@@ -97,3 +97,52 @@ export const tileUri = (did, rkey) => `tile://${rkey}.${encodeURIComponent(did)}
 
 /** The short form shown in the address box: @handle/rkey when the handle is known and checked. */
 export const shortForm = (actor, rkey) => `@${actor}/${rkey}`;
+
+// ---- pages that aren't tiles (stage 2) ----
+// Your shelf and an account's tiles are pages inside a tab too, with addresses of their own so the
+// tab's history and the page address (after #) can hold them:
+//   raku:shelf             your shelf
+//   raku:tiles/<actor>     an account's tiles (a handle or a DID)
+export const SHELF_URI = 'raku:shelf';
+export const accountPageUri = (actor) => `raku:tiles/${actor}`;
+
+function account(actor) {
+  actor = String(actor || '').replace(/^@/, '');
+  if (actor.startsWith('did:')) {
+    if (!isDid(actor)) return fail("That account (a DID) isn't one Raku can look up: did:plc and did:web only.");
+    actor = actor.startsWith('did:plc:') ? actor.toLowerCase() : 'did:web:' + actor.slice(8).toLowerCase();
+  } else {
+    actor = actor.toLowerCase();
+    if (!isHandle(actor)) return fail(`"${actor}" isn't a handle or a DID.`);
+  }
+  return { ok: true, kind: 'account', actor, uri: accountPageUri(actor) };
+}
+
+/**
+ * Everything the address box accepts: a tile (as parseAddress), your shelf, or an account's tiles
+ * (a handle or DID on its own: @thunderbird.cafe, thunderbird.cafe, did:plc:…, at://handle, or a
+ * lexicographer.space / appmosphe.re link to an account). → { ok, kind: 'tile' | 'shelf' | 'account', uri, … }
+ */
+export function parseTarget(input) {
+  const s = String(input || '').trim();
+  if (s === SHELF_URI) return { ok: true, kind: 'shelf', uri: SHELF_URI };
+  const page = s.match(/^raku:tiles\/([^/\s]+)$/);
+  if (page) return account(decodeURIComponent(page[1]));
+  const tile = parseAddress(s);
+  if (tile.ok) return { ...tile, kind: 'tile' };
+  // An account on its own.
+  if (/^@?(did:[a-z]+:[^/\s]+|[a-z0-9.-]+\.[a-z][a-z0-9-]*)$/i.test(s)) return account(s);
+  const at = s.match(/^at:\/\/([^/?#\s]+)(\/ing\.dasl\.masl)?\/?$/i);
+  if (at) return account(decodeURIComponent(at[1]));
+  try {
+    const u = new URL(s);
+    if (VIEWER_HOSTS.has(u.hostname.toLowerCase())) {
+      const m = u.pathname.match(/^\/@([^/]+)\/?$/);
+      if (m) return account(decodeURIComponent(m[1]));
+    }
+  } catch { /* not a link */ }
+  if (/^[^\s:/]+$/.test(s) && !s.includes('.')) {
+    return fail(`"${s}" isn't a tile's address or an account's handle. (Searching for tiles comes later.)`);
+  }
+  return tile;
+}

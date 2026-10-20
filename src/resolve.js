@@ -82,5 +82,32 @@ export function createResolver({ fetchImpl = globalThis.fetch, now = () => Date.
     return r.json;
   }
 
-  return { resolveHandle, account, checkedHandle, didFor, tileRecord, didDocumentUrl };
+  /** One page of an account's tile records, newest first. → { records: [{ uri, cid, value, rkey }], cursor } */
+  async function listTiles(did, cursor = null, limit = 100) {
+    const { pds } = await account(did);
+    let url = `${pds}/xrpc/com.atproto.repo.listRecords?repo=${encodeURIComponent(did)}&collection=${COLLECTION}&limit=${limit}`;
+    if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
+    const r = await fetchJson(url, { timeoutMs: LIMITS.lookupMs, maxBytes: 8 * 1024 * 1024, fetchImpl });
+    if (!r.ok || !Array.isArray(r.json?.records)) throw new NetError('upstream', "The account's server didn't list its tiles.");
+    const records = r.json.records
+      .filter((x) => x && typeof x.uri === 'string' && x.value)
+      .map((x) => ({ ...x, rkey: x.uri.split('/').pop() }));
+    return { records, cursor: records.length === limit && typeof r.json.cursor === 'string' ? r.json.cursor : null };
+  }
+
+  /** How many tiles an account has, counted up to `cap` (kept a few minutes). → { count, more } */
+  function countTiles(did, cap = 500) {
+    return remember(`n:${did}`, async () => {
+      let count = 0;
+      let cursor = null;
+      do {
+        const page = await listTiles(did, cursor);
+        count += page.records.length;
+        cursor = page.cursor;
+      } while (cursor && count < cap);
+      return { count: Math.min(count, cap), more: !!cursor || count > cap };
+    });
+  }
+
+  return { resolveHandle, account, checkedHandle, didFor, tileRecord, listTiles, countTiles, didDocumentUrl };
 }

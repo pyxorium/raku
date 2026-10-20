@@ -76,7 +76,7 @@ export function loadSourceOverride(loc = globalThis.location) {
 // The page's own security policy, a <meta> tag on the built page (GitHub Pages can't send headers;
 // frame-ancestors can't be set this way, so src/frame-guard.js refuses to run inside a frame instead).
 // - scripts and styles only from Raku itself;
-// - pictures only Raku's own, or made here from downloaded bytes (blob:);
+// - pictures only Raku's own, made here from downloaded bytes (blob:), or avatars from Bluesky's picture server;
 // - connections over https (lookups, the authors' account servers, Bluesky's public API);
 // - frames only from the tile loading server.
 export function pageCsp(loadDomain = TILE_LOAD_DOMAIN, scheme = 'https') {
@@ -85,7 +85,7 @@ export function pageCsp(loadDomain = TILE_LOAD_DOMAIN, scheme = 'https') {
     "default-src 'self'",
     "script-src 'self'",
     "style-src 'self'",
-    "img-src 'self' blob: data:",
+    "img-src 'self' blob: data: https://cdn.bsky.app",
     "font-src 'self'",
     "connect-src 'self' https:",
     `frame-src ${scheme}://${loadDomain} ${scheme}://*.${base}`,

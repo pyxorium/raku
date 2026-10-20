@@ -1,12 +1,13 @@
 // The tabs, as data: which are open, which is in front, each one's history. No DOM here (tested in Node).
 //
-// A tab shows either a tile (its at:// address) or the first screen (address null). Back and forward
+// A tab shows a tile (its at:// address), your shelf (raku:shelf), an account's tiles (raku:tiles/<actor>)
+// or the first screen (address null). Back and forward
 // move through the addresses that tab has shown. The open tabs are kept in the page's own address
 // (the part after #), so a reload or a copied link reopens the same set:
 //   #t=<at:// address, encoded>,<…>&a=<the tab in front, from 0>       (an empty slot = a first screen)
 
 import { TABS } from './config.js';
-import { parseAddress } from './address.js';
+import { parseTarget } from './address.js';
 
 let nextId = 1;
 const newTab = (uri = null) => ({ id: `t${nextId++}`, history: [uri], at: 0 });
@@ -80,7 +81,7 @@ export function createTabs({ max = TABS.max } = {}) {
         if (!s) return null;
         let v;
         try { v = decodeURIComponent(s); } catch { return null; }
-        const r = parseAddress(v);
+        const r = parseTarget(v);
         return r.ok ? r.uri : null;
       });
       tabs = (uris.length ? uris : [null]).map((u) => newTab(u));

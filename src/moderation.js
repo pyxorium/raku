@@ -83,23 +83,31 @@ export function createModeration({ fetchImpl = globalThis.fetch, listUrl = HIDE_
     return rkey ? list.tiles.has(await sha256Hex(tileKey(list.salt, did, rkey))) : false;
   }
 
-  async function hiddenByBluesky(did) {
+  // Bluesky's public profile for an account: whether its moderation hides the account, and (stage 2)
+  // the avatar and display name for an account's page and kept-account chips. Avatars are only taken
+  // from Bluesky's own picture server.
+  async function profile(did) {
     const k = bsky.get(did);
-    if (k && now() - k.at < MODERATION_KEEP_MS) return k.hidden;
-    let hidden = false;
+    if (k && now() - k.at < MODERATION_KEEP_MS) return k.profile;
+    const shown = { hidden: false, avatar: null, displayName: '' };
+    let answer = shown;
     try {
       const r = await fetchJson(`${BLUESKY_API}/xrpc/app.bsky.actor.getProfile?actor=${encodeURIComponent(did)}`, {
         timeoutMs: 5000, maxBytes: 256 * 1024, fetchImpl,
       });
-      if (r.status === 400 && /AccountTakedown/.test(r.json?.error || '')) hidden = true;
-      else if (r.ok) hidden = (r.json?.labels || []).some((l) => hidingLabel(l, now()));
-      else if (r.status >= 500) return false;      // not kept: ask again next time
+      if (r.status === 400 && /AccountTakedown/.test(r.json?.error || '')) answer = { ...shown, hidden: true };
+      else if (r.ok) {
+        const avatar = typeof r.json?.avatar === 'string' && r.json.avatar.startsWith('https://cdn.bsky.app/') ? r.json.avatar : null;
+        const displayName = typeof r.json?.displayName === 'string' ? r.json.displayName.slice(0, 80) : '';
+        answer = { hidden: (r.json?.labels || []).some((l) => hidingLabel(l, now())), avatar, displayName };
+      } else if (r.status >= 500) return shown;     // not kept: ask again next time
     } catch {
-      return false;                                 // can't reach Bluesky: show the tile, don't keep the answer
+      return shown;                                  // can't reach Bluesky: show the tile, don't keep the answer
     }
-    bsky.set(did, { at: now(), hidden });
-    return hidden;
+    bsky.set(did, { at: now(), profile: answer });
+    return answer;
   }
+  const hiddenByBluesky = async (did) => (await profile(did)).hidden;
 
   /** Is this tile (or its whole account) hidden? Never says which list or why. */
   async function isHidden(did, rkey) {
@@ -107,7 +115,13 @@ export function createModeration({ fetchImpl = globalThis.fetch, listUrl = HIDE_
     return a || b;
   }
 
-  return { refresh, isHidden, onHideList, hiddenByBluesky, get loaded() { return !!list; } };
+  /** The whole account hidden (the hide list's accounts, or Bluesky's moderation)? */
+  async function isAccountHidden(did) {
+    const [a, b] = await Promise.all([onHideList(did, null), hiddenByBluesky(did)]);
+    return a || b;
+  }
+
+  return { refresh, isHidden, isAccountHidden, onHideList, hiddenByBluesky, profile, get loaded() { return !!list; } };
 }
 
 // For the first screen's card pictures (not tiles): plain picture types only, checked by their first bytes.

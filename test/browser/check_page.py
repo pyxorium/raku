@@ -70,6 +70,10 @@ records = {
 }
 for k in range(12):
     records[(A, f'many{k}')] = tile(f'Tile {k}', {'/': res(PLAIN(f'Tile {k}'), 'text/html')})
+# stage 2: an older, flat record (not runnable here), and a tile that will be deleted after it's kept
+records[(A, 'flat1')] = {'$type': 'ing.dasl.masl', 'name': 'An old flat tile', 'src': {'$link': 'bafkreiflataaaaaaaaaaaaaaaaaaaaaaaaaa'}}
+records[(A, 'gone1')] = tile('Soon gone', {'/': res(PLAIN('Soon gone'), 'text/html')}, 'Deleted after it was kept', banner=png((168, 67, 46)))
+AVATAR = png((63, 184, 168), (64, 64))
 
 def h(s): return hashlib.sha256(s.encode()).hexdigest()
 HIDE_LIST = json.dumps({'version': 1, 'salt': SALT, 'accounts': [], 'tiles': [h(f'{SALT}\n{A}\nhidden1')]})
@@ -93,7 +97,11 @@ def route(r):
             return js({'did': did}) if did else js({'error': 'InvalidRequest'}, 400)
         if u.path.endswith('getProfile'):
             labels = [{'src': LABELER, 'uri': f'at://{B}', 'val': '!hide', 'cts': '2026-10-01T00:00:00Z'}] if q.get('actor') == B else []
-            return js({'did': q.get('actor'), 'labels': labels})
+            prof = {'did': q.get('actor'), 'labels': labels}
+            if q.get('actor') == A: prof.update({'displayName': 'Thunderbird Cafe', 'avatar': 'https://cdn.bsky.app/img/avatar/plain/a/av@jpeg'})
+            return js(prof)
+    if u.hostname == 'cdn.bsky.app':
+        return r.fulfill(status=200, headers={**cors, 'content-type': 'image/png'}, body=AVATAR)
     if u.hostname == 'lexicographer.space' and u.path == '/hidden-tiles.json':
         return r.fulfill(status=200, headers={**cors, 'content-type': 'application/json'}, body=HIDE_LIST)
     if u.hostname == 'pds.fakepds.net':
@@ -101,6 +109,13 @@ def route(r):
             rec = records.get((q.get('repo'), q.get('rkey')))
             if not rec: return js({'error': 'RecordNotFound'}, 400)
             return js({'uri': f"at://{q['repo']}/ing.dasl.masl/{q['rkey']}", 'cid': 'bafyreirecord', 'value': rec})
+        if u.path.endswith('listRecords'):
+            repo = q.get('repo'); limit = int(q.get('limit', 50)); start = int(q.get('cursor', 0))
+            keys = sorted([k for (d, k) in records if d == repo], reverse=True)
+            chunk = keys[start:start + limit]
+            out = {'records': [{'uri': f'at://{repo}/ing.dasl.masl/{k}', 'cid': 'bafyreirecord', 'value': records[(repo, k)]} for k in chunk]}
+            if start + limit < len(keys): out['cursor'] = str(start + limit)
+            return js(out)
         if u.path.endswith('getBlob'):
             b = blobs.get(q.get('cid'))
             if b is None: return r.fulfill(status=404, headers=cors, body='')
@@ -128,7 +143,7 @@ def wait_for(fn, timeout=10.0, step=0.1):
 with sync_playwright() as p:
     b = p.chromium.launch(args=['--host-resolver-rules=MAP *.localhost 127.0.0.1'])
     ctx = b.new_context(viewport={'width': 1280, 'height': 800})
-    for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://192.168.1.5/**', 'https://lexicographer.space/**']:
+    for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://192.168.1.5/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**']:
         ctx.route(host, route)
     popups = []
     ctx.on('page', lambda pg: popups.append(pg))
@@ -139,15 +154,15 @@ with sync_playwright() as p:
     page.goto(RAKU + '?loader=' + LOADER)
 
     # 1. first screen
-    wait_for(lambda: page.eval_on_selector_all('.pick-title', "els => els.length === 3 && els.every(e => e.textContent !== '…')"), 10)
-    names = page.eval_on_selector_all('.pick-title', 'els => els.map(e => e.textContent)')
+    wait_for(lambda: page.eval_on_selector_all('.picks .card-title', "els => els.length === 3 && els.every(e => e.textContent !== '…')"), 10)
+    names = page.eval_on_selector_all('.picks .card-title', 'els => els.map(e => e.textContent)')
     check('first screen: the three picks show their names from their records', names == ['Pick one', 'Pick two', 'Pick three'], str(names))
-    wait_for(lambda: page.eval_on_selector_all('.pick-pic img', 'els => els.length === 3 && els.every(i => i.complete)'), 10)
+    wait_for(lambda: page.eval_on_selector_all('.picks .card-pic img', 'els => els.length === 3 && els.every(i => i.complete)'), 10)
     check('the hide list is read from lexicographer.space', any(c == 'https://lexicographer.space/hidden-tiles.json' for c in calls))
-    check('first screen: card pictures drawn from the tiles\' banners', page.eval_on_selector_all('.pick-pic img', 'els => els.every(i => i.src.startsWith("blob:") && i.naturalWidth === 1280)'))
-    check('first screen: "by @handle" only after the handle checks both ways', wait_for(lambda: page.eval_on_selector_all('.pick-by', "els => els.length === 3 && els[0].textContent === 'by @thunderbird.cafe' && els[2].textContent === 'by @thunderbirdwine.bsky.social'"), 10))
+    check('first screen: card pictures drawn from the tiles\' banners', page.eval_on_selector_all('.picks .card-pic img', 'els => els.every(i => i.src.startsWith("blob:") && i.naturalWidth === 1280)'))
+    check('first screen: "by @handle" only after the handle checks both ways', wait_for(lambda: page.eval_on_selector_all('.picks .card-by', "els => els.length === 3 && els[0].textContent === 'by @thunderbird.cafe' && els[2].textContent === 'by @thunderbirdwine.bsky.social'"), 10))
     check('computer: no bottom toolbar; arrows in the top bar', not page.is_visible('.toolbar') and page.is_visible('.bar .nav'))
-    check('computer: back, forward, reload and + are drawn icons, not text', page.eval_on_selector_all('.bar .nav-btn, .newtab', "bs => bs.length === 4 && bs.every(b => b.querySelector('svg.icon') && b.textContent.trim() === '')"))
+    check('computer: back, forward, reload, the shelf and + are drawn icons, not text', page.eval_on_selector_all('.bar .nav-btn, .newtab', "bs => bs.length === 5 && bs.every(b => b.querySelector('svg.icon') && b.textContent.trim() === '')"))
     check('page title "Raku (lab)" and the lab label', page.title() == 'Raku (lab)' and '(lab)' in page.inner_text('.strip-row'))
     check('the built page carries its security policy', page.eval_on_selector('meta[http-equiv="Content-Security-Policy"]', 'm => m.content.includes("frame-src")'))
     check('noindex while a lab', page.eval_on_selector('meta[name=robots]', 'm => m.content') == 'noindex, nofollow')
@@ -297,7 +312,7 @@ with sync_playwright() as p:
 
     # 11. phone width
     m = b.new_context(viewport={'width': 390, 'height': 800}, is_mobile=True, has_touch=True)
-    for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**']:
+    for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**']:
         m.route(host, route)
     mp = m.new_page()
     mp.goto(RAKU + '?loader=' + LOADER + '#t=' + f'at%3A%2F%2F{A}%2Fing.dasl.masl%2Fprobe1,&a=0')
@@ -305,9 +320,9 @@ with sync_playwright() as p:
     check('phone: no tab strip, a tab count button', not mp.is_visible('.strip-row') and mp.is_visible('.count') and mp.inner_text('.count') == '2')
     check('phone: no arrows in the top bar; the address gets the row', not mp.is_visible('.bar .nav') and mp.eval_on_selector('.addr', 'a => a.getBoundingClientRect().width') > 300)
     sizes = mp.eval_on_selector_all('.toolbar button', 'bs => bs.map(b => { const r = b.getBoundingClientRect(); return [b.title, Math.round(r.width), Math.round(r.height)]; })')
-    check('phone: a bottom toolbar with back, forward, reload and tabs, each at least 44 px', [x[0] for x in sizes] == ['Back', 'Forward', 'Reload this tile', 'Open tabs'] and all(w >= 44 and hh >= 44 for _, w, hh in sizes), str(sizes))
+    check('phone: a bottom toolbar with back, forward, reload, the shelf and tabs, each at least 44 px', [x[0] for x in sizes] == ['Back', 'Forward', 'Reload this tile', 'Your shelf', 'Open tabs'] and all(w >= 44 and hh >= 44 for _, w, hh in sizes), str(sizes))
     icons = mp.eval_on_selector_all('.toolbar .tool-btn svg.icon', 'is => is.map(i => { const r = i.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })')
-    check('phone: back, forward and reload icons are drawn the same size', len(icons) == 3 and len(set(map(tuple, icons))) == 1, str(icons))
+    check('phone: the toolbar icons are drawn the same size', len(icons) == 4 and len(set(map(tuple, icons))) == 1, str(icons))
     check('phone: the toolbar sits at the bottom of the screen', mp.eval_on_selector('.toolbar', 't => Math.round(t.getBoundingClientRect().bottom)') == 800)
     ok = wait_for(lambda: mp.frame_locator('.pane.front iframe.tile-frame').frame_locator('iframe').locator('#h[data-ran=yes]').count() == 1, 15)
     check('phone: the tile fills the screen and runs', ok)
@@ -330,6 +345,103 @@ with sync_playwright() as p:
     ok = wait_for(lambda: mp.frame_locator('.pane.front iframe.tile-frame').frame_locator('iframe').locator('#h').inner_text() == 'Second tile', 15)
     check("phone: the toolbar's forward goes ahead again", ok)
     mp.screenshot(path=str(OUT / 'phone-toolbar.png'))
+
+
+    # 13. stage 2: the Shelf (a fresh browser profile)
+    s2 = b.new_context(viewport={'width': 1280, 'height': 860}, accept_downloads=True)
+    for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**']:
+        s2.route(host, route)
+    sp = s2.new_page()
+    s2_console = []
+    sp.on('console', lambda m: s2_console.append((m.type, m.text, (m.location or {}).get('url', ''))))
+    sp.on('pageerror', lambda e: s2_console.append(('pageerror', str(e), RAKU)))
+    sp.goto(RAKU + '?loader=' + LOADER)
+    sp.wait_for_selector('.addr')
+    check('shelf: no star on the first screen', not sp.is_visible('.star-btn'))
+    sp.fill('.addr', '@thunderbird.cafe'); sp.press('.addr', 'Enter')
+    ok = wait_for(lambda: sp.inner_text('.pane.front h1') == "@thunderbird.cafe's tiles", 10)
+    check("shelf: a handle opens that account's tiles", ok)
+    titles = wait_for(lambda: (lambda t: t if len(t) >= 20 else None)(sp.eval_on_selector_all('.pane.front .card-title', 'els => els.map(e => e.textContent)')), 10) or []
+    check("account page: every tile listed in the server's order, the hidden one left out", len(titles) == 20 and 'Hidden tile' not in titles and titles[0] == 'Probe tile', str(titles))
+    check('account page: a tile Raku can\'t run is greyed with a reason', sp.eval_on_selector_all('.pane.front .card.greyed', "cs => cs.length === 1 && cs[0].innerText.includes('An old flat tile') && cs[0].innerText.includes('no files listed')"))
+    check('account page: the avatar from Bluesky\'s picture server and the display name', wait_for(lambda: sp.eval_on_selector('.account-av', 'i => i.tagName === "IMG" && i.complete && i.naturalWidth === 64'), 5) and 'Thunderbird Cafe' in sp.inner_text('.pane.front .sub'))
+    check('account page: the address box shows the handle; tab and page title name the account', sp.input_value('.addr') == '@thunderbird.cafe' and sp.inner_text('.tab.on .tab-title') == "@thunderbird.cafe's tiles")
+    sp.screenshot(path=str(OUT / 'account-tiles.png'))
+    check('account page: the star keeps the account', sp.is_visible('.star-btn') and sp.get_attribute('.star-btn', 'aria-pressed') == 'false')
+    sp.click('.star-btn')
+    check('…kept: the star fills and says so', sp.get_attribute('.star-btn', 'aria-pressed') == 'true' and 'Account kept' in sp.inner_text('.note'))
+    sp.click(".pane.front .card-main:has-text('Second tile')")
+    ok = wait_for(lambda: sp.frame_locator('.pane.front iframe.tile-frame').frame_locator('iframe').locator('#h').inner_text() == 'Second tile', 15)
+    check('a card opens its tile in the same tab', ok)
+    check('the star keeps the tile', wait_for(lambda: sp.is_visible('.star-btn'), 5) and sp.get_attribute('.star-btn', 'aria-pressed') == 'false')
+    sp.click('.star-btn')
+    check('…kept on the shelf', sp.get_attribute('.star-btn', 'aria-pressed') == 'true')
+    sp.click('.nav-btn[title="Back"]')
+    check('Back returns to the account page', wait_for(lambda: sp.inner_text('.pane.front h1') == "@thunderbird.cafe's tiles", 10))
+    sp.fill('.addr', f'@{A_HANDLE}/gone1'); sp.press('.addr', 'Enter')
+    wait_for(lambda: sp.is_visible('.star-btn'), 10)
+    sp.click('.star-btn')
+    sp.fill('.addr', f'at://{C_HANDLE}/ing.dasl.masl/3mwwhkjfvfq2o'); sp.press('.addr', 'Enter')
+    wait_for(lambda: sp.is_visible('.star-btn') and sp.get_attribute('.star-btn', 'aria-pressed') == 'false', 10)
+    sp.click('.star-btn')
+    del records[(A, 'gone1')]                                   # the author deletes it
+    tabs_before = sp.eval_on_selector_all('.tab', 'ts => ts.length')
+    sp.click('.nav-btn[title="Your shelf"]')
+    ok = wait_for(lambda: sp.inner_text('.pane.front h1') == 'Your shelf', 10)
+    check('the Shelf button opens your shelf in a new tab (the running tile stays open)', ok and sp.eval_on_selector_all('.tab', 'ts => ts.length') == tabs_before + 1)
+    kept = wait_for(lambda: (lambda t: t if len(t) == 3 and '…' not in t[0] else None)(sp.eval_on_selector_all('.pane.front .card-title', 'els => els.map(e => e.textContent)')), 10)
+    check('your shelf: kept tiles, most recently kept first', kept == ['Pick two', 'Soon gone', 'Second tile'], str(kept))
+    check('your shelf: a deleted tile says so, greyed', wait_for(lambda: sp.eval_on_selector_all('.pane.front .card.greyed', "cs => cs.length === 1 && cs[0].innerText.includes('deleted by its author')"), 10))
+    check('your shelf: the kept account as a chip, with avatar and tile count', wait_for(lambda: sp.eval_on_selector_all('.chip', "cs => cs.length === 1 && cs[0].innerText.includes('@thunderbird.cafe') && /\\d+ tiles/.test(cs[0].innerText) && !!cs[0].querySelector('img')"), 10))
+    check('your shelf: pictures drawn from the tiles\' banners', wait_for(lambda: sp.eval_on_selector_all('.pane.front .card-pic img', 'is => is.length === 1 && is.every(i => i.complete && i.naturalWidth === 1280)'), 10))
+    check('your shelf: the Shelf button shows it is open', sp.eval_on_selector('.nav-btn[title="Your shelf"]', 'b => b.classList.contains("on")'))
+    sp.screenshot(path=str(OUT / 'your-shelf.png'))
+    sp.click(".pane.front .card.greyed .card-btn[title='Remove from your shelf']")
+    check('Remove takes a tile off the shelf (and the count follows)', sp.eval_on_selector_all('.pane.front .card', 'cs => cs.length') == 2 and '2 tiles' in sp.inner_text('.pane.front .sub'))
+    with sp.expect_download() as dl:
+        sp.click(".shelf-tools button:has-text('Export')")
+    path = dl.value.path()
+    exported = json.loads(open(path).read())
+    check('Export saves a small file: raku-shelf-<date>.json with the account and the tiles', dl.value.suggested_filename.startswith('raku-shelf-') and exported['format'] == 'raku-shelf' and len(exported['tiles']) == 2 and len(exported['accounts']) == 1, str(exported)[:200])
+    sp.click(".pane.front .card:has-text('Pick two') .card-btn[title='Open in a new tab']")
+    ok = wait_for(lambda: sp.inner_text('.tab.on .tab-title') == 'Pick two', 10)
+    check("a card's corner opens the tile in a new tab", ok)
+    sp.click('.newtab')
+    check('the first screen shows "From your shelf"', wait_for(lambda: 'FROM YOUR SHELF' in sp.inner_text('.pane.front').upper() and sp.eval_on_selector_all('.pane.front .first .cards:not(.picks) .card', 'cs => cs.length') == 2, 10))
+    sp.reload()
+    sp.wait_for_selector('.tab')
+    sp.click('.nav-btn[title="Your shelf"]')
+    check('your shelf survives a reload (kept in this browser)', wait_for(lambda: sp.eval_on_selector_all('.pane.front .card', 'cs => cs.length') == 2, 10))
+    errs = [c for c in s2_console if c[0] in ('error', 'pageerror') and c[2].startswith(RAKU)]
+    check('shelf: no errors on Raku\'s page', not errs, str(errs[:5]))
+
+    # Import into a fresh browser
+    s3 = b.new_context(viewport={'width': 1280, 'height': 860})
+    for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**']:
+        s3.route(host, route)
+    ip = s3.new_page()
+    ip.goto(RAKU + '?loader=' + LOADER)
+    ip.wait_for_selector('.addr')
+    ip.click('.nav-btn[title="Your shelf"]')
+    check('a new browser: an empty shelf says how to keep things', wait_for(lambda: 'Nothing kept yet' in ip.inner_text('.pane.front'), 5))
+    ip.set_input_files('.shelf-tools input[type=file]', path)
+    check('Import adds the file to the shelf', wait_for(lambda: 'Added 1 account and 2 tiles' in ip.inner_text('.note'), 5) and wait_for(lambda: ip.eval_on_selector_all('.pane.front .card', 'cs => cs.length') == 2, 10))
+    ip.set_input_files('.shelf-tools input[type=file]', path)
+    check('…and importing it again adds nothing', wait_for(lambda: 'Nothing new' in ip.inner_text('.note'), 5))
+    bad = W / 'not-a-shelf.json'; bad.write_text('{"hello": 1}')
+    ip.set_input_files('.shelf-tools input[type=file]', str(bad))
+    check('a file that isn\'t a shelf is refused', wait_for(lambda: "isn't a Raku shelf" in ip.inner_text('.note'), 5))
+
+    # The phone: the shelf as compact rows
+    s4 = b.new_context(viewport={'width': 390, 'height': 800}, is_mobile=True, has_touch=True)
+    for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**']:
+        s4.route(host, route)
+    pp = s4.new_page()
+    pp.goto(RAKU + '?loader=' + LOADER + '#t=raku%3Atiles%2Fthunderbird.cafe&a=0')
+    ok = wait_for(lambda: pp.eval_on_selector_all('.pane.front .card', 'cs => cs.length') >= 19, 10)
+    check('phone: an account\'s tiles as compact rows, no sideways scroll', ok and pp.eval_on_selector('.pane.front .card-main', 'm => getComputedStyle(m).flexDirection') == 'row' and pp.evaluate('() => document.documentElement.scrollWidth <= 390'))
+    check('phone: the star sits inside the address box', pp.is_visible('.star-btn') and pp.eval_on_selector('.star-btn', 'b => { const r = b.getBoundingClientRect(); const a = document.querySelector(".addr").getBoundingClientRect(); return r.right <= a.right + 1 && r.left >= a.left; }'))
+    pp.screenshot(path=str(OUT / 'phone-account.png'))
 
     # 12. inside another site's frame
     fp = ctx.new_page()

@@ -124,18 +124,6 @@ a { color: var(--glaze-light); }
 .first h1 { margin: 0 0 6px; font-size: 26px; font-weight: 650; color: var(--glaze-light); }
 .first .lede { margin: 0 0 24px; color: var(--muted); max-width: 62ch; }
 .first .small { margin-top: 28px; font-size: 12.5px; color: #8d8172; }
-.picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
-.pick {
-  display: flex; flex-direction: column; text-align: left; padding: 0; overflow: hidden; cursor: pointer;
-  background: #221d19; border: 1px solid #3a322b; border-radius: 10px;
-}
-.pick:hover { border-color: var(--glaze); }
-.pick-pic { aspect-ratio: 16 / 9; background: #2d2722; }
-.pick-pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.pick-text { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px 12px; }
-.pick-title { font-weight: 600; color: var(--text); }
-.pick-desc { color: var(--muted); font-size: 13px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.pick-by { color: var(--glaze-light); font-size: 12.5px; }
 
 /* ---------- the phone's tab list ---------- */
 .sheet { position: fixed; inset: 0; z-index: 10; background: var(--stage); padding: 12px 16px; overflow: auto; }
@@ -165,4 +153,79 @@ a { color: var(--glaze-light); }
   .addr { font-size: 12px; padding: 0 10px; height: 36px; }
   .toolbar { display: flex; }
   .first { padding-top: 24px; }
+}
+
+/* ---------- stage 2: cards, your shelf, an account's tiles, the star ---------- */
+.nav-btn.on, .tool-btn.on { color: var(--glaze); }
+.addr-form { position: relative; }
+.addr { padding-right: 38px; }
+.star-btn {
+  position: absolute; right: 3px; top: 50%; transform: translateY(-50%);
+  width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 6px;
+  background: none; color: #8d8172; cursor: pointer;
+}
+.star-btn[hidden] { display: none; }
+.star-btn:hover { color: var(--text); background: rgba(255,255,255,.06); }
+.star-btn.kept { color: var(--glaze); }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.card { position: relative; display: flex; background: #221d19; border: 1px solid #3a322b; border-radius: 10px; overflow: hidden; }
+.card:hover { border-color: var(--glaze); }
+.card.greyed:hover { border-color: #3a322b; }
+.card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; text-align: left; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; }
+.card-main:disabled { cursor: default; }
+.card-pic { aspect-ratio: 16 / 9; background: #2d2722; overflow: hidden; }
+.card-pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card-text { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px 12px; min-width: 0; }
+.card-title { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-desc { color: var(--muted); font-size: 13px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card-desc:empty, .card-by:empty, .card-note:empty { display: none; }
+.card-by { color: var(--glaze-light); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-note { color: var(--warn); font-size: 12.5px; }
+.card.greyed .card-title { color: var(--muted); }
+.card.greyed .card-pic { opacity: .35; }
+.card-corner { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; }
+.card-btn {
+  width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 7px; cursor: pointer;
+  background: rgba(23,20,17,.78); color: var(--text); opacity: .85;
+}
+.card-btn:hover { opacity: 1; color: var(--glaze-light); }
+
+.shelf-page { max-width: 1100px; margin: 0 auto; padding: 28px 16px 48px; }
+.shelf-page h1 { margin: 0 0 4px; font-size: 24px; font-weight: 650; color: var(--glaze-light); overflow-wrap: anywhere; }
+.shelf-page h2, .first h2 { margin: 26px 0 10px; font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.shelf-page .sub { margin: 0 0 6px; color: var(--muted); font-size: 13px; }
+.shelf-page .warn { color: var(--warn); font-size: 13px; margin: 8px 0 0; }
+.shelf-page .empty { color: var(--muted); margin: 20px 0; max-width: 60ch; }
+.chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.chip { display: flex; align-items: center; background: #221d19; border: 1px solid #3a322b; border-radius: 999px; }
+.chip:hover { border-color: var(--glaze); }
+.chip-main { display: flex; align-items: center; gap: 9px; padding: 6px 12px 6px 6px; border: 0; background: none; color: var(--text); cursor: pointer; font-size: 13.5px; min-height: 44px; }
+.chip-av { width: 30px; height: 30px; border-radius: 50%; background: #3a322b; overflow: hidden; flex: none; }
+.chip-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.chip-count { color: var(--muted); }
+.chip-x { width: 34px; height: 34px; margin-right: 4px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: var(--muted); cursor: pointer; }
+.chip-x:hover { color: var(--text); background: rgba(255,255,255,.06); }
+.account-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.account-av { width: 56px; height: 56px; border-radius: 50%; background: #3a322b; flex: none; object-fit: cover; }
+.shelf-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 28px; }
+.shelf-tools button, .more {
+  border: 1px solid var(--line); background: rgba(255,255,255,.06); color: var(--text);
+  padding: 8px 14px; border-radius: 7px; cursor: pointer; min-height: 40px;
+}
+.shelf-tools .small { color: #8d8172; font-size: 12.5px; }
+.more { display: block; margin: 20px auto 0; }
+.more[hidden] { display: none; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (max-width: 640px) {
+  .cards { grid-template-columns: 1fr; gap: 10px; }
+  .card-main { flex-direction: row; }
+  .card-pic { width: 112px; flex: none; aspect-ratio: auto; min-height: 84px; }
+  .card-text { padding: 9px 11px; }
+  .card-corner { top: auto; bottom: 6px; }
+  .card-corner .card-btn:first-child:not(:only-child) { display: none; }
+  .card:has(.card-corner .card-btn) .card-text { padding-right: 40px; }
+  .shelf-page { padding-top: 20px; }
+  .account-av { width: 44px; height: 44px; }
 }

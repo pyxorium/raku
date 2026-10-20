@@ -37,3 +37,7 @@ test('the hide list comes from lexicographer.space; the picks are tile addresses
   assert.ok(PICKS.length >= 1);
   for (const p of PICKS) assert.equal(parseAddress(p).ok, true, p);
 });
+
+test("avatars only from Bluesky's picture server", () => {
+  assert.match(pageCsp(), /img-src 'self' blob: data: https:\/\/cdn\.bsky\.app;/);
+});

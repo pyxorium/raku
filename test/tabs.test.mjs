@@ -71,3 +71,12 @@ test('changes are announced', () => {
   t.open();
   assert.deepEqual(seen, ['go', 'reload', 'open']);
 });
+
+test('shelf pages live in tabs and in the hash too', () => {
+  const t = createTabs();
+  t.go(t.active.id, 'raku:shelf');
+  t.open('raku:tiles/thunderbird.cafe');
+  const u = createTabs();
+  u.fromHash(t.toHash());
+  assert.deepEqual(u.list.map(current), ['raku:shelf', 'raku:tiles/thunderbird.cafe']);
+});

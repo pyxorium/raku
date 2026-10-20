@@ -58,3 +58,21 @@ test('did:web accounts are lower-cased; other DID methods are refused', () => {
   assert.equal(parseAddress(`at://did:web:Example.COM/ing.dasl.masl/${RKEY}`).actor, 'did:web:example.com');
   assert.match(parseAddress(`at://did:key:z6Mk/ing.dasl.masl/${RKEY}`).reason, /did:plc and did:web only/);
 });
+
+import { parseTarget, SHELF_URI, accountPageUri } from '../src/address.js';
+
+test('the address box also takes an account (its tiles) and your shelf', () => {
+  for (const s of ['@thunderbird.cafe', 'thunderbird.cafe', 'Thunderbird.Cafe', 'at://thunderbird.cafe', 'at://thunderbird.cafe/ing.dasl.masl', 'https://lexicographer.space/@thunderbird.cafe', 'raku:tiles/thunderbird.cafe']) {
+    const r = parseTarget(s);
+    assert.equal(r.ok, true, s);
+    assert.equal(r.kind, 'account', s);
+    assert.equal(r.uri, accountPageUri('thunderbird.cafe'), s);
+  }
+  assert.equal(parseTarget(DID).uri, `raku:tiles/${DID}`);
+  assert.equal(parseTarget(SHELF_URI).kind, 'shelf');
+  assert.equal(parseTarget(URI).kind, 'tile');
+  assert.equal(parseTarget(`thunderbird.cafe/${RKEY}`).kind, 'tile');
+  assert.match(parseTarget('mixtape').reason, /isn't a tile's address or an account's handle/);
+  assert.equal(parseTarget('https://example.com/').ok, false);
+  assert.equal(parseTarget('raku:tiles/not a handle').ok, false);
+});

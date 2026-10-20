@@ -6,6 +6,7 @@ import { isFramed, showOpenInOwnTab } from './frame-guard.js';
 import { createResolver } from './resolve.js';
 import { createModeration } from './moderation.js';
 import { createFileStore } from './tiles.js';
+import { createShelf, STORAGE_KEY } from './shelf-store.js';
 import { mountRaku } from './app.js';
 
 const root = document.getElementById('raku');
@@ -24,5 +25,8 @@ if (isFramed()) {
   try { storage = globalThis.localStorage; } catch { storage = null; }
   const moderation = createModeration({ storage });
   moderation.refresh();
-  mountRaku(root, { mothership, resolver: createResolver(), moderation, files: createFileStore() });
+  const shelf = createShelf({ storage });
+  // Another Raku tab changed your shelf: read it again.
+  globalThis.addEventListener('storage', (ev) => { if (ev.key === STORAGE_KEY) shelf.reload(); });
+  mountRaku(root, { mothership, resolver: createResolver(), moderation, files: createFileStore(), shelf });
 }

@@ -7,29 +7,22 @@
 //   4. watch it: "Still loading…" after 4 s, Try again after 8 s (as Daisy's frames.js and the blog's
 //      web-tile-mount.js). Nothing restarts on its own.
 // Background tabs keep running (decision 9): their panes are only moved out of sight.
+// A tab can also show your shelf or an account's tiles (stage 2, src/shelf-pages.js), and a star at the
+// end of the address box keeps the tile or account shown (shelf-store.js).
 
 import { Tile } from '@dasl/tile-loader';
 import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS } from './config.js';
-import { parseAddress, atUri } from './address.js';
+import { parseAddress, parseTarget, atUri, SHELF_URI } from './address.js';
 import { createTabs, current } from './tabs.js';
 import { describeTile, sizeVerdict, createPathLoader, blobCidOf } from './tiles.js';
 import { formatBytes, NetError } from './net.js';
 import { sniffPicture } from './moderation.js';
 import { icon } from './icons.js';
+import { h, createCardKit, bannerCid } from './cards.js';
+import { drawYourShelf, drawAccountTiles, drawShelfTeaser } from './shelf-pages.js';
 
-const h = (tag, attrs = {}, ...kids) => {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (v == null || v === false) continue;
-    if (k === 'class') e.className = v;
-    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
-    else e.setAttribute(k, v === true ? '' : String(v));
-  }
-  for (const k of kids.flat()) if (k != null) e.append(k);
-  return e;
-};
-
-export function mountRaku(root, { mothership, resolver, moderation, files, loc = globalThis.location, hist = globalThis.history }) {
+export function mountRaku(root, { mothership, resolver, moderation, files, shelf, loc = globalThis.location, hist = globalThis.history }) {
+  const kit = createCardKit({ files });
   const tabs = createTabs();
   const panes = new Map();          // tab id -> pane state
   const largeOk = new Set();        // tiles the visitor said "Open anyway" to, this visit
@@ -47,15 +40,19 @@ export function mountRaku(root, { mothership, resolver, moderation, files, loc =
     'aria-label': "A tile's address", placeholder: "Paste a tile's address (at://…, a lexicographer.space link, tile://…)",
   });
   input.addEventListener('focus', () => input.select());
-  const form = h('form', { class: 'addr-form', role: 'search', onsubmit: (ev) => { ev.preventDefault(); submitAddress(); } }, input);
+  // The star (decision Q30): keeps the tile or the account this tab shows; filled turquoise when kept.
+  const starBtn = h('button', { class: 'star-btn', type: 'button', hidden: true, onclick: () => toggleKeep() });
+  const form = h('form', { class: 'addr-form', role: 'search', onsubmit: (ev) => { ev.preventDefault(); submitAddress(); } }, input, starBtn);
+  const shelfBtn = h('button', { class: 'nav-btn', type: 'button', title: 'Your shelf', 'aria-label': 'Your shelf', onclick: () => goShelf() }, icon('shelf', 18));
   // On a phone (decision, Oct 19: option A) the address gets the whole top row, and these four go in a
   // toolbar along the bottom, each a full thumb-size target. On a computer the toolbar is hidden.
   const toolBtn = (label, title, onclick) => h('button', { class: 'tool-btn', type: 'button', title, 'aria-label': title, onclick }, label);
   const backTool = toolBtn(icon('back'), 'Back', () => tabs.back(tabs.active.id));
   const fwdTool = toolBtn(icon('forward'), 'Forward', () => tabs.forward(tabs.active.id));
   const reloadTool = toolBtn(icon('reload'), 'Reload this tile', () => reload(tabs.active.id));
+  const shelfTool = toolBtn(icon('shelf'), 'Your shelf', () => goShelf());
   const countBtn = h('button', { class: 'count', type: 'button', title: 'Open tabs', 'aria-label': 'Show open tabs', onclick: () => toggleSheet(true) }, h('span', {}, '1'));
-  const toolbar = h('nav', { class: 'toolbar', 'aria-label': 'Browsing' }, backTool, fwdTool, reloadTool, countBtn);
+  const toolbar = h('nav', { class: 'toolbar', 'aria-label': 'Browsing' }, backTool, fwdTool, reloadTool, shelfTool, countBtn);
   const noteLine = h('div', { class: 'note', role: 'status', 'aria-live': 'polite', hidden: true });
   const stage = h('main', { class: 'stage' });
   const sheetList = h('ul', { class: 'sheet-list' });
@@ -70,7 +67,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, loc =
     h('header', { class: 'chrome' },
       h('div', { class: 'strip-row' }, brand, strip, newTabBtn),
       h('div', { class: 'bar' }, h('span', { class: 'brand brand-small' }, SITE.name),
-        h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn), form),
+        h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn, shelfBtn), form),
       noteLine),
     stage, toolbar, sheet);
 
@@ -89,11 +86,36 @@ export function mountRaku(root, { mothership, resolver, moderation, files, loc =
   }
 
   function submitAddress() {
-    const r = parseAddress(input.value);
+    const r = parseTarget(input.value);
     if (!r.ok) { say(r.reason); return; }
     say('');
     tabs.go(tabs.active.id, r.uri);
     input.blur();
+  }
+
+  // The Shelf button: your shelf comes to the front. If a tab already shows it, that tab; if this tab
+  // shows a first screen or a shelf page, here; otherwise a new tab (so a running tile isn't closed).
+  function goShelf() {
+    const open = tabs.list.find((t) => current(t) === SHELF_URI);
+    if (open) { tabs.activate(open.id); return; }
+    const here = current(tabs.active);
+    if (!here || here.startsWith('raku:')) tabs.go(tabs.active.id, SHELF_URI);
+    else openNew(SHELF_URI);
+  }
+
+  function toggleKeep() {
+    const k = paneFor(tabs.active).keep;
+    if (!k) return;
+    if (k.kind === 'tile') {
+      if (shelf.hasTile(k.did, k.rkey)) { shelf.removeTile(k.did, k.rkey); say('Removed from your shelf.'); }
+      else if (shelf.keepTile(k)) say(shelf.saved ? 'Kept on your shelf.' : "Kept on your shelf for this visit (this browser isn't saving it).");
+      else say('Your shelf is full.');
+    } else {
+      if (shelf.hasAccount(k.did)) { shelf.removeAccount(k.did); say('Removed from your shelf.'); }
+      else if (shelf.keepAccount(k)) say(shelf.saved ? 'Account kept on your shelf.' : "Account kept for this visit (this browser isn't saving it).");
+      else say('Your shelf is full.');
+    }
+    drawChrome();
   }
 
   function toggleSheet(open) { sheet.hidden = !open; if (open) drawSheet(); }
@@ -103,7 +125,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, loc =
     let p = panes.get(tab.id);
     if (!p) {
       const el = h('section', { class: 'pane', 'data-tab': tab.id });
-      p = { el, uri: undefined, attempt: 0, timers: [], frame: null, title: 'New tab', icon: null, shownAddress: '', state: 'new' };
+      p = { el, uri: undefined, attempt: 0, timers: [], frame: null, title: 'New tab', icon: null, shownAddress: '', state: 'new', keep: null };
       panes.set(tab.id, p);
       stage.append(el);
     }
@@ -116,6 +138,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, loc =
     p.timers = [];
     if (p.frame) { p.frame.remove(); p.frame = null; }
     if (p.icon) { URL.revokeObjectURL(p.icon); p.icon = null; }
+    p.keep = null;
     p.el.replaceChildren();
   }
 
@@ -125,8 +148,22 @@ export function mountRaku(root, { mothership, resolver, moderation, files, loc =
     if (p.uri === uri) return;
     p.uri = uri;
     clearPane(p);
-    if (!uri) { p.title = 'New tab'; p.shownAddress = ''; p.state = 'new'; drawFirstScreen(p, tab); }
-    else openTile(p, tab, uri);
+    if (!uri) { p.title = 'New tab'; p.shownAddress = ''; p.state = 'new'; drawFirstScreen(p, tab); return; }
+    const target = parseTarget(uri);
+    if (target.ok && target.kind === 'shelf') { drawYourShelf(pageContext(p, tab)); drawChrome(); return; }
+    if (target.ok && target.kind === 'account') { drawAccountTiles(pageContext(p, tab), target.actor); return; }
+    openTile(p, tab, uri);
+  }
+
+  // What the shelf pages need from the page.
+  function pageContext(p, tab) {
+    const mine = p.attempt;
+    return {
+      p, tab, kit, shelf, tabs, resolver, moderation, openNew, say, drawChrome,
+      alive: () => mine === p.attempt,
+      status: (kind, text, ...actions) => status(p, kind, text, ...actions),
+      hideStatus: () => hideStatus(p),
+    };
   }
 
   function reload(id) {
@@ -188,11 +225,13 @@ export function mountRaku(root, { mothership, resolver, moderation, files, loc =
     if (!d.ok) { p.state = 'error'; status(p, 'error', d.reason); return; }
     p.title = d.name;
     p.shownAddress = atUri(did, parsed.rkey);
+    const keep = { kind: 'tile', did, rkey: parsed.rkey, name: d.name, by: '' };
+    p.keep = keep;
     drawChrome();
     const didForm = p.shownAddress;
     resolver.checkedHandle(did).then((handle) => {
       // (the tile may have started meanwhile, so check the address rather than the attempt)
-      if (handle && p.uri === uri && p.shownAddress === didForm) { p.shownAddress = atUri(handle, parsed.rkey); drawChrome(); }
+      if (handle && p.uri === uri && p.shownAddress === didForm) { p.shownAddress = atUri(handle, parsed.rkey); keep.by = handle; drawChrome(); }
     });
 
     const verdict = sizeVerdict(d.declaredBytes);
@@ -212,7 +251,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, loc =
   }
 
   function startTile(p, tab, uri, did, pds, d) {
+    const keep = p.keep;
     clearPane(p);
+    p.keep = keep;
     const mine = p.attempt;
     const alive = () => mine === p.attempt;
     p.state = 'loading';
@@ -263,41 +304,32 @@ export function mountRaku(root, { mothership, resolver, moderation, files, loc =
 
   // ---------- the first screen ----------
   function drawFirstScreen(p, tab) {
-    const grid = h('div', { class: 'picks' });
-    p.el.append(h('div', { class: 'first' },
+    const grid = h('div', { class: 'cards picks' });
+    const box = h('div', { class: 'first' },
       h('h1', {}, SITE.name, SITE.lab ? h('span', { class: 'lab' }, ' (lab)') : null),
-      h('p', { class: 'lede' }, 'A browser for web tiles: small pages people publish to their own atproto accounts. Paste a tile\'s address above, or start with one of these.'),
-      grid,
-      h('p', { class: 'small' }, 'Tiles run in their own sealed frames, loaded from their authors\' own accounts. Raku has no sign-in for browsing.')));
+      h('p', { class: 'lede' }, 'A browser for web tiles: small pages people publish to their own atproto accounts. Paste a tile\'s address or someone\'s handle above, or start with one of these.'),
+      grid);
+    p.el.append(box);
     for (const uri of PICKS) grid.append(pickCard(uri, tab));
+    drawShelfTeaser(pageContext(p, tab), box);
+    box.append(h('p', { class: 'small' }, 'Tiles run in their own sealed frames, loaded from their authors\' own accounts. Raku has no sign-in for browsing.'));
   }
 
   function pickCard(uri, tab) {
     const parsed = parseAddress(uri);
-    const pic = h('div', { class: 'pick-pic' });
-    const title = h('span', { class: 'pick-title' }, '…');
-    const desc = h('span', { class: 'pick-desc' }, '');
-    const by = h('span', { class: 'pick-by' }, '');
-    const card = h('button', { type: 'button', class: 'pick', onclick: () => tabs.go(tab.id, uri) }, pic, h('span', { class: 'pick-text' }, title, desc, by));
+    const card = kit.tileCard({ name: '…', onOpen: () => tabs.go(tab.id, uri), onOpenNew: () => openNew(uri) });
     (async () => {
       if (!parsed.ok) throw new Error('bad pick');
       const did = await resolver.didFor(parsed.actor);
-      if (await moderation.isHidden(did, parsed.rkey)) { card.remove(); return; }
+      if (await moderation.isHidden(did, parsed.rkey)) { card.el.remove(); return; }
       const [rec, acct] = await Promise.all([resolver.tileRecord(did, parsed.rkey), resolver.account(did)]);
       const d = describeTile(rec);
       if (!d.ok) throw new Error(d.reason);
-      title.textContent = d.name;
-      desc.textContent = d.description;
-      resolver.checkedHandle(did).then((hd) => { by.textContent = hd ? `by @${hd}` : ''; });
-      const shots = Array.isArray(d.manifest.screenshots) ? d.manifest.screenshots : [];
-      const cid = blobCidOf(shots.length ? d.manifest.resources?.[shots[0].src] : null);
-      if (cid) {
-        const buf = await files.get(acct.pds, did, cid, { left: LIMITS.cardImageBytes });
-        const type = buf && sniffPicture(new Uint8Array(buf));
-        if (type) pic.append(h('img', { src: URL.createObjectURL(new Blob([buf], { type })), alt: '' }));
-      }
-    })().catch(() => { title.textContent = title.textContent === '…' ? "Couldn't load this pick" : title.textContent; });
-    return card;
+      card.set({ name: d.name, description: d.description });
+      card.picture({ pds: acct.pds, did, cid: bannerCid(d.manifest) });
+      resolver.checkedHandle(did).then((hd) => card.set({ by: hd || '' }));
+    })().catch(() => card.set({ name: "Couldn't load this pick", greyed: true }));
+    return card.el;
   }
 
   // ---------- drawing the chrome ----------
@@ -335,6 +367,20 @@ export function mountRaku(root, { mothership, resolver, moderation, files, loc =
     backBtn.disabled = backTool.disabled = !tabs.canBack(tab.id);
     fwdBtn.disabled = fwdTool.disabled = !tabs.canForward(tab.id);
     reloadBtn.disabled = reloadTool.disabled = !current(tab);
+    const k = p.keep;
+    starBtn.hidden = !k;
+    if (k) {
+      const kept = k.kind === 'tile' ? shelf.hasTile(k.did, k.rkey) : shelf.hasAccount(k.did);
+      const what = k.kind === 'tile' ? 'this tile' : 'this account';
+      starBtn.replaceChildren(icon(kept ? 'star-filled' : 'star', 18));
+      starBtn.classList.toggle('kept', kept);
+      starBtn.setAttribute('aria-pressed', kept ? 'true' : 'false');
+      starBtn.title = kept ? `Remove ${what} from your shelf` : `Keep ${what} on your shelf`;
+      starBtn.setAttribute('aria-label', starBtn.title);
+    }
+    const onShelf = current(tab) === SHELF_URI;
+    shelfBtn.classList.toggle('on', onShelf);
+    shelfTool.classList.toggle('on', onShelf);
     newTabBtn.disabled = tabs.full;
     countBtn.firstChild.textContent = String(tabs.list.length);
     for (const [id, pane] of panes) pane.el.classList.toggle('front', id === tab.id);
@@ -355,6 +401,19 @@ export function mountRaku(root, { mothership, resolver, moderation, files, loc =
   tabs.onChange((what) => {
     if (what?.type === 'reload') { const p = panes.get(what.id); if (p) p.uri = undefined; }
     sync();
+  });
+  // When the shelf changes (the star, Import, another Raku tab), redraw the panes that show it, except
+  // the one whose own card made the change (it already updated itself).
+  shelf.onChange(({ source }) => {
+    for (const tab of tabs.list) {
+      const p = panes.get(tab.id);
+      const uri = current(tab);
+      if (!p || !(uri === SHELF_URI || uri === null)) continue;
+      if (source === 'card' && tab.id === tabs.active.id) continue;
+      p.uri = undefined;
+      show(tab);
+    }
+    drawChrome();
   });
   if (!tabs.fromHash(loc.hash)) sync();
   globalThis.addEventListener?.('hashchange', () => { if (loc.hash !== tabs.toHash()) tabs.fromHash(loc.hash); });
