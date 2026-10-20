@@ -15,6 +15,7 @@ import { createTabs, current } from './tabs.js';
 import { describeTile, sizeVerdict, createPathLoader, blobCidOf } from './tiles.js';
 import { formatBytes, NetError } from './net.js';
 import { sniffPicture } from './moderation.js';
+import { icon } from './icons.js';
 
 const h = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
@@ -37,10 +38,10 @@ export function mountRaku(root, { mothership, resolver, moderation, files, loc =
   // ---------- the frame of the page ----------
   const brand = h('span', { class: 'brand' }, SITE.name, SITE.lab ? h('span', { class: 'lab' }, ' (lab)') : null);
   const strip = h('div', { class: 'tabstrip', role: 'tablist', 'aria-label': 'Open tabs' });
-  const newTabBtn = h('button', { class: 'newtab', type: 'button', title: 'New tab', 'aria-label': 'New tab', onclick: () => openNew() }, '+');
-  const backBtn = h('button', { class: 'nav-btn', type: 'button', title: 'Back', 'aria-label': 'Back', onclick: () => tabs.back(tabs.active.id) }, '←');
-  const fwdBtn = h('button', { class: 'nav-btn', type: 'button', title: 'Forward', 'aria-label': 'Forward', onclick: () => tabs.forward(tabs.active.id) }, '→');
-  const reloadBtn = h('button', { class: 'nav-btn', type: 'button', title: 'Reload this tile', 'aria-label': 'Reload this tile', onclick: () => reload(tabs.active.id) }, '↻');
+  const newTabBtn = h('button', { class: 'newtab', type: 'button', title: 'New tab', 'aria-label': 'New tab', onclick: () => openNew() }, icon('plus', 18));
+  const backBtn = h('button', { class: 'nav-btn', type: 'button', title: 'Back', 'aria-label': 'Back', onclick: () => tabs.back(tabs.active.id) }, icon('back', 18));
+  const fwdBtn = h('button', { class: 'nav-btn', type: 'button', title: 'Forward', 'aria-label': 'Forward', onclick: () => tabs.forward(tabs.active.id) }, icon('forward', 18));
+  const reloadBtn = h('button', { class: 'nav-btn', type: 'button', title: 'Reload this tile', 'aria-label': 'Reload this tile', onclick: () => reload(tabs.active.id) }, icon('reload', 18));
   const input = h('input', {
     class: 'addr', type: 'text', name: 'address', spellcheck: 'false', autocomplete: 'off', autocapitalize: 'off',
     'aria-label': "A tile's address", placeholder: "Paste a tile's address (at://…, a lexicographer.space link, tile://…)",
@@ -50,9 +51,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, loc =
   // On a phone (decision, Oct 19: option A) the address gets the whole top row, and these four go in a
   // toolbar along the bottom, each a full thumb-size target. On a computer the toolbar is hidden.
   const toolBtn = (label, title, onclick) => h('button', { class: 'tool-btn', type: 'button', title, 'aria-label': title, onclick }, label);
-  const backTool = toolBtn('←', 'Back', () => tabs.back(tabs.active.id));
-  const fwdTool = toolBtn('→', 'Forward', () => tabs.forward(tabs.active.id));
-  const reloadTool = toolBtn('↻', 'Reload this tile', () => reload(tabs.active.id));
+  const backTool = toolBtn(icon('back'), 'Back', () => tabs.back(tabs.active.id));
+  const fwdTool = toolBtn(icon('forward'), 'Forward', () => tabs.forward(tabs.active.id));
+  const reloadTool = toolBtn(icon('reload'), 'Reload this tile', () => reload(tabs.active.id));
   const countBtn = h('button', { class: 'count', type: 'button', title: 'Open tabs', 'aria-label': 'Show open tabs', onclick: () => toggleSheet(true) }, h('span', {}, '1'));
   const toolbar = h('nav', { class: 'toolbar', 'aria-label': 'Browsing' }, backTool, fwdTool, reloadTool, countBtn);
   const noteLine = h('div', { class: 'note', role: 'status', 'aria-live': 'polite', hidden: true });
@@ -61,7 +62,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, loc =
   const sheet = h('div', { class: 'sheet', hidden: true, role: 'dialog', 'aria-label': 'Open tabs' },
     h('div', { class: 'sheet-head' },
       h('span', {}, 'Open tabs'),
-      h('button', { type: 'button', class: 'sheet-new', onclick: () => { toggleSheet(false); openNew(); } }, '+ New tab'),
+      h('button', { type: 'button', class: 'sheet-new', onclick: () => { toggleSheet(false); openNew(); } }, icon('plus', 16), 'New tab'),
       h('button', { type: 'button', class: 'sheet-done', onclick: () => toggleSheet(false) }, 'Done')),
     sheetList);
 
@@ -303,14 +304,14 @@ export function mountRaku(root, { mothership, resolver, moderation, files, loc =
   function tabButton(tab) {
     const p = paneFor(tab);
     const on = tab.id === tabs.active.id;
-    const icon = p.icon ? h('img', { class: 'tab-icon', src: p.icon, alt: '' }) : h('span', { class: 'tab-dot', 'data-state': p.state });
+    const mark = p.icon ? h('img', { class: 'tab-icon', src: p.icon, alt: '' }) : h('span', { class: 'tab-dot', 'data-state': p.state });
     const close = h('span', { class: 'tab-x', role: 'button', 'aria-label': `Close ${p.title}`, title: 'Close tab',
-      onclick: (ev) => { ev.stopPropagation(); tabs.close(tab.id); } }, '×');
+      onclick: (ev) => { ev.stopPropagation(); tabs.close(tab.id); } }, icon('close', 14));
     const b = h('div', { class: `tab${on ? ' on' : ''}`, role: 'tab', tabindex: '0', 'aria-selected': on ? 'true' : 'false', title: p.title,
       onclick: () => tabs.activate(tab.id),
       onauxclick: (ev) => { if (ev.button === 1) tabs.close(tab.id); },
       onkeydown: (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); tabs.activate(tab.id); } } },
-    icon, h('span', { class: 'tab-title' }, p.title), close);
+    mark, h('span', { class: 'tab-title' }, p.title), close);
     return b;
   }
 
@@ -322,7 +323,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, loc =
         h('button', { type: 'button', class: 'sheet-tab', onclick: () => { tabs.activate(tab.id); toggleSheet(false); } },
           p.icon ? h('img', { class: 'tab-icon', src: p.icon, alt: '' }) : h('span', { class: 'tab-dot', 'data-state': p.state }),
           h('span', { class: 'tab-title' }, p.title)),
-        h('button', { type: 'button', class: 'sheet-x', 'aria-label': `Close ${p.title}`, onclick: () => { tabs.close(tab.id); drawSheet(); } }, '×'));
+        h('button', { type: 'button', class: 'sheet-x', 'aria-label': `Close ${p.title}`, onclick: () => { tabs.close(tab.id); drawSheet(); } }, icon('close', 18)));
     }));
   }
 

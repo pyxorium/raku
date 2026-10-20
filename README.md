@@ -63,6 +63,7 @@ and open http://127.0.0.1:5181/.
 | `src/tabs.js` | the tabs as data (history, the cap, the page address) |
 | `src/app.js` | the page: tab strip, address bar, panes, the first screen |
 | `src/frame-guard.js` | refusing to run inside another site's frame |
+| `src/icons.js` | Raku's own icons, drawn (back, forward, reload, new tab, close) |
 | `src/style.css` | the look: raku pottery, turquoise, always dark |
 | `public/` | `CNAME`, `robots.txt`, the icon |
 | `.github/workflows/deploy.yml` | test, build, check the policy is on the page, publish to GitHub Pages |
@@ -71,6 +72,6 @@ and open http://127.0.0.1:5181/.
 
 `test/browser/` holds the checks run in the Claude chat sandbox (Playwright with Chromium): `servers.mjs`
 (Raku's page and an "outside" server), `loader-replica.mjs` (the loading server's own files, run locally)
-and `check_page.py` (62 checks: tabs, addresses, sizes, moderation, what a tile can reach, phone width,
+and `check_page.py` (65 checks: tabs, addresses, sizes, moderation, what a tile can reach, phone width,
 framing). They need a bundle of `src/main.js` and a copy of the loading server's `public/` folder; see the
 top of each file.
