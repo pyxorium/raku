@@ -104,6 +104,8 @@ export const shortForm = (actor, rkey) => `@${actor}/${rkey}`;
 //   raku:shelf             your shelf
 //   raku:tiles/<actor>     an account's tiles (a handle or a DID)
 export const SHELF_URI = 'raku:shelf';
+//   raku:table/<id>        a table (stage 3: sevenup, daisy)
+export const tableUri = (id) => `raku:table/${id}`;
 export const accountPageUri = (actor) => `raku:tiles/${actor}`;
 
 function account(actor) {
@@ -126,6 +128,8 @@ function account(actor) {
 export function parseTarget(input) {
   const s = String(input || '').trim();
   if (s === SHELF_URI) return { ok: true, kind: 'shelf', uri: SHELF_URI };
+  const table = s.match(/^raku:table\/([a-z0-9-]{1,40})$/);
+  if (table) return { ok: true, kind: 'table', id: table[1], uri: tableUri(table[1]) };
   const page = s.match(/^raku:tiles\/([^/\s]+)$/);
   if (page) return account(decodeURIComponent(page[1]));
   const tile = parseAddress(s);

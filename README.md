@@ -45,6 +45,18 @@ Plans and decisions: `claude/raku-plan.md` in the Web Tile Foundry project.
   shelf. Cards open in the same tab (Back returns), or in a new tab from a card's corner.
 - The first screen shows the latest few kept tiles under the picks.
 
+## Stage 3 (Oct 20 2026): tables against the bot
+
+- **Seven-Up and Daisy** play in a tab (`raku:table/sevenup`, `raku:table/daisy`), from the first screen's
+  **Tables** row: you at seat 1, the bot (@dicesprite.thunderbird.cafe) at seat 2, no sign-in. Saving isn't
+  here yet: the games' own pages save (stage 4 brings it to Raku).
+- Each table loads only the pinned versions on Raku's approved list (`TABLES` in `src/config.js`, the same
+  pins as the site's): a republished game is refused until the list is updated.
+- A small driver per game (`src/tables/sevenup.js`, `daisy.js`) on a shared core (`frames.js`, `pinned.js`,
+  `table-page.js`), with each game's own routing rules (`sevenup-relay.js`, `daisy-router.js`, copies).
+- **The message panel**: what passes between a table's tiles (and what an ordinary tile asks of Raku).
+- A table's own tile opened on its own says so and offers **Play Daisy**; the star keeps a table on your shelf.
+
 ## Try it
 
 ```
@@ -80,6 +92,7 @@ and open http://127.0.0.1:5181/.
 | `src/shelf-store.js` | your shelf as data (this browser's storage, Export and Import) |
 | `src/shelf-pages.js` | the Shelf's pages: your shelf and an account's tiles |
 | `src/typeahead.js` | handle suggestions under the address box (adapted copy of Daisy's) |
+| `src/tables/` | tables: the shared core, the two games' drivers, their routing rules (copies) |
 | `src/cards.js` | tile cards and account chips, pictures loaded as they come near |
 | `src/style.css` | the look: raku pottery, turquoise, always dark |
 | `public/` | `CNAME`, `robots.txt`, the icon |
@@ -89,6 +102,6 @@ and open http://127.0.0.1:5181/.
 
 `test/browser/` holds the checks run in the Claude chat sandbox (Playwright with Chromium): `servers.mjs`
 (Raku's page and an "outside" server), `loader-replica.mjs` (the loading server's own files, run locally)
-and `check_page.py` (99 checks: tabs, addresses, sizes, moderation, what a tile can reach, phone width,
-framing). They need a bundle of `src/main.js` and a copy of the loading server's `public/` folder; see the
+and `check_page.py` (120 checks: tabs, addresses, sizes, moderation, what a tile can reach, phone width,
+framing, both tables played to the end against the bot). They need a bundle of `src/main.js` and a copy of the loading server's `public/` folder; see the
 top of each file.

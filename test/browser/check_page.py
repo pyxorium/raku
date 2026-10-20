@@ -2,7 +2,8 @@
 # security policy, the loading server's own files through a local replica (loader-replica.mjs), a stand-in
 # PDS, PLC directory and Bluesky API through Playwright routes, and an "outside" server that logs anything
 # a tile manages to send out.
-# Usage: python3 test/browser/check_page.py <work folder>   (servers.mjs and the replica already running)
+# Usage: python3 test/browser/check_page.py <work folder> [the site's src folder, for the two games' memory tiles]
+#        (servers.mjs and the replica already running)
 import hashlib, io, json, sys, time, re
 from pathlib import Path
 from PIL import Image
@@ -74,8 +75,39 @@ for k in range(12):
 records[(A, 'flat1')] = {'$type': 'ing.dasl.masl', 'name': 'An old flat tile', 'src': {'$link': 'bafkreiflataaaaaaaaaaaaaaaaaaaaaaaaaa'}}
 records[(A, 'gone1')] = tile('Soon gone', {'/': res(PLAIN('Soon gone'), 'text/html')}, 'Deleted after it was kept', banner=png((168, 67, 46)))
 AVATAR = png((63, 184, 168), (64, 64))
+TALKER_HTML = b'<!doctype html><meta charset=utf-8><body style="font:18px sans-serif;background:#fffdf7;padding:20px"><h1>Talker</h1><script type="module" src="/talk.js"></script>'
+TALKER_JS = b"window.parent.postMessage({ action: 'tiles-protocol-up-data-ready' }, '*'); setTimeout(() => window.parent.postMessage({ action: 'tiles-protocol-up-data-payload', payload: { kind: 'hello-host' } }, '*'), 300);"
+records[(A, 'talker1')] = tile('Talker', {'/': res(TALKER_HTML, 'text/html'), '/talk.js': res(TALKER_JS, 'text/javascript')})
 
 def h(s): return hashlib.sha256(s.encode()).hexdigest()
+# Stage 3: the two tables' real tiles (the site's memory copies, src/*/tiles.generated.js, written out as
+# records and blobs with their content addresses), served under the pinned addresses with the pinned CIDs.
+import base64, subprocess
+def raw_cid(data):
+    mh = bytes([0x01, 0x55, 0x12, 0x20]) + hashlib.sha256(data).digest()
+    return 'b' + base64.b32encode(mh).decode().lower().rstrip('=')
+SITE_SRC = Path(sys.argv[2]) if len(sys.argv) > 2 else Path('/mnt/user-data/uploads/pyxorium.github.io/src')
+def memory_tiles(game):
+    out = subprocess.run(['node', '-e', f"import('{SITE_SRC}/{game}/tiles.generated.js').then(m => process.stdout.write(JSON.stringify(m.TILES)))"], capture_output=True, text=True, check=True).stdout
+    return json.loads(out)
+RAKU_SRC = Path(__file__).resolve().parents[2] / 'src'
+PINS = json.loads(subprocess.run(['node', '-e', f"import('{RAKU_SRC}/config.js').then(m => process.stdout.write(JSON.stringify(m.TABLES)))"], capture_output=True, text=True, check=True).stdout)
+PIN_CIDS = {}
+for game in ['sevenup', 'daisy']:
+    tiles = memory_tiles(game)
+    for role in ['house', 'player']:
+        t = tiles[role]
+        resources = {}
+        for path, r in t['resources'].items():
+            data = r['src'].encode()
+            c = raw_cid(data); blobs[c] = data
+            resources[path] = {'src': {'$type': 'blob', 'ref': {'$link': c}, 'mimeType': r['content-type'], 'size': len(data)}, 'content-type': r['content-type']}
+        uri = PINS[game][role]['uri']
+        did, _, rkey = uri.replace('at://', '').split('/')
+        records[(did, rkey)] = {'$type': 'ing.dasl.masl', 'cid': 'bafyreimanifest', 'tile': {'name': t['name'], 'description': t.get('description', ''), 'sizing': t.get('sizing'), 'resources': resources}}
+        PIN_CIDS[(did, rkey)] = PINS[game][role]['cid']
+BOT_DID = 'did:plc:hd2efebmfhpqcusfya4lguce'
+
 HIDE_LIST = json.dumps({'version': 1, 'salt': SALT, 'accounts': [], 'tiles': [h(f'{SALT}\n{A}\nhidden1')]})
 
 calls = []
@@ -89,7 +121,7 @@ def route(r):
     def js(obj, status=200): r.fulfill(status=status, headers={**cors, 'content-type': 'application/json'}, body=json.dumps(obj))
     if u.hostname == 'plc.directory':
         did = u.path.strip('/')
-        handle = {A: A_HANDLE, B: B_HANDLE, C: C_HANDLE}.get(did)
+        handle = {A: A_HANDLE, B: B_HANDLE, C: C_HANDLE, BOT_DID: 'dicesprite.thunderbird.cafe'}.get(did)
         if not handle: return js({'message': 'not found'}, 404)
         return js({'id': did, 'alsoKnownAs': [f'at://{handle}'], 'service': [{'id': '#atproto_pds', 'type': 'AtprotoPersonalDataServer', 'serviceEndpoint': PDS}]})
     if u.hostname == 'public.api.bsky.app':
@@ -114,7 +146,7 @@ def route(r):
         if u.path.endswith('getRecord'):
             rec = records.get((q.get('repo'), q.get('rkey')))
             if not rec: return js({'error': 'RecordNotFound'}, 400)
-            return js({'uri': f"at://{q['repo']}/ing.dasl.masl/{q['rkey']}", 'cid': 'bafyreirecord', 'value': rec})
+            return js({'uri': f"at://{q['repo']}/ing.dasl.masl/{q['rkey']}", 'cid': PIN_CIDS.get((q.get('repo'), q.get('rkey')), 'bafyreirecord'), 'value': rec})
         if u.path.endswith('listRecords'):
             repo = q.get('repo'); limit = int(q.get('limit', 50)); start = int(q.get('cursor', 0))
             keys = sorted([k for (d, k) in records if d == repo], reverse=True)
@@ -238,14 +270,14 @@ with sync_playwright() as p:
     page.fill('.addr', f'https://lexicographer.space/@{A_HANDLE}/other1'); page.press('.addr', 'Enter')
     ok = wait_for(lambda: page.frame_locator('.pane.front iframe.tile-frame').frame_locator('iframe').locator('#h').inner_text() == 'Second tile', 15)
     check('a lexicographer.space link opens its tile', ok)
-    page.fill('.addr', f'tile://3my6uchoghd2m.{A.replace(":", "%3A")}/'); page.press('.addr', 'Enter')
-    ok = wait_for(lambda: page.frame_locator('.pane.front iframe.tile-frame').frame_locator('iframe').locator('#h').inner_text() == 'Daisy player', 15)
+    page.fill('.addr', f'tile://many0.{A.replace(":", "%3A")}/'); page.press('.addr', 'Enter')
+    ok = wait_for(lambda: page.frame_locator('.pane.front iframe.tile-frame').frame_locator('iframe').locator('#h').inner_text() == 'Tile 0', 15)
     check("Beaver's tile:// form opens its tile", ok)
     page.click('.nav-btn[title="Back"]')
     ok = wait_for(lambda: page.frame_locator('.pane.front iframe.tile-frame').frame_locator('iframe').locator('#h').inner_text() == 'Second tile', 15)
     check('Back returns to the previous tile in this tab', ok)
     page.click('.nav-btn[title="Forward"]')
-    ok = wait_for(lambda: page.frame_locator('.pane.front iframe.tile-frame').frame_locator('iframe').locator('#h').inner_text() == 'Daisy player', 15)
+    ok = wait_for(lambda: page.frame_locator('.pane.front iframe.tile-frame').frame_locator('iframe').locator('#h').inner_text() == 'Tile 0', 15)
     check('Forward goes ahead again', ok)
 
     def status_text():
@@ -259,7 +291,7 @@ with sync_playwright() as p:
     check('nothing runs before the answer', page.eval_on_selector('.pane.front', 'p => !p.querySelector("iframe")'))
     page.screenshot(path=str(OUT / 'ask-large.png'))
     page.click('.pane.front .tile-status button:has-text("Not now")')
-    ok = wait_for(lambda: page.frame_locator('.pane.front iframe.tile-frame').frame_locator('iframe').locator('#h').inner_text() == 'Daisy player', 15)
+    ok = wait_for(lambda: page.frame_locator('.pane.front iframe.tile-frame').frame_locator('iframe').locator('#h').inner_text() == 'Tile 0', 15)
     check('"Not now" goes back', ok)
     page.click('.nav-btn[title="Forward"]')
     wait_for(lambda: 'Open anyway' in status_text(), 8)
@@ -380,8 +412,8 @@ with sync_playwright() as p:
     sp.fill('.addr', '@thunderbird.cafe'); sp.press('.addr', 'Enter')
     ok = wait_for(lambda: sp.inner_text('.pane.front h1') == "@thunderbird.cafe's tiles", 10)
     check("shelf: a handle opens that account's tiles", ok)
-    titles = wait_for(lambda: (lambda t: t if len(t) >= 20 else None)(sp.eval_on_selector_all('.pane.front .card-title', 'els => els.map(e => e.textContent)')), 10) or []
-    check("account page: every tile listed in the server's order, the hidden one left out", len(titles) == 20 and 'Hidden tile' not in titles and titles[0] == 'Probe tile', str(titles))
+    titles = wait_for(lambda: (lambda t: t if len(t) >= 24 else None)(sp.eval_on_selector_all('.pane.front .card-title', 'els => els.map(e => e.textContent)')), 10) or []
+    check("account page: every tile listed in the server's order, the hidden one left out", len(titles) == 24 and 'Hidden tile' not in titles and titles[0] == 'Talker', str(titles))
     check('account page: a tile Raku can\'t run is greyed with a reason', sp.eval_on_selector_all('.pane.front .card.greyed', "cs => cs.length === 1 && cs[0].innerText.includes('An old flat tile') && cs[0].innerText.includes('no files listed')"))
     check('account page: the avatar from Bluesky\'s picture server and the display name', wait_for(lambda: sp.eval_on_selector('.account-av', 'i => i.tagName === "IMG" && i.complete && i.naturalWidth === 64'), 5) and 'Thunderbird Cafe' in sp.inner_text('.pane.front .sub'))
     check('account page: the address box shows the handle; tab and page title name the account', sp.input_value('.addr') == '@thunderbird.cafe' and sp.inner_text('.tab.on .tab-title') == "@thunderbird.cafe's tiles")
@@ -426,7 +458,7 @@ with sync_playwright() as p:
     ok = wait_for(lambda: sp.inner_text('.tab.on .tab-title') == 'Pick two', 10)
     check("a card's corner opens the tile in a new tab", ok)
     sp.click('.newtab')
-    check('the first screen shows "From your shelf"', wait_for(lambda: 'FROM YOUR SHELF' in sp.inner_text('.pane.front').upper() and sp.eval_on_selector_all('.pane.front .first .cards:not(.picks) .card', 'cs => cs.length') == 2, 10))
+    check('the first screen shows "From your shelf"', wait_for(lambda: 'FROM YOUR SHELF' in sp.inner_text('.pane.front').upper() and sp.eval_on_selector_all('.pane.front .first .cards.kept .card', 'cs => cs.length') == 2, 10))
     sp.reload()
     sp.wait_for_selector('.tab')
     sp.click('.nav-btn[title="Your shelf"]')
@@ -461,6 +493,123 @@ with sync_playwright() as p:
     check('phone: an account\'s tiles as compact rows, no sideways scroll', ok and pp.eval_on_selector('.pane.front .card-main', 'm => getComputedStyle(m).flexDirection') == 'row' and pp.evaluate('() => document.documentElement.scrollWidth <= 390'))
     check('phone: the star sits inside the address box', pp.is_visible('.star-btn') and pp.eval_on_selector('.star-btn', 'b => { const r = b.getBoundingClientRect(); const a = document.querySelector(".addr").getBoundingClientRect(); return r.right <= a.right + 1 && r.left >= a.left; }'))
     pp.screenshot(path=str(OUT / 'phone-account.png'))
+
+
+    # 14. stage 3: tables against the bot
+    s5 = b.new_context(viewport={'width': 1280, 'height': 900})
+    for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**']:
+        s5.route(host, route)
+    tp = s5.new_page()
+    t_console = []
+    tp.on('console', lambda m: t_console.append((m.type, m.text, (m.location or {}).get('url', ''))))
+    tp.on('pageerror', lambda e: t_console.append(('pageerror', str(e), RAKU)))
+    tp.goto(RAKU + '?loader=' + LOADER)
+    ok = wait_for(lambda: tp.eval_on_selector_all('.first .tables .card-title', "els => els.map(e => e.textContent).join(',')") == 'Seven-Up,Daisy', 10)
+    check('first screen: a Tables row with Seven-Up and Daisy', ok)
+    tp.click(".first .tables .card-main:has-text('Daisy')")
+    ok = wait_for(lambda: tp.inner_text('.pane.front .table-bar h1') == 'Daisy', 10)
+    check('a table card opens the table in the tab (raku:table/daisy)', ok and tp.input_value('.addr') == 'raku:table/daisy' and tp.inner_text('.tab.on .tab-title') == 'Daisy')
+    mine = tp.frame_locator('.pane.front .seat-mine iframe').frame_locator('iframe')
+    theirs = tp.frame_locator('.pane.front .seat-theirs iframe').frame_locator('iframe')
+    ok = wait_for(lambda: mine.locator('#glazes button').count() >= 6, 25)
+    check('Daisy: your tile and the watching copy load from the pinned tiles; the glazes are offered', ok and wait_for(lambda: theirs.locator('#badge').is_visible(), 10))
+    check('Daisy: two hidden houses run too (yours and the bot\'s)', tp.eval_on_selector_all('.pane.front .hidden-mount iframe', 'fs => fs.length') == 2)
+    mine.locator('#glazes button').first.click()
+    rolls = 0
+    deadline = time.time() + 150
+    over = False
+    while time.time() < deadline:
+        try:
+            if mine.locator('#end').is_visible():
+                over = True; break
+            if mine.locator('#roll').is_visible() and mine.locator('#roll').is_enabled():
+                tl = mine.locator('#turn-line').inner_text()
+                m = re.search(r'(\d+)', tl or '')
+                if m and int(m.group(1)) >= 12 and mine.locator('#bank').is_enabled():
+                    mine.locator('#bank').click()
+                else:
+                    mine.locator('#roll').click(); rolls += 1
+                time.sleep(1.2)
+            else:
+                time.sleep(0.5)
+        except Exception:
+            time.sleep(0.5)
+    check('Daisy: a whole match against the bot plays to the end', over, f'rolls {rolls}')
+    tp.screenshot(path=str(OUT / 'daisy-table.png'))
+    if over:
+        mine.locator('#save').click()
+        check('Daisy: Save says saving comes to Raku soon, with the game\'s own page', wait_for(lambda: 'Saving comes to Raku soon' in tp.inner_text('.pane.front .table-note') and 'thunderbird.cafe/webtiles/daisy' in tp.inner_text('.pane.front .table-note'), 5))
+    tp.click('.pane.front .panel-btn')
+    lines = tp.eval_on_selector_all('.pane.front .panel-list li', 'ls => ls.map(l => l.textContent)')
+    check('the message panel shows what passes between the tiles (house ↔ bot, seats, Raku)', any('house → bot' in l for l in lines) and any('mine → house' in l for l in lines) and any('Raku' in l or 'page' in l for l in lines) and not any(' ping' in l or ' pong' in l for l in lines), str(lines[:6]))
+    tp.screenshot(path=str(OUT / 'daisy-panel.png'))
+    tp.click('.pane.front .panel-close')
+    check('the star on a table keeps it on your shelf', tp.is_visible('.star-btn'))
+    tp.click('.star-btn')
+    tp.click('.nav-btn[title="Your shelf"]')
+    ok = wait_for(lambda: tp.eval_on_selector_all('.pane.front .card', 'cs => cs.length') == 1, 10)
+    tp.click('.pane.front .card-main')
+    check('…and the kept table opens the table again', wait_for(lambda: tp.inner_text('.pane.front .table-bar h1') == 'Daisy', 10))
+
+    # Seven-Up
+    tp.fill('.addr', 'raku:table/sevenup'); tp.press('.addr', 'Enter')
+    ok = wait_for(lambda: tp.inner_text('.pane.front .table-bar h1') == 'Seven-Up', 10)
+    s1 = tp.frame_locator('.pane.front .table-seat[data-seat="1"] iframe').frame_locator('iframe')
+    s2 = tp.frame_locator('.pane.front .table-seat[data-seat="2"] iframe').frame_locator('iframe')
+    ok = ok and wait_for(lambda: '@you' in s1.locator('#handle').inner_text() and 'dicesprite' in s2.locator('#handle').inner_text(), 25)
+    check('Seven-Up: both seats load from the pinned tiles; you at seat 1, the bot at seat 2', ok)
+    played = 0
+    deadline = time.time() + 120
+    sover = False
+    while time.time() < deadline:
+        try:
+            if s1.locator('#end').is_visible():
+                sover = True; break
+            for sel in ['#offers button:not([disabled])', '#roll:not([disabled])', '#pass:not([disabled])']:
+                loc = s1.locator(sel).first
+                if loc.count() and loc.is_visible():
+                    loc.click(); played += 1; time.sleep(0.6); break
+            else:
+                time.sleep(0.5)
+        except Exception:
+            time.sleep(0.5)
+    check('Seven-Up: a whole match against the bot plays to the end', sover, f'clicks {played}')
+    tp.screenshot(path=str(OUT / 'sevenup-table.png'))
+    if sover:
+        check('Seven-Up: the tile itself says the match isn\'t saved here', wait_for(lambda: 'Saving comes to Raku soon' in s1.locator('#save-status').inner_text(), 5))
+    s1.locator('#table-pic').click()
+    check("Seven-Up: the house's whole-table view opens over the tab, and closes", wait_for(lambda: tp.is_visible('.pane.front .table-house'), 5) and (tp.keyboard.press('Escape') or True) and wait_for(lambda: not tp.is_visible('.pane.front .table-house'), 5))
+
+    # a table's own tile opened on its own
+    tp.fill('.addr', PINS['daisy']['player']['uri']); tp.press('.addr', 'Enter')
+    ok = wait_for(lambda: tp.is_visible('.pane.front .table-hint'), 10)
+    check("a table's own tile opened directly says it's part of a table", ok and 'Play Daisy' in tp.inner_text('.pane.front .table-hint'))
+    tp.click(".pane.front .table-hint button:has-text('Play Daisy')")
+    check('…and "Play Daisy" opens the table', wait_for(lambda: tp.inner_text('.pane.front .table-bar h1') == 'Daisy', 10))
+    tp.fill('.addr', 'raku:table/nosuch'); tp.press('.addr', 'Enter')
+    check('an unknown table says so', wait_for(lambda: 'no table called' in tp.inner_text('.pane.front'), 5))
+    # the message panel on an ordinary tile
+    tp.fill('.addr', f'at://{A}/ing.dasl.masl/talker1'); tp.press('.addr', 'Enter')
+    ok = wait_for(lambda: tp.is_visible('.pane.front .panel-pill'), 10)
+    check('an ordinary tile that asks Raku something gets a Messages button', ok)
+    tp.click('.pane.front .panel-pill')
+    check("…and the panel shows what it asked", wait_for(lambda: 'data-ready' in tp.inner_text('.pane.front .panel') or 'data-payload' in tp.inner_text('.pane.front .panel'), 5), tp.inner_text('.pane.front .panel')[:200])
+    errs = [c for c in t_console if c[0] in ('error', 'pageerror') and c[2].startswith(RAKU)]
+    check("tables: no errors on Raku's page", not errs, str(errs[:5]))
+    csp = [c for c in t_console if ('Content Security Policy' in c[1] or 'Refused' in c[1]) and c[2].startswith(RAKU)]
+    check("tables: Raku's own policy refused nothing", not csp, str(csp[:3]))
+
+    # phone
+    s6 = b.new_context(viewport={'width': 390, 'height': 800}, is_mobile=True, has_touch=True)
+    for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**']:
+        s6.route(host, route)
+    pq = s6.new_page()
+    pq.goto(RAKU + '?loader=' + LOADER + '#t=raku%3Atable%2Fdaisy&a=0')
+    mine6 = pq.frame_locator('.pane.front .seat-mine iframe').frame_locator('iframe')
+    ok = wait_for(lambda: mine6.locator('#glazes button').count() >= 6, 25)
+    order = pq.eval_on_selector_all('.pane.front .table-seat', 'ss => ss.map(s => [s.dataset.role, Math.round(s.getBoundingClientRect().top)])')
+    check('phone: Daisy stacked, your seat at the bottom; no sideways scroll', ok and order[0][1] > order[1][1] and pq.evaluate('() => document.documentElement.scrollWidth <= 390'), str(order))
+    pq.screenshot(path=str(OUT / 'phone-daisy.png'))
 
     # 12. inside another site's frame
     fp = ctx.new_page()

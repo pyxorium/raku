@@ -11,8 +11,8 @@
 // end of the address box keeps the tile or account shown (shelf-store.js).
 
 import { Tile } from '@dasl/tile-loader';
-import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS } from './config.js';
-import { parseAddress, parseTarget, atUri, SHELF_URI } from './address.js';
+import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS, TABLES, tableForTile } from './config.js';
+import { parseAddress, parseTarget, atUri, SHELF_URI, tableUri } from './address.js';
 import { createTabs, current } from './tabs.js';
 import { describeTile, sizeVerdict, createPathLoader, blobCidOf } from './tiles.js';
 import { formatBytes, NetError } from './net.js';
@@ -21,9 +21,13 @@ import { icon } from './icons.js';
 import { h, createCardKit, bannerCid } from './cards.js';
 import { drawYourShelf, drawAccountTiles, drawShelfTeaser } from './shelf-pages.js';
 import { attachTypeahead } from './typeahead.js';
+import { drawTable, createPanel } from './tables/table-page.js';
+import { createPinnedLoader } from './tables/pinned.js';
 
 export function mountRaku(root, { mothership, resolver, moderation, files, shelf, loc = globalThis.location, hist = globalThis.history }) {
   const kit = createCardKit({ files });
+  // Tables (stage 3): their tiles load through Raku's one mothership, but only the pinned versions.
+  mothership.addLoader(createPinnedLoader({ Tile, pins: Object.values(TABLES).flatMap((t) => [t.house, t.player]), resolver }));
   const tabs = createTabs();
   const panes = new Map();          // tab id -> pane state
   const largeOk = new Set();        // tiles the visitor said "Open anyway" to, this visit
@@ -128,7 +132,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     let p = panes.get(tab.id);
     if (!p) {
       const el = h('section', { class: 'pane', 'data-tab': tab.id });
-      p = { el, uri: undefined, attempt: 0, timers: [], frame: null, title: 'New tab', icon: null, shownAddress: '', state: 'new', keep: null };
+      p = { el, uri: undefined, attempt: 0, timers: [], frame: null, title: 'New tab', icon: null, shownAddress: '', state: 'new', keep: null, dispose: null, panel: null, table: null };
       panes.set(tab.id, p);
       stage.append(el);
     }
@@ -141,7 +145,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     p.timers = [];
     if (p.frame) { p.frame.remove(); p.frame = null; }
     if (p.icon) { URL.revokeObjectURL(p.icon); p.icon = null; }
+    if (p.dispose) { try { p.dispose(); } catch { /* fine */ } p.dispose = null; }
     p.keep = null;
+    p.panel = null;
     p.el.replaceChildren();
   }
 
@@ -155,7 +161,23 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     const target = parseTarget(uri);
     if (target.ok && target.kind === 'shelf') { drawYourShelf(pageContext(p, tab)); drawChrome(); return; }
     if (target.ok && target.kind === 'account') { drawAccountTiles(pageContext(p, tab), target.actor); return; }
+    if (target.ok && target.kind === 'table') { openTable(p, tab, target.id); return; }
     openTile(p, tab, uri);
+  }
+
+  // A table (stage 3): the game's driver on the shared table core (src/tables/).
+  function openTable(p, tab, id) {
+    const table = TABLES[id];
+    p.title = table ? table.name : 'No such table';
+    p.shownAddress = tableUri(id);
+    p.state = 'ready';
+    if (!table) { p.state = 'error'; status(p, 'error', `Raku has no table called "${id}". The tables are on the first screen.`); drawChrome(); return; }
+    const [did, , rkey] = table.player.uri.replace(/^at:\/\//, '').split('/');
+    p.keep = { kind: 'tile', did, rkey, name: table.name, by: '' };
+    const t = drawTable({ p, mothership, resolver }, id);
+    p.dispose = t.dispose;
+    p.table = t;
+    drawChrome();
   }
 
   // What the shelf pages need from the page.
@@ -289,7 +311,35 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     p.frame = frame;
     p.el.prepend(frame);
     loadIcon(p, did, pds, d.manifest, alive);
+    // What this tile asks of Raku (decision 12): a small Messages button appears with its first message.
+    p.panel = createPanel({ label: `What "${d.name}" asks of Raku` });
+    p.panel.button.classList.add('panel-pill');
+    p.panel.button.hidden = true;
+    p.el.append(p.panel.el, p.panel.button);
+    // One of a table's own tiles, opened on its own: say so, and offer the table (decision Q34).
+    const table = keep && tableForTile(keep.did, keep.rkey);
+    if (table) {
+      const hint = h('div', { class: 'table-hint' }, h('span', {}, 'This tile is part of a table.'),
+        h('button', { type: 'button', class: 'primary', onclick: () => tabs.go(tab.id, tableUri(table.id)) }, `Play ${table.name}`),
+        h('button', { type: 'button', class: 'table-hint-x', 'aria-label': 'Hide this note', onclick: () => hint.remove() }, icon('close', 14)));
+      p.el.append(hint);
+    }
   }
+
+  // Messages from ordinary tiles (tiles-protocol-up-…): logged on their tab's panel. Raku doesn't answer
+  // any protocol yet; the panel just shows what was asked.
+  addEventListener('message', (e) => {
+    const d = e.data;
+    if (!d || typeof d.action !== 'string' || !d.action.startsWith('tiles-protocol-up-')) return;
+    for (const pane of panes.values()) {
+      if (!pane.frame || pane.frame.contentWindow !== e.source || !pane.panel) continue;
+      const what = d.action.slice('tiles-protocol-up-'.length);
+      const kind = d.payload && typeof d.payload === 'object' && typeof d.payload.kind === 'string' ? `${what} · ${d.payload.kind}` : what;
+      pane.panel.log({ dir: 'page', from: 'tile', to: 'Raku', kind: kind.slice(0, 80), note: "Raku doesn't answer this yet" });
+      pane.panel.button.hidden = false;
+      return;
+    }
+  });
 
   async function loadIcon(p, did, pds, manifest, alive) {
     const icons = Array.isArray(manifest.icons) ? manifest.icons : [];
@@ -314,13 +364,29 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       grid);
     p.el.append(box);
     for (const uri of PICKS) grid.append(pickCard(uri, tab));
+    const tables = h('div', { class: 'cards tables' });
+    box.append(h('h2', {}, 'Tables'), h('p', { class: 'small-lede' }, 'Groups of tiles that play together. Play the bot: no sign-in.'), tables);
+    for (const t of Object.values(TABLES)) tables.append(tableCard(t, tab));
     drawShelfTeaser(pageContext(p, tab), box);
     box.append(h('p', { class: 'small' }, 'Tiles run in their own sealed frames, loaded from their authors\' own accounts. Raku has no sign-in for browsing.'));
   }
 
+  function tableCard(t, tab) {
+    const card = kit.tileCard({ name: t.name, description: t.blurb, onOpen: () => tabs.go(tab.id, tableUri(t.id)), onOpenNew: () => openNew(tableUri(t.id)) });
+    (async () => {
+      const [did, , rkey] = t.player.uri.replace(/^at:\/\//, '').split('/');
+      const [rec, acct] = await Promise.all([resolver.tileRecord(did, rkey), resolver.account(did)]);
+      const d = describeTile(rec);
+      if (d.ok) card.picture({ pds: acct.pds, did, cid: bannerCid(d.manifest) });
+    })().catch(() => { /* the card stays without a picture */ });
+    return card.el;
+  }
+
   function pickCard(uri, tab) {
     const parsed = parseAddress(uri);
-    const card = kit.tileCard({ name: '…', onOpen: () => tabs.go(tab.id, uri), onOpenNew: () => openNew(uri) });
+    const pickTable = parsed.ok && parsed.actor.startsWith('did:') ? tableForTile(parsed.actor, parsed.rkey) : null;
+    const target = pickTable ? tableUri(pickTable.id) : uri;
+    const card = kit.tileCard({ name: '…', onOpen: () => tabs.go(tab.id, target), onOpenNew: () => openNew(target) });
     (async () => {
       if (!parsed.ok) throw new Error('bad pick');
       const did = await resolver.didFor(parsed.actor);

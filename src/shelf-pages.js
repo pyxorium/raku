@@ -7,8 +7,8 @@
 // name and picture, or says the tile was deleted by its author, or that it isn't shown in Raku.
 // An account's tiles are read live from the account's own server, newest first, 100 at a time.
 
-import { TAKEDOWNS_PAGE } from './config.js';
-import { atUri, accountPageUri, SHELF_URI } from './address.js';
+import { TAKEDOWNS_PAGE, tableForTile } from './config.js';
+import { atUri, accountPageUri, SHELF_URI, tableUri } from './address.js';
 import { describeTile } from './tiles.js';
 import { NetError } from './net.js';
 import { h, bannerCid } from './cards.js';
@@ -57,7 +57,9 @@ function refreshKeptTile(ctx, card, t, alive) {
 
 function keptTileCard(ctx, t, { removable, alive, queue }) {
   const { kit, tabs, tab, openNew, shelf } = ctx;
-  const uri = atUri(t.did, t.rkey);
+  // A kept table (its player tile, kept with the star on the table's page) opens the table.
+  const table = tableForTile(t.did, t.rkey);
+  const uri = table ? tableUri(table.id) : atUri(t.did, t.rkey);
   const card = kit.tileCard({
     name: t.name, by: t.by,
     onOpen: () => tabs.go(tab.id, uri),
@@ -243,7 +245,7 @@ export function drawShelfTeaser(ctx, into, count = 6) {
   const tiles = shelf.tiles().slice(0, count);
   if (!tiles.length) return;
   const queue = limiter(3);
-  const grid = h('div', { class: 'cards' });
+  const grid = h('div', { class: 'cards kept' });
   for (const t of tiles) grid.append(keptTileCard(ctx, t, { removable: false, alive, queue }).el);
   into.append(h('h2', {}, 'From your shelf'), grid,
     h('button', { type: 'button', class: 'more', onclick: () => tabs.go(tab.id, SHELF_URI) }, 'See all on your shelf'));

@@ -54,6 +54,36 @@ export const LIMITS = Object.freeze({
 // their links out and new windows are blocked (checked in the sandbox, Oct 19). Owner's decision pending.
 export const TILE_POPUPS = true;
 
+// Tables (stage 3): groups of tiles that work together, each with a small driver in src/tables/.
+// The approved list, pinned by record CID (decided Oct 17: only the owner's approved tables; re-approve
+// after a republish). These are the same pins as the site's src/sevenup/published.generated.js and
+// src/daisy/published.generated.js: when a game is republished, update them here too.
+export const BOT = Object.freeze({ did: 'did:plc:hd2efebmfhpqcusfya4lguce', handle: 'dicesprite.thunderbird.cafe' });
+export const TABLES = Object.freeze({
+  sevenup: Object.freeze({
+    id: 'sevenup',
+    name: 'Seven-Up',
+    blurb: 'Two dice, three rounds each: roll until a 7. A hidden house tile referees.',
+    page: 'https://thunderbird.cafe/webtiles/sevenup/',
+    house: { uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3my27cwible2m', cid: 'bafyreibnphpuuoe5ukn2mmwok4vdwi7ov7ssniwpli5d4cgizpppht2tga' },
+    player: { uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3my27d43kry2d', cid: 'bafyreif4m335ieeh3bfkayyz7zrkqtp45tc3af66un2vhea44xogqebdya' },
+  }),
+  daisy: Object.freeze({
+    id: 'daisy',
+    name: 'Daisy',
+    blurb: 'A dice race: roll or bank, a 1 loses the turn, first to 25 wins.',
+    page: 'https://thunderbird.cafe/webtiles/daisy/',
+    house: { uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3my6ucagtd32m', cid: 'bafyreib473vajcpexj5m7xcpah4dtwyzfazknnuqss4mokiclqcvgvye54' },
+    player: { uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3my6uchoghd2m', cid: 'bafyreihsiqt4owq4p2bfudfwvz5qbxub3bw3q63b3ufnuepfa35p6yui7m' },
+  }),
+});
+/** The table a tile belongs to (its house or player tile), or null. */
+export function tableForTile(did, rkey) {
+  const uri = `at://${did}/${COLLECTION}/${rkey}`;
+  return Object.values(TABLES).find((t) => t.house.uri === uri || t.player.uri === uri) || null;
+}
+export const TABLE_TIMES = Object.freeze({ still: 4000, retry: 8000, heartbeat: 3000, misses: 2, tick: 1000 });
+
 export const TABS = Object.freeze({ max: 10 });
 export const TIMES = Object.freeze({ still: 4000, retry: 8000 });
 
