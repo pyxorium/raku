@@ -47,7 +47,14 @@ export function mountRaku(root, { mothership, resolver, moderation, files, loc =
   });
   input.addEventListener('focus', () => input.select());
   const form = h('form', { class: 'addr-form', role: 'search', onsubmit: (ev) => { ev.preventDefault(); submitAddress(); } }, input);
-  const countBtn = h('button', { class: 'count', type: 'button', 'aria-label': 'Show open tabs', onclick: () => toggleSheet(true) }, '1');
+  // On a phone (decision, Oct 19: option A) the address gets the whole top row, and these four go in a
+  // toolbar along the bottom, each a full thumb-size target. On a computer the toolbar is hidden.
+  const toolBtn = (label, title, onclick) => h('button', { class: 'tool-btn', type: 'button', title, 'aria-label': title, onclick }, label);
+  const backTool = toolBtn('←', 'Back', () => tabs.back(tabs.active.id));
+  const fwdTool = toolBtn('→', 'Forward', () => tabs.forward(tabs.active.id));
+  const reloadTool = toolBtn('↻', 'Reload this tile', () => reload(tabs.active.id));
+  const countBtn = h('button', { class: 'count', type: 'button', title: 'Open tabs', 'aria-label': 'Show open tabs', onclick: () => toggleSheet(true) }, h('span', {}, '1'));
+  const toolbar = h('nav', { class: 'toolbar', 'aria-label': 'Browsing' }, backTool, fwdTool, reloadTool, countBtn);
   const noteLine = h('div', { class: 'note', role: 'status', 'aria-live': 'polite', hidden: true });
   const stage = h('main', { class: 'stage' });
   const sheetList = h('ul', { class: 'sheet-list' });
@@ -62,9 +69,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, loc =
     h('header', { class: 'chrome' },
       h('div', { class: 'strip-row' }, brand, strip, newTabBtn),
       h('div', { class: 'bar' }, h('span', { class: 'brand brand-small' }, SITE.name),
-        h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn), form, countBtn),
+        h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn), form),
       noteLine),
-    stage, sheet);
+    stage, toolbar, sheet);
 
   function say(text) {
     clearTimeout(notice);
@@ -324,11 +331,11 @@ export function mountRaku(root, { mothership, resolver, moderation, files, loc =
     const tab = tabs.active;
     const p = paneFor(tab);
     if (document.activeElement !== input) input.value = p.shownAddress || '';
-    backBtn.disabled = !tabs.canBack(tab.id);
-    fwdBtn.disabled = !tabs.canForward(tab.id);
-    reloadBtn.disabled = !current(tab);
+    backBtn.disabled = backTool.disabled = !tabs.canBack(tab.id);
+    fwdBtn.disabled = fwdTool.disabled = !tabs.canForward(tab.id);
+    reloadBtn.disabled = reloadTool.disabled = !current(tab);
     newTabBtn.disabled = tabs.full;
-    countBtn.textContent = String(tabs.list.length);
+    countBtn.firstChild.textContent = String(tabs.list.length);
     for (const [id, pane] of panes) pane.el.classList.toggle('front', id === tab.id);
     document.title = current(tab) ? `${p.title} · ${SITE.name}${SITE.lab ? ' (lab)' : ''}` : `${SITE.name}${SITE.lab ? ' (lab)' : ''}`;
     if (!sheet.hidden) drawSheet();

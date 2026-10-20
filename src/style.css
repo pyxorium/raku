@@ -82,9 +82,20 @@ a { color: var(--glaze-light); }
 }
 .addr::placeholder { color: #8d8172; }
 .addr:focus { outline: none; border-color: var(--glaze); box-shadow: 0 0 0 2px rgba(63,184,168,.25); }
-.count {
-  display: none; width: 30px; height: 28px; flex: none; border-radius: 7px; cursor: pointer;
-  background: none; border: 2px solid var(--glaze); color: #d9f5f0; font-weight: 650; font-size: 13px;
+/* the phone's bottom toolbar (hidden on a computer) */
+.toolbar {
+  display: none; flex: none; justify-content: space-around; align-items: center;
+  padding: 4px 8px calc(6px + env(safe-area-inset-bottom, 0px)); background: var(--clay); border-top: 1px solid #2d2722;
+}
+.tool-btn, .count {
+  width: 44px; height: 44px; flex: none; display: grid; place-items: center; border: 0; border-radius: 10px;
+  background: none; color: #e8dcc9; font-size: 22px; cursor: pointer;
+}
+.tool-btn:active:not(:disabled), .count:active { background: rgba(255,255,255,.08); }
+.tool-btn:disabled { opacity: .3; cursor: default; }
+.count span {
+  width: 30px; height: 28px; display: grid; place-items: center; border-radius: 7px;
+  border: 2px solid var(--glaze); color: #d9f5f0; font-weight: 650; font-size: 13px;
 }
 .note { padding: 7px 14px; background: #2d2722; color: var(--warn); border-top: 1px solid #3f362e; font-size: 13px; }
 
@@ -144,9 +155,9 @@ a { color: var(--glaze-light); }
 @media (max-width: 640px) {
   .strip-row { display: none; }
   .brand-small { display: inline; padding: 0 2px 0 0; font-size: 13px; }
-  .bar { padding: 0 8px; gap: 6px; }
-  .nav-btn:not(:first-child) { display: none; }
-  .addr { font-size: 12px; padding: 0 9px; }
-  .count { display: grid; place-items: center; }
+  .bar { padding: 0 8px; gap: 8px; height: 52px; }
+  .nav { display: none; }
+  .addr { font-size: 12px; padding: 0 10px; height: 36px; }
+  .toolbar { display: flex; }
   .first { padding-top: 24px; }
 }

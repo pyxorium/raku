@@ -11,8 +11,9 @@ Plans and decisions: `claude/raku-plan.md` in the Web Tile Foundry project.
 
 ## Stage 1 (Oct 19 2026): skeleton, plain tabs, basic safety
 
-- **Tabs**: a row of tabs on a computer; on a phone one tile at a time with a tab count that opens the
-  list. Up to 10 open. Background tabs keep running. The open tabs live in the page's own address (after
+- **Tabs**: a row of tabs on a computer; on a phone one tile at a time, the address across the top, and a
+  bottom toolbar (back, forward, reload, and a tab count that opens the list), each a full thumb-size
+  button. Up to 10 open. Background tabs keep running. The open tabs live in the page's own address (after
   `#`), so a reload or a copied link reopens them.
 - **The address box** takes `at://…/ing.dasl.masl/…`, lexicographer.space and appmosphe.re tile links
   (`/@handle/rkey`), webtil.es links (`#url=at://…`), Beaver's `tile://<rkey>.<did>/`, and `@handle/rkey`.
@@ -70,6 +71,6 @@ and open http://127.0.0.1:5181/.
 
 `test/browser/` holds the checks run in the Claude chat sandbox (Playwright with Chromium): `servers.mjs`
 (Raku's page and an "outside" server), `loader-replica.mjs` (the loading server's own files, run locally)
-and `check_page.py` (54 checks: tabs, addresses, sizes, moderation, what a tile can reach, phone width,
+and `check_page.py` (62 checks: tabs, addresses, sizes, moderation, what a tile can reach, phone width,
 framing). They need a bundle of `src/main.js` and a copy of the loading server's `public/` folder; see the
 top of each file.
