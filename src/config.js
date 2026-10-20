@@ -1,8 +1,8 @@
 // Raku: every setting in one place.
 //
 // Raku's own address lives here and only here (SITE.origin): public/CNAME, the
-// sign-in description (stage 4) and anything else that names the address are
-// checked against it by test/config.test.mjs, so a move (to a generic address
+// sign-in description (oauth.json, written from oauthMetadata() below by vite.config.js on build) and
+// anything else that names the address are checked against it by test/config.test.mjs, so a move (to a generic address
 // before going public, say) is one edit here plus the DNS.
 
 export const SITE = Object.freeze({
@@ -65,6 +65,10 @@ export const TABLES = Object.freeze({
     name: 'Seven-Up',
     blurb: 'Two dice, three rounds each: roll until a 7. A hidden house tile referees.',
     page: 'https://thunderbird.cafe/webtiles/sevenup/',
+    // Saving (stage 4): the game's permission set (published from thunderbird.cafe, sevenup-tiles
+    // lexicons/cafe.thunderbird.sevenup.authPlay.json: "Play Seven-Up") and the one kind of record it covers.
+    scope: 'include:cafe.thunderbird.sevenup.authPlay',
+    collection: 'cafe.thunderbird.sevenup.match',
     house: { uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3my27cwible2m', cid: 'bafyreibnphpuuoe5ukn2mmwok4vdwi7ov7ssniwpli5d4cgizpppht2tga' },
     player: { uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3my27d43kry2d', cid: 'bafyreif4m335ieeh3bfkayyz7zrkqtp45tc3af66un2vhea44xogqebdya' },
   }),
@@ -73,6 +77,8 @@ export const TABLES = Object.freeze({
     name: 'Daisy',
     blurb: 'A dice race: roll or bank, a 1 loses the turn, first to 25 wins.',
     page: 'https://thunderbird.cafe/webtiles/daisy/',
+    scope: 'include:cafe.thunderbird.daisy.authPlay',      // "Play Daisy" (daisy-tiles lexicons/)
+    collection: 'cafe.thunderbird.daisy.match',
     house: { uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3my6ucagtd32m', cid: 'bafyreib473vajcpexj5m7xcpah4dtwyzfazknnuqss4mokiclqcvgvye54' },
     player: { uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3my6uchoghd2m', cid: 'bafyreihsiqt4owq4p2bfudfwvz5qbxub3bw3q63b3ufnuepfa35p6yui7m' },
   }),
@@ -83,6 +89,61 @@ export function tableForTile(did, rkey) {
   return Object.values(TABLES).find((t) => t.house.uri === uri || t.player.uri === uri) || null;
 }
 export const TABLE_TIMES = Object.freeze({ still: 4000, retry: 8000, heartbeat: 3000, misses: 2, tick: 1000 });
+
+// ---------- signing in and saving (stage 4, claude/raku-stage4-plan.md) ----------
+// Browsing never needs a sign-in. Signing in is only for saving match results from the tables, and each
+// game's permission set is asked the first time you save at that game (Q36): the first sign-in asks for
+// your account plus that table's set; another game adds its own with one short Authorize. Several
+// accounts can be signed in on this browser, one of them current (Q38).
+export const SIGNIN = Object.freeze({
+  clientId: `${SITE.origin}/oauth.json`,       // changing it signs everyone out
+  redirectUri: `${SITE.origin}/`,
+  handleResolver: 'https://bsky.social',        // as the Foundry, Seven-Up and Daisy
+  windowName: 'raku-signin',
+  windowFeatures: 'width=600,height=700,menubar=no,toolbar=no',
+  accountsKey: 'raku-accounts',                // localStorage: [{ did, handle }] signed in on this browser
+  currentKey: 'raku-account',                  // localStorage: the current account's DID
+  alwaysKey: 'raku-always',                    // localStorage: "Always" choices, per account and game (Q37)
+  returnKey: 'raku-signin-return',             // sessionStorage: what to pick up after "Sign in in this tab instead" (Q41)
+});
+// Shown beside "Sign in to save matches" and in the account menu (Q43).
+export const SIGNIN_PROMISE = `Signing in lets ${SITE.host} save your match results from the tables you play. Each game asks for its own permission the first time you save. Raku doesn't touch your posts, likes, follows or anything else.`;
+export const recordLink = (uri) => `https://pdsls.dev/${uri}`;
+
+/** The permissions for a sign-in: your account, plus the sets of the given tables (ids). */
+export function scopeFor(tableIds = []) {
+  const sets = [...new Set(tableIds)].map((id) => TABLES[id] && TABLES[id].scope).filter(Boolean);
+  return ['atproto', ...sets].join(' ');
+}
+/** Everything Raku may ever ask for (oauth.json's scope): every approved table's set. */
+export const fullScope = () => scopeFor(Object.keys(TABLES));
+/** Does a sign-in's permissions (its token's scope) cover saving at this table? The account's server
+ *  expands a set into plain permissions (repo:<collection>), so either form counts. */
+export function coversTable(scope, table) {
+  const s = ` ${String(scope || '')} `;
+  if (!table) return false;
+  if (s.includes(` ${table.scope} `)) return true;
+  const esc = table.collection.replace(/\./g, '\\.');
+  return new RegExp(`\\srepo:(\\*|${esc})(\\?[^\\s]*)?\\s`).test(s);
+}
+/** Which tables a sign-in's permissions cover (ids). */
+export const tablesCovered = (scope) => Object.keys(TABLES).filter((id) => coversTable(scope, TABLES[id]));
+
+/** The sign-in description file, published at SIGNIN.clientId (made by vite.config.js on build). */
+export function oauthMetadata() {
+  return {
+    client_id: SIGNIN.clientId,
+    client_name: SITE.lab ? `${SITE.name} (lab)` : SITE.name,
+    client_uri: `${SITE.origin}/`,
+    redirect_uris: [SIGNIN.redirectUri],
+    scope: fullScope(),
+    grant_types: ['authorization_code', 'refresh_token'],
+    response_types: ['code'],
+    token_endpoint_auth_method: 'none',
+    application_type: 'web',
+    dpop_bound_access_tokens: true,
+  };
+}
 
 export const TABS = Object.freeze({ max: 10 });
 export const TIMES = Object.freeze({ still: 4000, retry: 8000 });

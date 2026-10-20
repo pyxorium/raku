@@ -9,6 +9,7 @@
 // Background tabs keep running (decision 9): their panes are only moved out of sight.
 // A tab can also show your shelf or an account's tiles (stage 2, src/shelf-pages.js), and a star at the
 // end of the address box keeps the tile or account shown (shelf-store.js).
+// Stage 4: the account menu in the top bar (account-menu.js) and saving at the tables (tables/saving.js).
 
 import { Tile } from '@dasl/tile-loader';
 import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS, TABLES, tableForTile } from './config.js';
@@ -23,8 +24,9 @@ import { drawYourShelf, drawAccountTiles, drawShelfTeaser } from './shelf-pages.
 import { attachTypeahead } from './typeahead.js';
 import { drawTable, createPanel } from './tables/table-page.js';
 import { createPinnedLoader } from './tables/pinned.js';
+import { createAccountMenu } from './account-menu.js';
 
-export function mountRaku(root, { mothership, resolver, moderation, files, shelf, loc = globalThis.location, hist = globalThis.history }) {
+export function mountRaku(root, { mothership, resolver, moderation, files, shelf, auth, returned = null, keepForReturn = () => {}, loc = globalThis.location, hist = globalThis.history }) {
   const kit = createCardKit({ files });
   // Tables (stage 3): their tiles load through Raku's one mothership, but only the pinned versions.
   mothership.addLoader(createPinnedLoader({ Tile, pins: Object.values(TABLES).flatMap((t) => [t.house, t.player]), resolver }));
@@ -61,6 +63,10 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   const countBtn = h('button', { class: 'count', type: 'button', title: 'Open tabs', 'aria-label': 'Show open tabs', onclick: () => toggleSheet(true) }, h('span', {}, '1'));
   const toolbar = h('nav', { class: 'toolbar', 'aria-label': 'Browsing' }, backTool, fwdTool, reloadTool, shelfTool, countBtn);
   const noteLine = h('div', { class: 'note', role: 'status', 'aria-live': 'polite', hidden: true });
+  // "Sign in in this tab instead" (Q41): what to pick up afterwards, with the open tabs.
+  const keep = (info) => keepForReturn({ ...info, hash: tabs.toHash() });
+  const menu = createAccountMenu({ auth, moderation, keepForReturn: keep, say: (t) => say(t) });
+  let pendingReturn = returned && returned.pending ? returned.pending : null;
   const stage = h('main', { class: 'stage' });
   const sheetList = h('ul', { class: 'sheet-list' });
   const sheet = h('div', { class: 'sheet', hidden: true, role: 'dialog', 'aria-label': 'Open tabs' },
@@ -74,8 +80,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     h('header', { class: 'chrome' },
       h('div', { class: 'strip-row' }, brand, strip, newTabBtn),
       h('div', { class: 'bar' }, h('span', { class: 'brand brand-small' }, SITE.name),
-        h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn, shelfBtn), form),
-      noteLine),
+        h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn, shelfBtn), form, menu.button),
+      noteLine, menu.panel),
     stage, toolbar, sheet);
 
   function say(text) {
@@ -174,7 +180,10 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (!table) { p.state = 'error'; status(p, 'error', `Raku has no table called "${id}". The tables are on the first screen.`); drawChrome(); return; }
     const [did, , rkey] = table.player.uri.replace(/^at:\/\//, '').split('/');
     p.keep = { kind: 'tile', did, rkey, name: table.name, by: '' };
-    const t = drawTable({ p, mothership, resolver }, id);
+    // Back from "Sign in in this tab instead" at this table: hand over the match kept for the trip.
+    const pending = pendingReturn && pendingReturn.table === id ? pendingReturn : null;
+    if (pending) pendingReturn = null;
+    const t = drawTable({ p, mothership, resolver, auth, keepForReturn: keep, pending }, id);
     p.dispose = t.dispose;
     p.table = t;
     drawChrome();
@@ -365,7 +374,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     p.el.append(box);
     for (const uri of PICKS) grid.append(pickCard(uri, tab));
     const tables = h('div', { class: 'cards tables' });
-    box.append(h('h2', {}, 'Tables'), h('p', { class: 'small-lede' }, 'Groups of tiles that play together. Play the bot: no sign-in.'), tables);
+    box.append(h('h2', {}, 'Tables'), h('p', { class: 'small-lede' }, 'Groups of tiles that play together. Play the bot with no sign-in; sign in only to save your matches.'), tables);
     for (const t of Object.values(TABLES)) tables.append(tableCard(t, tab));
     drawShelfTeaser(pageContext(p, tab), box);
     box.append(h('p', { class: 'small' }, 'Tiles run in their own sealed frames, loaded from their authors\' own accounts. Raku has no sign-in for browsing.'));
@@ -485,6 +494,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     drawChrome();
   });
   if (!tabs.fromHash(loc.hash)) sync();
+  if (returned) say(returned.did && auth.current() ? `Signed in as @${auth.current().handle}.` : "Sign-in didn't finish. Try again.");
   globalThis.addEventListener?.('hashchange', () => { if (loc.hash !== tabs.toHash()) tabs.fromHash(loc.hash); });
-  return { tabs, openNew, say };
+  return { tabs, openNew, say, menu };
 }

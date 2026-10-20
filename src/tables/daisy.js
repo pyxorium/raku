@@ -1,4 +1,5 @@
-// Daisy in Raku: you at seat 1, the table's bot at seat 2, no sign-in and no saving (stage 3).
+// Daisy in Raku: you at seat 1, the table's bot at seat 2 (stage 3); saving a finished match to your own
+// account since stage 4 (saving.js: Raku's own prompt, from your house's result only).
 //
 // Adapted from the bot part of the site's src/daisy/table.js (step 7 there): four pinned tiles on one page
 // (your house, your player tile, a copy watching the bot's seat, and a second copy of the house playing
@@ -17,7 +18,7 @@ const STATUS_TEXT = {
 };
 export const READER = Object.freeze({ handle: 'you', did: 'reader:you' });
 
-export function mountDaisy(root, { table, mothership, log, setNote, setStatus, saveNote }) {
+export function mountDaisy(root, { table, mothership, log, setNote, setStatus, reader = READER, save }) {
   const seatBox = (role, label, who) => {
     const status = h('div', { class: 'seat-status' }, h('p', {}, 'Loading the tile…'), h('button', { type: 'button', class: 'seat-retry', hidden: true, onclick: () => frames.start(role) }, 'Try again'));
     const mount = h('div', { class: 'seat-mount' });
@@ -26,13 +27,13 @@ export function mountDaisy(root, { table, mothership, log, setNote, setStatus, s
       h('div', { class: 'seat-frame' }, mount, status));
     return { el, mount, status };
   };
-  const mine = seatBox('mine', 'Seat 1', 'You');
+  const mine = seatBox('mine', 'Seat 1', reader === READER ? 'You' : `You · @${reader.handle}`);
   const theirs = seatBox('theirs', 'Seat 2', `@${BOT.handle} · the bot`);
   const houseMount = h('div', { class: 'hidden-mount' });
   const botMount = h('div', { class: 'hidden-mount' });
   root.append(h('div', { class: 'table-seats daisy-seats' }, mine.el, theirs.el), houseMount, botMount);
 
-  const me = { ...READER, seat: 1 };
+  const me = { handle: reader.handle, did: reader.did, seat: 1 };
   const other = { did: BOT.did, handle: BOT.handle, seat: 2, here: true, bot: true };
   const hello = { mine: false, theirs: false };
   let houseSaid = false, houseReady = false, botSaid = false, botReady = false;
@@ -104,8 +105,9 @@ export function mountDaisy(root, { table, mothership, log, setNote, setStatus, s
         result = p.result;
         root.dataset.result = p.result.matchId;
         break;
+      // Save in your seat: Raku's own prompt (saving.js), from your house's result.
       case 'save-request':
-        if (from === 'mine') { router.fromPage('mine', 'save-status', { state: 'declined' }); setNote(saveNote); }
+        if (from === 'mine') save({ result, seat: me.seat, tell: tellMine });
         break;
       case 'ignored':
         if (!['already had it'].includes(p.why)) log({ dir: 'drop', from: 'house', kind: p.about, why: p.why });
@@ -113,14 +115,18 @@ export function mountDaisy(root, { table, mothership, log, setNote, setStatus, s
     }
   }
 
+  const tellMine = (state, extra = {}) => { if (hello.mine) router.fromPage('mine', 'save-status', { state, ...extra }); };
+
   // The player tiles: yours, and the copy watching the bot's seat.
   function introduce(role) {
     if (!hello[role]) return;
+    const done = role === 'mine' && result && save.savedFor?.(result.matchId);
     if (role === 'mine') router.fromPage('mine', 'seat', { seat: 1, handle: me.handle, watching: false });
     else router.fromPage('theirs', 'seat', { seat: 2, handle: other.handle, watching: true });
     if (lastView) frames.send(role, lastView);
     if (houseReady && houseSaid) router.fromPage(role, 'presence', { who: 'house', state: 'back' });
     if (role === 'mine') router.fromPage('mine', 'presence', { who: 'other', state: 'back' });
+    if (done) tellMine('saved', { handle: done.handle });
   }
 
   function setupHouse() {

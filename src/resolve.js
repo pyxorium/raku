@@ -109,5 +109,16 @@ export function createResolver({ fetchImpl = globalThis.fetch, now = () => Date.
     });
   }
 
-  return { resolveHandle, account, checkedHandle, didFor, tileRecord, listTiles, countTiles, didDocumentUrl };
+  /** How many records of one kind an account has (public; stage 4's "3 matches saved"), up to `cap`.
+   *  Not kept: it changes when you save. → { count, more } */
+  async function countRecords(did, collection, cap = 100) {
+    const { pds } = await account(did);
+    const url = `${pds}/xrpc/com.atproto.repo.listRecords?repo=${encodeURIComponent(did)}&collection=${encodeURIComponent(collection)}&limit=${cap}`;
+    const r = await fetchJson(url, { timeoutMs: LIMITS.lookupMs, maxBytes: 8 * 1024 * 1024, fetchImpl });
+    if (!r.ok || !Array.isArray(r.json?.records)) throw new NetError('upstream', "The account's server didn't list its records.");
+    const n = r.json.records.length;
+    return { count: n, more: n >= cap && typeof r.json.cursor === 'string' };
+  }
+
+  return { resolveHandle, account, checkedHandle, didFor, tileRecord, listTiles, countTiles, countRecords, didDocumentUrl };
 }

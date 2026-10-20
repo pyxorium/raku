@@ -13,6 +13,8 @@ const PATHS = {
   shelf: ['M4 3v18', 'M20 3v18', 'M4 12h16', 'M4 20.5h16', 'M7.5 12V6.5', 'M10.5 12V7.5', 'M13.5 12l2-5', 'M9 20.5v-1.5a3 3 0 0 1 6 0v1.5'],
   star: ['M12 3.8l2.5 5.1 5.6.8-4 3.9.9 5.6-5-2.6-5 2.6.9-5.6-4-3.9 5.6-.8z'],
   newtab: ['M14 4h6v6', 'M20 4l-8.5 8.5', 'M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10'],
+  // stage 4: the account button when nobody is signed in (a phone shows only this; a computer adds "Sign in")
+  person: ['M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M4.5 20.5a7.5 7.5 0 0 1 15 0'],
 };
 const FILLED = new Set(['star-filled']);
 export const ICON_NAMES = Object.keys(PATHS);

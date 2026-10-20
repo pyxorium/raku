@@ -11,6 +11,7 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
+    "@atproto/oauth-client-browser": "0.5.8",
     "@dasl/tile-loader": "2.0.0"
   },
   "devDependencies": {

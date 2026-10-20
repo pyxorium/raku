@@ -356,7 +356,7 @@ with sync_playwright() as p:
     mp.goto(RAKU + '?loader=' + LOADER + '#t=' + f'at%3A%2F%2F{A}%2Fing.dasl.masl%2Fprobe1,&a=0')
     mp.wait_for_selector('.count')
     check('phone: no tab strip, a tab count button', not mp.is_visible('.strip-row') and mp.is_visible('.count') and mp.inner_text('.count') == '2')
-    check('phone: no arrows in the top bar; the address gets the row', not mp.is_visible('.bar .nav') and mp.eval_on_selector('.addr', 'a => a.getBoundingClientRect().width') > 300)
+    check('phone: no arrows in the top bar; the address gets the row (beside the account button)', not mp.is_visible('.bar .nav') and mp.eval_on_selector('.addr', 'a => a.getBoundingClientRect().width') > 280)
     sizes = mp.eval_on_selector_all('.toolbar button', 'bs => bs.map(b => { const r = b.getBoundingClientRect(); return [b.title, Math.round(r.width), Math.round(r.height)]; })')
     check('phone: a bottom toolbar with back, forward, reload, the shelf and tabs, each at least 44 px', [x[0] for x in sizes] == ['Back', 'Forward', 'Reload this tile', 'Your shelf', 'Open tabs'] and all(w >= 44 and hh >= 44 for _, w, hh in sizes), str(sizes))
     icons = mp.eval_on_selector_all('.toolbar .tool-btn svg.icon', 'is => is.map(i => { const r = i.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })')
@@ -538,7 +538,9 @@ with sync_playwright() as p:
     tp.screenshot(path=str(OUT / 'daisy-table.png'))
     if over:
         mine.locator('#save').click()
-        check('Daisy: Save says saving comes to Raku soon, with the game\'s own page', wait_for(lambda: 'Saving comes to Raku soon' in tp.inner_text('.pane.front .table-note') and 'thunderbird.cafe/webtiles/daisy' in tp.inner_text('.pane.front .table-note'), 5))
+        check("Daisy: Save signed out opens Raku's own prompt, which signs you in first (stage 4)", wait_for(lambda: tp.is_visible('.pane.front .rk-dialog') and 'Save this Daisy match?' in tp.inner_text('.pane.front .rk-dialog') and tp.is_visible('.pane.front .rk-dialog .signin-handle'), 5))
+        tp.click(".pane.front .rk-dialog button:has-text('Not now')")
+        check('…"Not now" closes it and the tile can be asked again', wait_for(lambda: not tp.is_visible('.pane.front .rk-dialog') and 'Save it to your account, if you like.' in mine.locator('#save-status').inner_text() and mine.locator('#save').is_enabled(), 5))
     tp.click('.pane.front .panel-btn')
     lines = tp.eval_on_selector_all('.pane.front .panel-list li', 'ls => ls.map(l => l.textContent)')
     check('the message panel shows what passes between the tiles (house ↔ bot, seats, Raku)', any('house → bot' in l for l in lines) and any('mine → house' in l for l in lines) and any('Raku' in l or 'page' in l for l in lines) and not any(' ping' in l or ' pong' in l for l in lines), str(lines[:6]))
@@ -559,7 +561,7 @@ with sync_playwright() as p:
     ok = ok and wait_for(lambda: '@you' in s1.locator('#handle').inner_text() and 'dicesprite' in s2.locator('#handle').inner_text(), 25)
     check('Seven-Up: both seats load from the pinned tiles; you at seat 1, the bot at seat 2', ok)
     played = 0
-    deadline = time.time() + 120
+    deadline = time.time() + 180          # a round lasts until someone rolls a 7: some run long
     sover = False
     while time.time() < deadline:
         try:
@@ -576,7 +578,7 @@ with sync_playwright() as p:
     check('Seven-Up: a whole match against the bot plays to the end', sover, f'clicks {played}')
     tp.screenshot(path=str(OUT / 'sevenup-table.png'))
     if sover:
-        check('Seven-Up: the tile itself says the match isn\'t saved here', wait_for(lambda: 'Saving comes to Raku soon' in s1.locator('#save-status').inner_text(), 5))
+        check('Seven-Up: the tile offers Save (saving is Raku\'s, stage 4)', s1.locator('#save').is_visible() and s1.locator('#save').is_enabled())
     s1.locator('#table-pic').click()
     check("Seven-Up: the house's whole-table view opens over the tab, and closes", wait_for(lambda: tp.is_visible('.pane.front .table-house'), 5) and (tp.keyboard.press('Escape') or True) and wait_for(lambda: not tp.is_visible('.pane.front .table-house'), 5))
 

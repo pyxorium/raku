@@ -1,4 +1,5 @@
-// Seven-Up in Raku: you at seat 1, the table's bot at seat 2, no sign-in and no saving (stage 3).
+// Seven-Up in Raku: you at seat 1, the table's bot at seat 2 (stage 3); saving a finished match to your
+// own account since stage 4 (saving.js: Raku's own prompt, from the house's result only).
 //
 // Adapted from the site's src/sevenup/embed.js (the table in the Seven-Up blog post), which does the same
 // on the blog: the same three pinned tiles (the house and a player tile per seat), the same sender stamps
@@ -13,20 +14,21 @@ import { h } from '../cards.js';
 import { icon } from '../icons.js';
 
 const UP = 'tiles-protocol-up-data-payload';
-// The reader's seat. The player tile puts an @ before any name, so this shows as "@you". Not an account:
-// nothing is saved, and the house only needs some text for each seat.
+// The reader's seat when nobody is signed in. The player tile puts an @ before any name, so this shows as
+// "@you". Not an account: the house only needs some text for each seat (a saved record names the account
+// it's saved to: saving.js). Signed in when the table opens, the seat shows the current account instead.
 export const READER = Object.freeze({ handle: 'you', did: 'reader:you' });
 const STATUS_TEXT = {
   loading: 'Loading the tile…', slow: 'Still loading…', stuck: 'Still loading…',
   failed: "This tile couldn't be loaded.", stopped: 'This tile stopped answering.',
 };
 
-export function mountSevenUp(root, { table, mothership, resolver, fetchImpl, log, setNote, saveNote }) {
+export function mountSevenUp(root, { table, mothership, resolver, fetchImpl, log, setNote, reader = READER, save }) {
   const seatBox = (n) => {
     const status = h('div', { class: 'seat-status' }, h('p', {}, 'Loading the tile…'), h('button', { type: 'button', class: 'seat-retry', hidden: true, onclick: () => frames.start(`seat${n}`) }, 'Try again'));
     const mount = h('div', { class: 'seat-mount' });
     const el = h('section', { class: 'table-seat', 'data-seat': String(n), 'aria-label': `Seat ${n}` },
-      h('div', { class: 'seat-line' }, h('b', {}, `Seat ${n}`), h('span', {}, n === 1 ? 'You' : `@${BOT.handle} · the bot`)),
+      h('div', { class: 'seat-line' }, h('b', {}, `Seat ${n}`), h('span', {}, n === 1 ? (reader === READER ? 'You' : `You · @${reader.handle}`) : `@${BOT.handle} · the bot`)),
       h('div', { class: 'seat-frame' }, mount, status));
     return { el, mount, status };
   };
@@ -38,11 +40,13 @@ export function mountSevenUp(root, { table, mothership, resolver, fetchImpl, log
       houseMount));
   root.append(h('div', { class: 'table-seats' }, s1.el, s2.el), house);
 
-  const seats = { 1: { ...READER }, 2: { handle: BOT.handle, did: BOT.did, bot: true } };
+  const seats = { 1: { handle: reader.handle, did: reader.did }, 2: { handle: BOT.handle, did: BOT.did, bot: true } };
   const hello = { house: false, seat1: false, seat2: false };
   let seated = false;
   let snapshot = null;
   let botSprite = null;
+  let result = null;
+  const tellSeat = (n) => (state, extra = {}) => { if (hello[`seat${n}`]) relay.fromPage(`seat${n}`, 'save-status', { state, ...extra }); };
 
   const frames = createFrames({
     roles: ['house', 'seat1', 'seat2'],
@@ -109,14 +113,14 @@ export function mountSevenUp(root, { table, mothership, resolver, fetchImpl, log
       case 'sprite-request': sendSprite(n); break;
       case 'show-table': showHouse(true); break;
       case 'state': snapshot = p.snapshot; break;
-      // The match is over, or Save was pressed: say straight away that it isn't saved here.
+      // The house's result: the only thing that can be saved (never what a player tile says).
       case 'result':
+        result = p.result;
         root.dataset.result = p.result.matchId;
-        if (hello.seat1) relay.fromPage('seat1', 'save-status', { state: 'preview', note: saveNote });
         break;
+      // Save in your seat: Raku's own prompt (saving.js). The bot's seat has no Save.
       case 'save-request':
-        relay.fromPage(`seat${n}`, 'save-status', { state: 'preview', note: saveNote });
-        setNote(saveNote);
+        if (n === 1 && !seats[1].bot) save({ result, seat: 1, tell: tellSeat(1) });
         break;
     }
   }
@@ -143,6 +147,8 @@ export function mountSevenUp(root, { table, mothership, resolver, fetchImpl, log
   function tileBack(n) {
     if (!seated) return;
     relay.fromPage(`seat${n}`, 'seat', seatPayload(n));
+    const done = result && save.savedFor?.(result.matchId);
+    if (n === 1 && done) relay.fromPage('seat1', 'save-status', { state: 'saved', handle: done.handle });
     if (!hello.house) return;
     if (snapshot && snapshot.waitingFor === n - 1) relay.fromPage('house', 'presence', { seat: n, state: 'back' });
     else relay.fromPage('house', 'sync', {});
@@ -173,7 +179,7 @@ export function mountSevenUp(root, { table, mothership, resolver, fetchImpl, log
   frames.start('seat2');
 
   return {
-    frames, relay, hello, snapshot: () => snapshot,
+    frames, relay, hello, snapshot: () => snapshot, get result() { return result; },
     dispose() { frames.stop(); removeEventListener('message', onMessage); removeEventListener('keydown', onKey); },
   };
 }

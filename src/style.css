@@ -313,3 +313,110 @@ a { color: var(--glaze-light); }
     border-top: 1px solid #3a322b; z-index: 25; box-shadow: 0 -8px 24px rgba(0,0,0,.5); }
   .table-house-box { aspect-ratio: auto; height: 70vh; }
 }
+
+/* ---------- stage 4: signing in and saving ---------- */
+/* the account button: at the right of the bar on a computer; between the Raku label and the address on a phone */
+.account-btn {
+  flex: none; height: 32px; min-width: 32px; padding: 0; border: 0; border-radius: 999px; background: none; cursor: pointer;
+  display: grid; place-items: center; color: var(--text);
+}
+.account-btn.signed-out { display: flex; gap: 6px; padding: 0 12px 0 9px; border: 1px solid var(--line); background: rgba(255,255,255,.05); font-size: 13px; }
+.account-btn.signed-out:hover { border-color: var(--glaze); color: var(--glaze-light); }
+.account-btn[aria-expanded="true"] .acct-av { box-shadow: 0 0 0 2px var(--glaze); }
+.acct-av { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; flex: none; background: #3a322b; display: grid; place-items: center; }
+.acct-letter { color: var(--glaze-ink); background: var(--glaze-btn); font-weight: 700; font-size: 14px; }
+.account-menu {
+  position: absolute; right: 10px; top: calc(100% - 4px); z-index: 40; width: min(360px, calc(100vw - 20px));
+  max-height: calc(100vh - 110px); overflow: auto; padding: 12px 14px 14px; border-radius: 12px;
+  background: #2a241f; border: 1px solid var(--line); box-shadow: 0 14px 40px rgba(0,0,0,.55);
+}
+.account-menu[hidden] { display: none; }
+.acct-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.acct-head b { flex: 1; color: var(--glaze-light); font-weight: 650; }
+.acct-close { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 7px; background: none; color: var(--muted); cursor: pointer; }
+.acct-list, .acct-always { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; }
+.acct-row {
+  width: 100%; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 8px; text-align: left;
+  border: 1px solid transparent; border-radius: 9px; background: rgba(255,255,255,.04); color: var(--text); cursor: pointer;
+}
+.acct-row:hover { border-color: var(--line); }
+.acct-row.on { border-color: var(--glaze); }
+.acct-handle { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tick { color: var(--glaze); font-weight: 700; }
+.acct-add, .acct-out {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 6px 12px; margin-top: 4px;
+  border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.05); color: var(--text); cursor: pointer;
+}
+.acct-out { margin-top: 10px; }
+.account-menu h3 { margin: 14px 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.acct-always li { display: flex; align-items: center; gap: 10px; justify-content: space-between; font-size: 13.5px; }
+.rk-promise { color: var(--muted); font-size: 12.5px; margin: 10px 0 0; max-width: 60ch; }
+.account-menu .small, .rk-dialog .small { color: #8d8172; font-size: 12.5px; }
+.linkish { border: 0; background: none; padding: 0; color: var(--glaze-light); text-decoration: underline; cursor: pointer; font: inherit; }
+
+/* the sign-in form */
+.signin-form { display: grid; gap: 6px; margin: 8px 0 0; }
+.signin-form label { font-size: 12.5px; color: var(--muted); }
+.signin-row { position: relative; display: flex; gap: 8px; }
+.signin-handle {
+  flex: 1; min-width: 0; height: 38px; padding: 0 12px; border-radius: 8px; background: var(--well); color: var(--text);
+  border: 1px solid var(--line); font: inherit;
+}
+.signin-handle:focus { outline: none; border-color: var(--glaze); box-shadow: 0 0 0 2px rgba(63,184,168,.25); }
+.signin-row button, .rk-dialog .actions button, .signin-blocked button, .signin-btn {
+  min-height: 38px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--line); background: rgba(255,255,255,.06); color: var(--text); cursor: pointer;
+}
+.signin-row button.primary, .rk-dialog .actions button.primary, .signin-blocked button.primary {
+  background: var(--glaze-btn); border-color: var(--glaze-btn); color: var(--glaze-ink); font-weight: 600;
+}
+.signin-row button:disabled, .rk-dialog .actions button:disabled { opacity: .5; cursor: default; }
+.signin-row .signin-cancel[hidden] { display: none; }
+.signin-status { margin: 0; min-height: 1em; font-size: 13px; color: var(--warn); }
+.signin-status:empty { min-height: 0; }
+.signin-blocked { margin-top: 6px; padding: 10px 12px; border-radius: 9px; background: rgba(230,179,106,.08); border: 1px solid rgba(230,179,106,.35); }
+.signin-blocked p { margin: 0 0 8px; }
+.signin-blocked .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.signin-blocked .small { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; }
+.signin-wait, .signin-done { margin: auto; padding: 24px; color: var(--glaze-light); font-size: 16px; text-align: center; }
+
+/* the table's seat line and what was saved */
+.table-account { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; font-size: 13.5px; color: var(--muted); }
+.table-who { color: var(--glaze-light); }
+.signin-btn { min-height: 32px; padding: 4px 12px; font-size: 13px; border-color: var(--glaze-btn); color: var(--glaze-light); }
+.table-saved { margin-bottom: 12px; padding: 9px 12px; border-radius: 9px; background: rgba(63,184,168,.10); border: 1px solid rgba(63,184,168,.35); font-size: 13.5px; }
+.table-saved[hidden] { display: none; }
+
+/* Raku's own dialog over a table: the save prompt and signing in */
+.table-wrap { position: relative; }
+.rk-dialog { position: absolute; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(15,12,10,.74); }
+.rk-dialog-box {
+  position: relative; width: min(100%, 540px); max-height: 100%; overflow: auto; padding: 18px 20px 16px; border-radius: 14px;
+  background: #2a241f; border: 1px solid var(--line); box-shadow: 0 18px 50px rgba(0,0,0,.6);
+}
+.rk-dialog-x { position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; }
+.rk-dialog h2 { margin: 0 36px 10px 0; font-size: 18px; font-weight: 650; color: var(--glaze-light); overflow-wrap: anywhere; }
+.rk-dialog p { margin: 0 0 10px; }
+.rk-dialog .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.rk-notice { color: var(--glaze-light); }
+.rk-ask { color: var(--warn); font-size: 13.5px; }
+.rk-status { color: var(--warn); font-size: 13px; min-height: 1em; margin: 6px 0 0 !important; }
+.rk-status:empty { min-height: 0; }
+.rk-record { margin: 8px 0; font-size: 13px; }
+.rk-record summary { cursor: pointer; color: var(--muted); }
+.rk-record pre { max-height: 220px; overflow: auto; margin: 6px 0 0; padding: 10px; border-radius: 8px; background: var(--well); color: #d8ccbb; font-size: 11.5px; white-space: pre-wrap; word-break: break-all; }
+.rk-other { font-size: 13px; }
+
+@media (max-width: 640px) {
+  .brand-small { order: 1; }
+  .account-btn { order: 2; }
+  .addr-form { order: 3; }
+  .account-btn.signed-out { width: 32px; height: 32px; padding: 0; justify-content: center; }
+  .account-btn.signed-out .account-signin { display: none; }
+  .acct-av { width: 28px; height: 28px; }
+  .bar .account-btn .acct-av { width: 30px; height: 30px; }
+  /* the menu as a sheet from the bottom */
+  .account-menu { position: fixed; left: 0; right: 0; top: auto; bottom: 0; width: auto; max-height: 80vh; border-radius: 14px 14px 0 0;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+  .rk-dialog { align-items: flex-end; padding: 0; }
+  .rk-dialog-box { width: 100%; border-radius: 14px 14px 0 0; max-height: 92%; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+}

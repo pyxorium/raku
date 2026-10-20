@@ -25,6 +25,8 @@ jobs:
       - run: npm run build
       - name: Check the built page carries its security policy
         run: grep -q 'http-equiv="Content-Security-Policy"' dist/index.html
+      - name: Check the sign-in description file names Raku's own address
+        run: node -e "const m=JSON.parse(require('fs').readFileSync('dist/oauth.json','utf8')); const c=require('fs').readFileSync('public/CNAME','utf8').trim(); if (m.client_id !== 'https://'+c+'/oauth.json' || m.redirect_uris[0] !== 'https://'+c+'/') process.exit(1)"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

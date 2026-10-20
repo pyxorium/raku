@@ -39,8 +39,7 @@ export async function searchActors(text, fetchImpl = fetch, signal) {
 }
 
 /** Adds suggestions under `input`, in `holder` (a positioned element around it). onChoose(handle). */
-export function attachTypeahead(input, holder, { onChoose, fetchImpl = fetch } = {}) {
-  const id = 'rk-ta-list';
+export function attachTypeahead(input, holder, { onChoose, fetchImpl = fetch, id = 'rk-ta-list' } = {}) {
   const list = document.createElement('ul');
   list.className = 'rk-ta-list';
   list.id = id;
