@@ -1,0 +1,7 @@
+{
+  "_about": "Stand-in for the coded hide list that lexicographer.space will publish (claude/raku-plan.md, step 1b). Hashes only; empty for now.",
+  "version": 1,
+  "salt": "lexicographer.space hide list v1",
+  "accounts": [],
+  "tiles": []
+}

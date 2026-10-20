@@ -1,0 +1,3 @@
+# Raku is a lab for now: please leave it out of search engines.
+User-agent: *
+Disallow: /
