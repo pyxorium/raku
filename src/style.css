@@ -229,3 +229,17 @@ a { color: var(--glaze-light); }
   .shelf-page { padding-top: 20px; }
   .account-av { width: 44px; height: 44px; }
 }
+
+/* ---------- handle suggestions under the address box ---------- */
+.rk-ta-list {
+  position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; margin: 0; padding: 4px; list-style: none;
+  background: #2d2722; border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 10px 28px rgba(0,0,0,.5);
+}
+.rk-ta-list[hidden] { display: none; }
+.rk-ta-item { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 10px; border-radius: 7px; cursor: pointer; }
+.rk-ta-item:hover, .rk-ta-item[aria-selected="true"] { background: rgba(63,184,168,.16); }
+.rk-ta-pic { width: 28px; height: 28px; border-radius: 50%; background: #3a322b; overflow: hidden; flex: none; }
+.rk-ta-pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rk-ta-words { display: flex; flex-direction: column; min-width: 0; }
+.rk-ta-handle { color: var(--text); font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rk-ta-name { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

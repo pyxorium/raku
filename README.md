@@ -38,7 +38,8 @@ Plans and decisions: `claude/raku-plan.md` in the Web Tile Foundry project.
   handle, how many tiles), then kept tiles as cards, most recently kept first. Kept only in this browser;
   **Export** saves it as a small file and **Import** adds one (nothing is removed).
 - **An account's tiles**: type a handle (`@thunderbird.cafe`, `thunderbird.cafe`) or a DID in the address
-  box. Cards, read live from the account's own server, 100 at a time with More; tiles Raku can't run are
+  box; suggestions with avatars appear as you type a handle (from typeahead.waow.tech; pasted tile
+  addresses are never sent there). Cards, read live from the account's own server, 100 at a time with More; tiles Raku can't run are
   greyed with the reason; hidden tiles aren't listed.
 - **The star** at the end of the address box keeps the tile (or, on an account's page, the account) on your
   shelf. Cards open in the same tab (Back returns), or in a new tab from a card's corner.
@@ -78,6 +79,7 @@ and open http://127.0.0.1:5181/.
 | `src/icons.js` | Raku's own icons, drawn (back, forward, reload, new tab, close, shelf, star) |
 | `src/shelf-store.js` | your shelf as data (this browser's storage, Export and Import) |
 | `src/shelf-pages.js` | the Shelf's pages: your shelf and an account's tiles |
+| `src/typeahead.js` | handle suggestions under the address box (adapted copy of Daisy's) |
 | `src/cards.js` | tile cards and account chips, pictures loaded as they come near |
 | `src/style.css` | the look: raku pottery, turquoise, always dark |
 | `public/` | `CNAME`, `robots.txt`, the icon |
@@ -87,6 +89,6 @@ and open http://127.0.0.1:5181/.
 
 `test/browser/` holds the checks run in the Claude chat sandbox (Playwright with Chromium): `servers.mjs`
 (Raku's page and an "outside" server), `loader-replica.mjs` (the loading server's own files, run locally)
-and `check_page.py` (95 checks: tabs, addresses, sizes, moderation, what a tile can reach, phone width,
+and `check_page.py` (99 checks: tabs, addresses, sizes, moderation, what a tile can reach, phone width,
 framing). They need a bundle of `src/main.js` and a copy of the loading server's `public/` folder; see the
 top of each file.

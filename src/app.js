@@ -20,6 +20,7 @@ import { sniffPicture } from './moderation.js';
 import { icon } from './icons.js';
 import { h, createCardKit, bannerCid } from './cards.js';
 import { drawYourShelf, drawAccountTiles, drawShelfTeaser } from './shelf-pages.js';
+import { attachTypeahead } from './typeahead.js';
 
 export function mountRaku(root, { mothership, resolver, moderation, files, shelf, loc = globalThis.location, hist = globalThis.history }) {
   const kit = createCardKit({ files });
@@ -37,12 +38,14 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   const reloadBtn = h('button', { class: 'nav-btn', type: 'button', title: 'Reload this tile', 'aria-label': 'Reload this tile', onclick: () => reload(tabs.active.id) }, icon('reload', 18));
   const input = h('input', {
     class: 'addr', type: 'text', name: 'address', spellcheck: 'false', autocomplete: 'off', autocapitalize: 'off',
-    'aria-label': "A tile's address", placeholder: "Paste a tile's address (at://…, a lexicographer.space link, tile://…)",
+    'aria-label': "A tile's address or someone's handle", placeholder: "Paste a tile's address, or type someone's handle",
   });
   input.addEventListener('focus', () => input.select());
   // The star (decision Q30): keeps the tile or the account this tab shows; filled turquoise when kept.
   const starBtn = h('button', { class: 'star-btn', type: 'button', hidden: true, onclick: () => toggleKeep() });
   const form = h('form', { class: 'addr-form', role: 'search', onsubmit: (ev) => { ev.preventDefault(); submitAddress(); } }, input, starBtn);
+  // Handle suggestions under the box (typeahead.js): choosing one opens that account's tiles.
+  attachTypeahead(input, form, { onChoose: (handle) => { input.value = handle; submitAddress(); } });
   const shelfBtn = h('button', { class: 'nav-btn', type: 'button', title: 'Your shelf', 'aria-label': 'Your shelf', onclick: () => goShelf() }, icon('shelf', 18));
   // On a phone (decision, Oct 19: option A) the address gets the whole top row, and these four go in a
   // toolbar along the bottom, each a full thumb-size target. On a computer the toolbar is hidden.

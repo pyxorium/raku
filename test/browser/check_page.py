@@ -79,6 +79,7 @@ def h(s): return hashlib.sha256(s.encode()).hexdigest()
 HIDE_LIST = json.dumps({'version': 1, 'salt': SALT, 'accounts': [], 'tiles': [h(f'{SALT}\n{A}\nhidden1')]})
 
 calls = []
+typed = []
 def route(r):
     url = r.request.url
     calls.append(url)
@@ -100,6 +101,11 @@ def route(r):
             prof = {'did': q.get('actor'), 'labels': labels}
             if q.get('actor') == A: prof.update({'displayName': 'Thunderbird Cafe', 'avatar': 'https://cdn.bsky.app/img/avatar/plain/a/av@jpeg'})
             return js(prof)
+    if u.hostname == 'typeahead.waow.tech':
+        typed.append(q.get('q'))
+        actors = [{'handle': A_HANDLE, 'displayName': 'Thunderbird Cafe', 'avatar': 'https://cdn.bsky.app/img/avatar/plain/a/av@jpeg'},
+                  {'handle': C_HANDLE, 'displayName': 'Wine'}] if 'thund' in (q.get('q') or '') else []
+        return js({'actors': actors})
     if u.hostname == 'cdn.bsky.app':
         return r.fulfill(status=200, headers={**cors, 'content-type': 'image/png'}, body=AVATAR)
     if u.hostname == 'lexicographer.space' and u.path == '/hidden-tiles.json':
@@ -355,9 +361,22 @@ with sync_playwright() as p:
     s2_console = []
     sp.on('console', lambda m: s2_console.append((m.type, m.text, (m.location or {}).get('url', ''))))
     sp.on('pageerror', lambda e: s2_console.append(('pageerror', str(e), RAKU)))
+    s2.route('https://typeahead.waow.tech/**', route)
     sp.goto(RAKU + '?loader=' + LOADER)
     sp.wait_for_selector('.addr')
     check('shelf: no star on the first screen', not sp.is_visible('.star-btn'))
+    check("the address box says handles work too", "handle" in sp.get_attribute('.addr', 'placeholder'))
+    sp.click('.addr'); sp.keyboard.type('thund')
+    ok = wait_for(lambda: sp.is_visible('.rk-ta-list') and sp.eval_on_selector_all('.rk-ta-item', 'is => is.length') == 2, 5)
+    check('typing the start of a handle shows suggestions with avatars', ok and sp.eval_on_selector('.rk-ta-item', "li => li.innerText.includes('@thunderbird.cafe') && li.innerText.includes('Thunderbird Cafe') && !!li.querySelector('img')"))
+    sp.screenshot(path=str(OUT / 'suggestions.png'))
+    sp.keyboard.press('ArrowDown'); sp.keyboard.press('Enter')
+    check("choosing a suggestion opens that account's tiles", wait_for(lambda: sp.inner_text('.pane.front h1') == "@thunderbird.cafe's tiles", 10) and not sp.is_visible('.rk-ta-list'))
+    before = len(typed)
+    sp.fill('.addr', f'at://{A_HANDLE}/ing.dasl.masl/other1')
+    sp.keyboard.press('Escape')
+    time.sleep(0.5)
+    check('a pasted tile address is never sent for suggestions', len(typed) == before and not sp.is_visible('.rk-ta-list'))
     sp.fill('.addr', '@thunderbird.cafe'); sp.press('.addr', 'Enter')
     ok = wait_for(lambda: sp.inner_text('.pane.front h1') == "@thunderbird.cafe's tiles", 10)
     check("shelf: a handle opens that account's tiles", ok)
