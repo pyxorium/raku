@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { SITE, pageCsp, loadSourceOverride, TILE_LOAD_DOMAIN } from '../src/config.js';
+import { SITE, pageCsp, loadSourceOverride, TILE_LOAD_DOMAIN, HIDE_LIST_URL, PICKS } from '../src/config.js';
+import { parseAddress } from '../src/address.js';
 
 const file = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
@@ -29,4 +30,10 @@ test('?loader= only on this computer', () => {
   assert.equal(loadSourceOverride({ hostname: '127.0.0.1', search: `?loader=${v}` }), v);
   assert.equal(loadSourceOverride({ hostname: SITE.host, search: `?loader=${v}` }), null);
   assert.equal(loadSourceOverride({ hostname: '127.0.0.1', search: '?loader=javascript:alert(1)' }), null);
+});
+
+test('the hide list comes from lexicographer.space; the picks are tile addresses', () => {
+  assert.equal(HIDE_LIST_URL, 'https://lexicographer.space/hidden-tiles.json');
+  assert.ok(PICKS.length >= 1);
+  for (const p of PICKS) assert.equal(parseAddress(p).ok, true, p);
 });

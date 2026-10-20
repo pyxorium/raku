@@ -7,7 +7,9 @@
 //      { "version": 1, "salt": "<text>", "accounts": ["<hex>", …], "tiles": ["<hex>", …] }
 //      account hash = sha256(salt + "\n" + did)
 //      tile hash    = sha256(salt + "\n" + did + "\n" + rkey)
-//    Downloaded at start and about every hour; if a download fails, the last copy stays in use.
+//    Published by the viewer at https://lexicographer.space/hidden-tiles.json (its src/hide-list.js makes
+//    the same hashes; both repos' tests check the same values). Downloaded at start and about every hour;
+//    if a download fails, the last copy (also kept in this browser) stays in use.
 // 2. Bluesky's moderation, asked straight from the browser: an account taken down (400
 //    AccountTakedown) or labelled !takedown / !hide by Bluesky's own moderation service (not negated,
 //    not expired). Answers kept 10 minutes. If Bluesky can't be reached, the tile is shown (as the viewer).
@@ -48,7 +50,7 @@ export function createModeration({ fetchImpl = globalThis.fetch, listUrl = HIDE_
 
   // A copy kept in this browser, so a returning visitor has the list even if the first download fails.
   function readStored() {
-    try { const s = storage?.getItem('raku-hide-list'); return s ? parseCodedList(JSON.parse(s)) && JSON.parse(s) : null; } catch { return null; }
+    try { const s = storage?.getItem('raku-hide-list'); return s ? JSON.parse(s) : null; } catch { return null; }
   }
   function store(json) { try { storage?.setItem('raku-hide-list', JSON.stringify(json)); } catch { /* fine */ } }
 

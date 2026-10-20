@@ -27,9 +27,9 @@ export const COLLECTION = 'ing.dasl.masl';
 //   downloaded when Raku starts and checked again about every hour;
 // - Bluesky's moderation: an account Bluesky has taken down, or labelled !takedown / !hide by its
 //   own moderation service, is treated the same way.
-// Until step 1b publishes the list on lexicographer.space, Raku reads the stand-in in its own
-// public/hidden-tiles.json (empty).
-export const HIDE_LIST_URL = '/hidden-tiles.json';
+// The list is published by the viewer (C:\thunderbird-cafe\lexicographer-viewer, step 1b) from its
+// hide-list.json at every deploy, readable from any site.
+export const HIDE_LIST_URL = 'https://lexicographer.space/hidden-tiles.json';
 export const HIDE_LIST_RECHECK_MS = 60 * 60 * 1000;
 export const BLUESKY_API = 'https://public.api.bsky.app';
 export const BLUESKY_MODERATION = 'did:plc:ar7c4by46qjdydhdevvrndac';   // moderation.bsky.app
@@ -57,11 +57,11 @@ export const TILE_POPUPS = true;
 export const TABS = Object.freeze({ max: 10 });
 export const TIMES = Object.freeze({ still: 4000, retry: 8000 });
 
-// The first screen's picks: tiles the owner chooses (claude/raku-plan.md decision 6). Placeholders until
-// the owner picks: Daisy's two published tiles (on their own they show their card pictures).
+// The first screen's picks: tiles the owner chooses (claude/raku-plan.md decision 6; chosen Oct 19).
 export const PICKS = Object.freeze([
-  'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3my6uchoghd2m',
-  'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3my6ucagtd32m',
+  'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3mw763im3qw2t',
+  'at://did:plc:joer5rzmwgec3dkr4srfmq45/ing.dasl.masl/3mwwhkjfvfq2o',
+  'at://did:plc:joer5rzmwgec3dkr4srfmq45/ing.dasl.masl/3mwztqi2rl2i4',
 ]);
 
 // On this computer only (http://127.0.0.1 or localhost): ?loader=<a loading server's

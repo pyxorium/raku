@@ -92,3 +92,9 @@ test('card pictures: only plain picture types', () => {
   assert.equal(sniffPicture(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>')), 'image/svg+xml');
   assert.equal(sniffPicture(new TextEncoder().encode('<html><script>')), null);
 });
+
+// The same values are checked in the viewer's test/hide-list.test.js: both sides must make the same codes.
+test('the agreed hashes (same as the viewer)', async () => {
+  assert.equal(await sha256Hex(accountKey(SALT, 'did:plc:abcdefghijklmnopqrstuvwx')), '5b3a74a95d6d6f1ec288eccbc232ce346ef37e956041671864d573ad0b84e008');
+  assert.equal(await sha256Hex(tileKey(SALT, 'did:plc:abcdefghijklmnopqrstuvwx', '3mxxxxxxxxxxx')), '893853110c30e8cef1f4c15ae2f781fca0039225001e5153427d678b999ae66d');
+});

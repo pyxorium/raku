@@ -15,6 +15,7 @@ LOADER = 'http://load.tiles.lex.localhost/.well-known/web-tiles/'
 PDS = 'https://pds.fakepds.net'
 A = 'did:plc:6vxjigxrqizmbo56gojxico3'; A_HANDLE = 'thunderbird.cafe'
 B = 'did:plc:bbbbbbbbbbbbbbbbbbbbbbbb'; B_HANDLE = 'bad.fakepds.net'
+C = 'did:plc:joer5rzmwgec3dkr4srfmq45'; C_HANDLE = 'thunderbirdwine.bsky.social'
 LABELER = 'did:plc:ar7c4by46qjdydhdevvrndac'
 SALT = 'lexicographer.space hide list v1'
 MB = 1024 * 1024
@@ -56,8 +57,10 @@ def tile(name, resources, desc='', banner=None, icon=None):
     return {'$type': 'ing.dasl.masl', 'cid': 'bafyreimanifest', 'tile': t, 'createdAt': '2026-10-19T00:00:00Z'}
 
 records = {
-    (A, '3my6uchoghd2m'): tile('Daisy', {'/': res(PLAIN('Daisy player'), 'text/html')}, 'A dice race for two players', banner=png((242, 178, 51)), icon=png((242, 178, 51), (256, 256))),
-    (A, '3my6ucagtd32m'): tile('Daisy house', {'/': res(PLAIN('Daisy house'), 'text/html')}, "Daisy's referee", banner=png((94, 156, 134))),
+    (A, '3mw763im3qw2t'): tile('Pick one', {'/': res(PLAIN('Pick one'), 'text/html')}, 'The first pick', banner=png((242, 178, 51)), icon=png((242, 178, 51), (256, 256))),
+    (C, '3mwwhkjfvfq2o'): tile('Pick two', {'/': res(PLAIN('Pick two'), 'text/html')}, 'The second pick', banner=png((94, 156, 134))),
+    (C, '3mwztqi2rl2i4'): tile('Pick three', {'/': res(PLAIN('Pick three'), 'text/html')}, 'The third pick', banner=png((30, 35, 64))),
+    (A, '3my6uchoghd2m'): tile('Daisy', {'/': res(PLAIN('Daisy player'), 'text/html')}, 'A dice race for two players'),
     (A, 'probe1'): tile('Probe tile', {'/': res(PROBE_HTML, 'text/html'), '/probe.js': res(PROBE_JS, 'text/javascript')}, icon=png((63, 184, 168), (256, 256))),
     (A, 'other1'): tile('Second tile', {'/': res(PLAIN('Second tile'), 'text/html')}),
     (A, 'large1'): tile('Long mixtape', {'/': res(PLAIN('Long mixtape'), 'text/html'), '/song.flac': {'src': {'$type': 'blob', 'ref': {'$link': 'bafkreinotdownloadedaaaaaaaaaaaaaaaaaaaa'}, 'size': 60 * MB}}}),
@@ -69,8 +72,7 @@ for k in range(12):
     records[(A, f'many{k}')] = tile(f'Tile {k}', {'/': res(PLAIN(f'Tile {k}'), 'text/html')})
 
 def h(s): return hashlib.sha256(s.encode()).hexdigest()
-(W / 'override').mkdir(exist_ok=True)
-(W / 'override' / 'hidden-tiles.json').write_text(json.dumps({'version': 1, 'salt': SALT, 'accounts': [], 'tiles': [h(f'{SALT}\n{A}\nhidden1')]}))
+HIDE_LIST = json.dumps({'version': 1, 'salt': SALT, 'accounts': [], 'tiles': [h(f'{SALT}\n{A}\nhidden1')]})
 
 calls = []
 def route(r):
@@ -82,16 +84,18 @@ def route(r):
     def js(obj, status=200): r.fulfill(status=status, headers={**cors, 'content-type': 'application/json'}, body=json.dumps(obj))
     if u.hostname == 'plc.directory':
         did = u.path.strip('/')
-        handle = {A: A_HANDLE, B: B_HANDLE}.get(did)
+        handle = {A: A_HANDLE, B: B_HANDLE, C: C_HANDLE}.get(did)
         if not handle: return js({'message': 'not found'}, 404)
         return js({'id': did, 'alsoKnownAs': [f'at://{handle}'], 'service': [{'id': '#atproto_pds', 'type': 'AtprotoPersonalDataServer', 'serviceEndpoint': PDS}]})
     if u.hostname == 'public.api.bsky.app':
         if u.path.endswith('resolveHandle'):
-            did = {A_HANDLE: A, B_HANDLE: B}.get(q.get('handle'))
+            did = {A_HANDLE: A, B_HANDLE: B, C_HANDLE: C}.get(q.get('handle'))
             return js({'did': did}) if did else js({'error': 'InvalidRequest'}, 400)
         if u.path.endswith('getProfile'):
             labels = [{'src': LABELER, 'uri': f'at://{B}', 'val': '!hide', 'cts': '2026-10-01T00:00:00Z'}] if q.get('actor') == B else []
             return js({'did': q.get('actor'), 'labels': labels})
+    if u.hostname == 'lexicographer.space' and u.path == '/hidden-tiles.json':
+        return r.fulfill(status=200, headers={**cors, 'content-type': 'application/json'}, body=HIDE_LIST)
     if u.hostname == 'pds.fakepds.net':
         if u.path.endswith('getRecord'):
             rec = records.get((q.get('repo'), q.get('rkey')))
@@ -124,7 +128,7 @@ def wait_for(fn, timeout=10.0, step=0.1):
 with sync_playwright() as p:
     b = p.chromium.launch(args=['--host-resolver-rules=MAP *.localhost 127.0.0.1'])
     ctx = b.new_context(viewport={'width': 1280, 'height': 800})
-    for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://192.168.1.5/**']:
+    for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://192.168.1.5/**', 'https://lexicographer.space/**']:
         ctx.route(host, route)
     popups = []
     ctx.on('page', lambda pg: popups.append(pg))
@@ -135,12 +139,13 @@ with sync_playwright() as p:
     page.goto(RAKU + '?loader=' + LOADER)
 
     # 1. first screen
-    wait_for(lambda: page.eval_on_selector_all('.pick-title', "els => els.length === 2 && els.every(e => e.textContent !== '…')"), 10)
+    wait_for(lambda: page.eval_on_selector_all('.pick-title', "els => els.length === 3 && els.every(e => e.textContent !== '…')"), 10)
     names = page.eval_on_selector_all('.pick-title', 'els => els.map(e => e.textContent)')
-    check('first screen: the picks show their names from their records', names == ['Daisy', 'Daisy house'], str(names))
-    wait_for(lambda: page.eval_on_selector_all('.pick-pic img', 'els => els.length === 2 && els.every(i => i.complete)'), 10)
+    check('first screen: the three picks show their names from their records', names == ['Pick one', 'Pick two', 'Pick three'], str(names))
+    wait_for(lambda: page.eval_on_selector_all('.pick-pic img', 'els => els.length === 3 && els.every(i => i.complete)'), 10)
+    check('the hide list is read from lexicographer.space', any(c == 'https://lexicographer.space/hidden-tiles.json' for c in calls))
     check('first screen: card pictures drawn from the tiles\' banners', page.eval_on_selector_all('.pick-pic img', 'els => els.every(i => i.src.startsWith("blob:") && i.naturalWidth === 1280)'))
-    check('first screen: "by @handle" only after the handle checks both ways', wait_for(lambda: page.eval_on_selector_all('.pick-by', "els => els.length === 2 && els.every(e => e.textContent === 'by @thunderbird.cafe')"), 10))
+    check('first screen: "by @handle" only after the handle checks both ways', wait_for(lambda: page.eval_on_selector_all('.pick-by', "els => els.length === 3 && els[0].textContent === 'by @thunderbird.cafe' && els[2].textContent === 'by @thunderbirdwine.bsky.social'"), 10))
     check('page title "Raku (lab)" and the lab label', page.title() == 'Raku (lab)' and '(lab)' in page.inner_text('.strip-row'))
     check('the built page carries its security policy', page.eval_on_selector('meta[http-equiv="Content-Security-Policy"]', 'm => m.content.includes("frame-src")'))
     check('noindex while a lab', page.eval_on_selector('meta[name=robots]', 'm => m.content') == 'noindex, nofollow')
@@ -290,7 +295,7 @@ with sync_playwright() as p:
 
     # 11. phone width
     m = b.new_context(viewport={'width': 390, 'height': 800}, is_mobile=True, has_touch=True)
-    for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**']:
+    for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**']:
         m.route(host, route)
     mp = m.new_page()
     mp.goto(RAKU + '?loader=' + LOADER + '#t=' + f'at%3A%2F%2F{A}%2Fing.dasl.masl%2Fprobe1,&a=0')
