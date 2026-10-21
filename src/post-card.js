@@ -16,7 +16,6 @@ import { h, bannerCid } from './cards.js';
 import { icon } from './icons.js';
 import { ago } from './posts.js';
 import { parseAddress, parsePost } from './address.js';
-import { postLink } from './config.js';
 import { describeTile } from './tiles.js';
 
 /**
@@ -27,13 +26,12 @@ export function postCard(post, ctx, { context = false, thread = false } = {}) {
   // context: drawn above a reply as its thread (no footer); thread: the reply at the bottom of a thread
   const { linkMessage, app } = ctx;
   const who = post.author.handle || post.author.did;
-  const postUrl = postLink(app, who, post.rkey);
   const from = (what) => `${what} by ${post.author.handle ? `@${post.author.handle}` : 'an account'}${ctx.from ? ` in ${ctx.from}` : ''}.`;
   const goLink = (url) => {
     const tile = parseAddress(url);
     if (tile.ok) { ctx.openTile(tile.uri); return; }
     const p = parsePost(url);
-    if (p && p.ok) { linkMessage.show({ url: postLink(app, p.actor, p.rkey), from: from('A link in a post') }); return; }
+    if (p && p.ok) { linkMessage.show({ post: { actor: p.actor, rkey: p.rkey }, from: from('A link in a post') }); return; }
     linkMessage.show({ url, from: from('A link in a post') });
   };
 
@@ -79,15 +77,15 @@ export function postCard(post, ctx, { context = false, thread = false } = {}) {
         e.description ? h('span', { class: 'post-ext-desc' }, e.description) : null)));
   }
   if (post.quote) {
-    body.append(h('button', { type: 'button', class: 'post-quote', onclick: () => linkMessage.show({ url: postLink(app, post.quote.handle || post.quote.actor, post.quote.rkey), from: from('A post quoted') }) },
+    body.append(h('button', { type: 'button', class: 'post-quote', onclick: () => linkMessage.show({ post: { actor: post.quote.handle || post.quote.actor, rkey: post.quote.rkey }, from: from('A post quoted') }) },
       h('span', { class: 'post-quote-who' }, `Quoting ${post.quote.handle ? `@${post.quote.handle}` : 'a post'}`),
       post.quote.text ? h('span', { class: 'post-quote-text' }, post.quote.text) : null));
   }
   if (post.video) body.append(h('p', { class: 'post-note' }, 'This post has a video. Open the post to watch it.'));
 
   const foot = context ? null : h('footer', { class: 'post-foot' },
-    h('button', { type: 'button', class: 'post-open', onclick: () => linkMessage.show({ url: postUrl, from: from(thread ? 'A thread' : 'A post') }) },
-      `Open ${thread ? 'thread' : 'post'} in ${app.name}`, icon('newtab', 14)));
+    h('button', { type: 'button', class: 'post-open', onclick: () => linkMessage.show({ post: { actor: who, rkey: post.rkey }, from: from(thread ? 'A thread' : 'A post') }) },
+      `Open ${thread ? 'thread' : 'post'} in `, h('span', { class: 'post-app-name' }, app.name), icon('newtab', 14)));
   // A reply drawn on its own (its thread wasn't sent with it): say so.
   if (!context && !thread && post.replyTo) body.prepend(h('p', { class: 'post-note' }, 'A reply. Open the thread to see the conversation.'));
 

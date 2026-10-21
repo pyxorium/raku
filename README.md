@@ -213,6 +213,17 @@ Plan and decisions: `claude/raku-stage6-plan.md` (Q84 to Q96).
   is a tile-style banner for places that list apps beside tiles. Check the card in Bluesky's composer after
   the push (paste the address into a new post).
 
+## Stage 6, step 6b (Oct 21 2026): Tile news on, "Open in"
+
+- **Tile news is on** for everyone: `FEED` in `src/config.js` is the "Web Tiles" feed
+  (`at://did:plc:6vxjigxrqizmbo56gojxico3/app.bsky.feed.generator/Web-Tiles`, made with Graze), so it's
+  Discover's first source.
+- **The first screen** shows a Tile news row after the picks: the latest three posts (a "reply" mark on
+  replies); each, and More, opens Tile news on Discover. Hidden when the feed can't be read.
+- **"Open in" (Q98):** a post's link message carries "Open in [Bluesky ▾]" (Bluesky, Blacksky, mu); switching
+  updates the address shown and every "Open post in …" on the page, and is remembered in this browser
+  (`raku-post-app`). Ordinary links have no choice.
+
 ## Try it
 
 ```
@@ -276,7 +287,7 @@ the saved records passing the games' own checks; the phone). They need a bundle 
 top of each file. For the sign-in checks the bundle swaps in a stand-in for the sign-in library:
 `esbuild src/main.js --bundle --format=esm --alias:@atproto/oauth-client-browser=./test/browser/oauth-standin.js`.
 
-`check_discover.py` (69 checks, stage 6) runs the same way as `check_page.py`: Discover's columns at four widths,
+`check_discover.py` (79 checks, stage 6) runs the same way as `check_page.py`: Discover's columns at four widths,
 Following (order, hidden ones, "New"), search from the box and from Discover (nothing sent while typing, one request
 with only the words), a word with a dot as a handle first, Tile news from a stand-in feed with a post linking a tile,
 labels, replies with their thread, the link message (Cancel, Escape, Open with no opener), a post's address in the box, the phone.

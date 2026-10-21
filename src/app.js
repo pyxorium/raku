@@ -14,8 +14,8 @@
 // address opens through the link message (link-message.js), outside Raku.
 
 import { Tile } from '@dasl/tile-loader';
-import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS, TABLES, tableForTile, postApp, postLink } from './config.js';
-import { parseAddress, parseTarget, atUri, SHELF_URI, tableUri, DISCOVER_URI } from './address.js';
+import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS, TABLES, tableForTile } from './config.js';
+import { parseAddress, parseTarget, atUri, SHELF_URI, tableUri, DISCOVER_URI, discoverUri } from './address.js';
 import { createTabs, current } from './tabs.js';
 import { describeTile, sizeVerdict, createPathLoader, blobCidOf } from './tiles.js';
 import { formatBytes, NetError } from './net.js';
@@ -92,7 +92,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       noteLine, menu.panel),
     stage, toolbar, sheet);
   // Links out of Raku (a post, a link in a post): Raku says where they go and opens them on a click.
-  const linkMessage = createLinkMessage(root);
+  const linkMessage = createLinkMessage(root, { storage });
 
   function say(text) {
     clearTimeout(notice);
@@ -114,7 +114,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     say('');
     input.blur();               // first, so the box shows the tab's own address afterwards (a table's, say)
     // A post opens outside Raku for now (stage 6, Q87/Q88), in the app chosen for posts, after the link message.
-    if (r.kind === 'post') { linkMessage.show({ url: postLink(postApp(storage), r.actor, r.rkey), from: 'A post address you typed. Raku shows tiles, so posts open in their app.' }); return; }
+    if (r.kind === 'post') { linkMessage.show({ post: { actor: r.actor, rkey: r.rkey }, from: 'A post address you typed. Raku shows tiles, so posts open in their app.' }); return; }
     tabs.go(tabs.active.id, r.uri);
   }
 
@@ -408,11 +408,39 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     box.append(h('div', { class: 'first-discover' },
       h('button', { type: 'button', class: 'more', onclick: () => goDiscover() }, icon('compass', 16), 'Discover more tiles'),
       h('span', { class: 'small-lede' }, 'Search, and new tiles from the accounts you keep.')));
+    drawNewsRow(p, tab, box);
     const tables = h('div', { class: 'cards tables' });
     box.append(h('h2', {}, 'Tables'), h('p', { class: 'small-lede' }, 'Groups of tiles that play together. Play the bot with no sign-in; sign in to save your matches, or to play Daisy with a friend on another computer.'), tables);
     for (const t of Object.values(TABLES)) tables.append(tableCard(t, tab));
     drawShelfTeaser(pageContext(p, tab), box);
     box.append(h('p', { class: 'small' }, 'Tiles run in their own sealed frames, loaded from their authors\' own accounts. Raku has no sign-in for browsing.'));
+  }
+
+  // The first screen's Tile news row (step 6b, Q85): the latest three posts from the Web Tiles feed, each opening
+  // Tile news on Discover; More does too. Hidden when the feed can't be read or is empty.
+  function drawNewsRow(p, tab, box) {
+    if (!discover.feed) return;
+    const mine = p.attempt;
+    const list = h('div', { class: 'news-row' });
+    const part = h('section', { class: 'first-news', hidden: true },
+      h('div', { class: 'first-news-head' }, h('h2', {}, 'Tile news'),
+        h('button', { type: 'button', class: 'linkish', onclick: () => tabs.go(tab.id, discoverUri('news')) }, 'More')),
+      list);
+    box.append(part);
+    discover.news().then((r) => {
+      if (mine !== p.attempt || !r.items.length) return;
+      for (const it of r.items.slice(0, 3)) {
+        const a = it.post.author;
+        const reply = !!(it.context || it.post.replyTo);
+        list.append(h('button', { type: 'button', class: 'news-item', onclick: () => tabs.go(tab.id, discoverUri('news')) },
+          h('span', { class: 'news-av' }, a.avatar ? h('img', { src: a.avatar, alt: '', referrerpolicy: 'no-referrer', loading: 'lazy' }) : null),
+          h('span', { class: 'news-words' },
+            h('span', { class: 'news-who' }, a.displayName || (a.handle ? `@${a.handle}` : 'Someone'),
+              reply ? h('span', { class: 'news-reply' }, 'reply') : null),
+            h('span', { class: 'news-text' }, (it.post.text || '').split('\n')[0].slice(0, 140) || (it.post.tile ? 'A web tile' : 'A post')))));
+      }
+      part.hidden = false;
+    }).catch(() => { /* no row: the feed couldn't be read just now */ });
   }
 
   function tableCard(t, tab) {

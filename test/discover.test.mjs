@@ -44,8 +44,8 @@ test("posts: at:// and any app's /profile/…/post/… link; never kept in a tab
   assert.deepEqual(tabs.list.map((t) => t.history[0]), [null, 'raku:search/coaster']);
 });
 
-test('config: no feed yet (step 6b), search and post apps over https, ?feed= on this computer only', () => {
-  assert.equal(FEED, null);
+test('config: the Web Tiles feed (step 6b), search and post apps over https, ?feed= on this computer only', () => {
+  assert.equal(FEED, 'at://did:plc:6vxjigxrqizmbo56gojxico3/app.bsky.feed.generator/Web-Tiles');   // step 6b
   assert.match(SEARCH.url, /^https:\/\/appmosphe\.re\//);
   assert.ok(POST_APPS.every((a) => /^[a-z0-9.-]+\.[a-z]+$/.test(a.host)));
   assert.equal(postApp(null).id, 'bluesky');
@@ -54,8 +54,8 @@ test('config: no feed yet (step 6b), search and post apps over https, ?feed= on 
   assert.equal(postLink(POST_APPS[0], 'thunderbird.cafe', '3abc'), 'https://bsky.app/profile/thunderbird.cafe/post/3abc');
   const f = `at://${DID}/app.bsky.feed.generator/web-tiles`;
   assert.equal(feedUri({ hostname: '127.0.0.1', search: `?feed=${encodeURIComponent(f)}` }), f);
-  assert.equal(feedUri({ hostname: 'raku.lexicographer.space', search: `?feed=${encodeURIComponent(f)}` }), null);
-  assert.equal(feedUri({ hostname: '127.0.0.1', search: '?feed=https://evil.example/' }), null);
+  assert.equal(feedUri({ hostname: 'raku.lexicographer.space', search: `?feed=${encodeURIComponent(f)}` }), FEED, 'only on this computer');
+  assert.equal(feedUri({ hostname: '127.0.0.1', search: '?feed=https://evil.example/' }), FEED);
   assert.deepEqual([...MODERATION_SERVICES], [LABELER]);
 });
 

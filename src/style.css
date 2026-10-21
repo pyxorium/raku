@@ -681,3 +681,24 @@ a { color: var(--glaze-light); }
 .post-thread > .post.gone::after { top: 0; left: 31px; }
 .post-gap { display: flex; align-items: center; gap: 22px; padding: 2px 14px 6px 26px; color: var(--muted); font-size: 12.5px; }
 .post-gap-dots { width: 12px; text-align: center; color: #6b5d50; font-size: 16px; }
+
+/* step 6b: the first screen's Tile news row, and "Open in" in the link message */
+.first-news[hidden] { display: none; }
+.first-news-head { display: flex; align-items: baseline; gap: 14px; }
+.first-news-head .linkish { font-size: 13px; }
+.news-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.news-item { display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding: 10px 12px; border-radius: 10px; text-align: left; cursor: pointer;
+  background: #221d19; border: 1px solid #3a322b; color: var(--text); }
+.news-item:hover { border-color: var(--glaze); }
+.news-av { width: 30px; height: 30px; border-radius: 50%; background: #3a322b; overflow: hidden; flex: none; }
+.news-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.news-words { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.news-who { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; overflow: hidden; white-space: nowrap; }
+.news-reply { font-weight: 400; font-size: 11.5px; color: var(--muted); border: 1px solid #4a3f35; border-radius: 999px; padding: 0 6px; }
+.news-text { color: var(--muted); font-size: 13px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.link-msg-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 4px 0 10px; }
+.link-msg-choice label { display: inline-flex; align-items: center; gap: 8px; color: var(--text); }
+.link-msg-choice .small { color: #8d8172; font-size: 12px; }
+.link-msg-app { min-height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--well); color: var(--text); font: inherit; }
+.link-msg-app:focus { outline: none; border-color: var(--glaze); box-shadow: 0 0 0 2px rgba(63,184,168,.25); }
+@media (max-width: 640px) { .news-row { grid-template-columns: 1fr; gap: 8px; } }

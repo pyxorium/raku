@@ -9,6 +9,7 @@
 
 import { h } from './cards.js';
 import { icon } from './icons.js';
+import { POST_APPS, POST_APP_KEY, postApp, postLink } from './config.js';
 
 export function safeLink(url) {
   try {
@@ -19,8 +20,13 @@ export function safeLink(url) {
   } catch { return null; }
 }
 
-/** createLinkMessage(holder, { open }) → { show({ url, from }), close() }; open(url) is a new window by default. */
-export function createLinkMessage(holder, { open = (url) => globalThis.open(url, '_blank', 'noopener,noreferrer') } = {}) {
+/**
+ * createLinkMessage(holder, { open, storage }) → { show({ url, from } | { post: { actor, rkey }, from }), close() };
+ * open(url) is a new window by default. For a post (stage 6b, Q98), the message carries "Open in [app ▾]": the
+ * app that shows posts (Bluesky by default), remembered in this browser; switching it updates the address shown,
+ * and every "Open post in …" on the page (elements with class post-app-name).
+ */
+export function createLinkMessage(holder, { open = (url) => globalThis.open(url, '_blank', 'noopener,noreferrer'), storage = null } = {}) {
   let box = null;
   let before = null;
 
@@ -34,20 +40,37 @@ export function createLinkMessage(holder, { open = (url) => globalThis.open(url,
   function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
 
   /** Shows the message. `from` is a short line saying what's asking (optional). → false if the address isn't openable. */
-  function show({ url, from = '' }) {
-    const u = safeLink(url);
+  function show({ url = null, post = null, from = '' }) {
+    let app = post ? postApp(storage) : null;
+    let u = safeLink(post ? postLink(app, post.actor, post.rkey) : url);
     close();
     if (!u) return false;
     before = document.activeElement;
-    const host = u.hostname.replace(/^www\./, '');
+    const site = h('b', {}, u.hostname.replace(/^www\./, ''));
+    const full = h('p', { class: 'link-msg-url' }, u.toString());
+    let choice = null;
+    if (post) {
+      const select = h('select', { class: 'link-msg-app', 'aria-label': 'Open posts in' },
+        POST_APPS.map((a) => h('option', { value: a.id, selected: a.id === app.id }, a.name)));
+      select.addEventListener('change', () => {
+        app = POST_APPS.find((a) => a.id === select.value) || POST_APPS[0];
+        u = safeLink(postLink(app, post.actor, post.rkey));
+        site.textContent = u.hostname.replace(/^www\./, '');
+        full.textContent = u.toString();
+        try { storage?.setItem(POST_APP_KEY, app.id); } catch { /* fine: this visit only */ }
+        for (const el of document.querySelectorAll('.post-app-name')) el.textContent = app.name;
+      });
+      choice = h('div', { class: 'link-msg-choice' }, h('label', {}, 'Open in ', select), h('span', { class: 'small' }, 'Remembered for posts in this browser.'));
+    }
     const openBtn = h('button', { type: 'button', class: 'primary', onclick: () => { const go = u.toString(); close(); open(go); } }, 'Open');
     const cancel = h('button', { type: 'button', onclick: close }, 'Cancel');
     box = h('div', { class: 'link-msg', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'rk-link-title', onclick: (e) => { if (e.target === box) close(); } },
       h('div', { class: 'link-msg-box' },
         h('button', { type: 'button', class: 'rk-dialog-x', 'aria-label': 'Cancel', onclick: close }, icon('close', 18)),
         h('h2', { id: 'rk-link-title' }, 'This opens a page outside Raku'),
-        h('p', { class: 'link-msg-site' }, h('b', {}, host)),
-        h('p', { class: 'link-msg-url' }, u.toString()),
+        h('p', { class: 'link-msg-site' }, site),
+        full,
+        choice,
         from ? h('p', { class: 'link-msg-from' }, from) : null,
         h('p', { class: 'link-msg-trust' }, 'Only continue if you trust this site.'),
         h('div', { class: 'actions' }, openBtn, cancel)));

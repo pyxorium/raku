@@ -252,9 +252,10 @@ export function cardTags() {
 
 // ---------- Discover (stage 6, claude/raku-stage6-plan.md) ----------
 // The Discover page (raku:discover): sources in a left column, the chosen one in the centre, previews of the
-// others on the right (Q85, Q86). Step 6a: Following and search; step 6b adds Tile news (the hand-picked
-// "Web Tiles" feed, published from thunderbird.cafe through Graze, Q84) by filling in FEED below.
-export const FEED = null;            // step 6b: 'at://did:plc:6vxjigxrqizmbo56gojxico3/app.bsky.feed.generator/<rkey>'
+// others on the right (Q85, Q86): Tile news (the "Web Tiles" feed, published from thunderbird.cafe through
+// Graze, Q84; step 6b), Following and search (step 6a).
+// The "Web Tiles" feed (step 6b, Oct 21): published from thunderbird.cafe, made with Graze (did:web:api.graze.social).
+export const FEED = 'at://did:plc:6vxjigxrqizmbo56gojxico3/app.bsky.feed.generator/Web-Tiles';
 // Public reads of posts and feeds (no sign-in): one server, named here, so it can change (another AppView,
 // Q90 notes) without touching the code that draws posts.
 export const APPVIEW = BLUESKY_API;
@@ -265,14 +266,15 @@ export const MODERATION_SERVICES = Object.freeze([BLUESKY_MODERATION]);
 export const SEARCH = Object.freeze({ name: 'appmosphe.re', url: 'https://appmosphe.re/api/search', max: 24, maxBytes: 1024 * 1024 });
 // Following (Q91): the newest few tiles of each account kept on your shelf, a few accounts at a time.
 export const FOLLOWING = Object.freeze({ perAccount: 10, max: 60, keepMs: 5 * 60 * 1000, seenKey: 'raku-following-seen' });
-// Where a post opens outside Raku (Q90: a setting, step 6b; Bluesky by default). Every one of these apps
+// Where a post opens outside Raku (Q90; chosen in the link message, Q98; Bluesky by default). Northsky joins once
+// its app's address for posts is confirmed. Every one of these apps
 // shows a post at https://<host>/profile/<handle or DID>/post/<record key>.
 export const POST_APPS = Object.freeze([
   Object.freeze({ id: 'bluesky', name: 'Bluesky', host: 'bsky.app' }),
   Object.freeze({ id: 'blacksky', name: 'Blacksky', host: 'blacksky.community' }),
   Object.freeze({ id: 'mu', name: 'mu', host: 'mu.social' }),
 ]);
-export const POST_APP_KEY = 'raku-post-app';           // localStorage: the chosen app's id (the setting comes in step 6b)
+export const POST_APP_KEY = 'raku-post-app';           // localStorage: the chosen app's id (chosen in the link message, Q98)
 export function postApp(storage = null) {
   let id = null;
   try { id = storage?.getItem(POST_APP_KEY); } catch { id = null; }
@@ -280,7 +282,7 @@ export function postApp(storage = null) {
 }
 export const postLink = (app, actor, rkey) => `https://${app.host}/profile/${actor}/post/${rkey}`;
 // On this computer only: ?feed=at://…/app.bsky.feed.generator/… shows Tile news from another feed (the checks'
-// stand-in feed, or the real one before step 6b).
+// stand-in feed, say).
 export function feedUri(loc = globalThis.location) {
   if (isLocal(loc)) {
     const v = new URLSearchParams(loc.search).get('feed');

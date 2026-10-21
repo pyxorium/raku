@@ -23,7 +23,7 @@ B = 'did:plc:bbbbbbbbbbbbbbbbbbbbbbbb'; B_H = 'bad.fakepds.net'          # hidde
 MK = 'did:plc:makeraaaaaaaaaaaaaaaaaaa'; MK_H = 'maker.fakepds.net'        # a made-up tile maker
 LABELER = 'did:plc:ar7c4by46qjdydhdevvrndac'
 SALT = 'lexicographer.space hide list v1'
-FEED = f'at://{A}/app.bsky.feed.generator/web-tiles'
+FEED = f'at://{A}/app.bsky.feed.generator/Web-Tiles'          # the real feed's address (config.js FEED, step 6b)
 HANDLES = {A: A_H, P: P_H, B: B_H, MK: MK_H}
 
 blobs = {}
@@ -132,7 +132,7 @@ def route(r):
         if u.path.endswith('getBlob'):
             b = blobs.get(q.get('cid'))
             return r.fulfill(status=200 if b else 404, headers={**cors, 'content-type': 'application/octet-stream'}, body=b or b'')
-    if u.hostname in ('bsky.app', 'example.org'):
+    if u.hostname in ('bsky.app', 'example.org', 'mu.social'):
         return r.fulfill(status=200, headers={'content-type': 'text/html'}, body='<!doctype html><title>outside</title>')
     r.fulfill(status=404, headers=cors, body='')
 
@@ -159,7 +159,7 @@ with sync_playwright() as pw:
     b = pw.chromium.launch(args=['--host-resolver-rules=MAP *.localhost 127.0.0.1'])
     ctx = b.new_context(viewport={'width': 1400, 'height': 900})
     for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**',
-                 'https://appmosphe.re/**', 'https://typeahead.waow.tech/**', 'https://bsky.app/**', 'https://example.org/**', 'https://evil.example/**']:
+                 'https://appmosphe.re/**', 'https://typeahead.waow.tech/**', 'https://bsky.app/**', 'https://example.org/**', 'https://mu.social/**', 'https://evil.example/**']:
         ctx.route(host, route)
     ctx.add_init_script(f"if (!sessionStorage.getItem('seeded')) {{ localStorage.setItem('raku-shelf', {json.dumps(SHELF)}); sessionStorage.setItem('seeded', '1'); }}")
     popups = []
@@ -169,11 +169,23 @@ with sync_playwright() as pw:
     page.on('console', lambda m: policy.append(m.text) if 'Content Security Policy' in m.text or 'Refused' in m.text else None)
 
     # ---------- Discover, Following ----------
-    page.goto(RAKU + '#t=raku%3Adiscover&a=0')
+    # step 6b: the first screen's Tile news row
+    page.goto(RAKU)
+    page.wait_for_selector('.first-news:not([hidden]) .news-item')
+    row = page.eval_on_selector_all('.first-news .news-item', 'bs => bs.map(b => [b.querySelector(".news-who").textContent, !!b.querySelector(".news-reply")])')
+    check('first screen: a Tile news row with the latest three posts', len(row) == 3, str(row))
+    order = page.evaluate("() => [...document.querySelectorAll('.first > *')].map(e => e.className || e.tagName)")
+    check('...after the picks, before Tables', order.index('first-news') > order.index('cards picks') and order.index('first-news') < order.index('cards tables'), str(order))
+    page.eval_on_selector('.first-news', 'e => e.scrollIntoView()'); page.wait_for_timeout(300)
+    page.screenshot(path=str(OUT / 'd0-first-news.png'))
+    page.click('.first-news .linkish')
+    page.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Tile news'")
+    check('...More opens Tile news on Discover', True)
+    page.goto(RAKU + '#t=raku%3Adiscover%2Ffollowing&a=0')
     page.wait_for_selector('.discover')
     check('Discover opens as a page in a tab, titled Discover', 'Discover' in page.title() and texts(page, '.tab.on .tab-title') == ['Discover'])
     check('the Discover button in the top bar shows it is on', page.eval_on_selector('.bar .nav-btn[title="Discover"]', 'b => b.classList.contains("on")'))
-    check('without a feed (step 6b) the sources are Following only', texts(page, '.dv-src') == ['Following'], str(texts(page, '.dv-src')))
+    check('with the Web Tiles feed (step 6b) the sources are Tile news and Following', texts(page, '.dv-src') == ['Tile news', 'Following'], str(texts(page, '.dv-src')))
     wait_for(lambda: page.eval_on_selector_all('.dv-centre .card-title', 'els => els.length >= 3 && els.every(e => e.textContent !== "…")'), page=page)
     names = texts(page, '.dv-centre .card-title')
     check('Following: the kept accounts\' tiles, newest first, all mixed', names == ['Coaster Two', 'Roller Coaster', 'Glass Lantern'], str(names))
@@ -216,7 +228,7 @@ with sync_playwright() as pw:
     check('search: appmosphe.re\'s results looked up from the tiles\' servers; hidden and missing ones left out', theirs == ['Roller Coaster'], str(theirs))
     check('search: the line says what was sent where', 'Only the words you searched for were sent' in page.inner_text('.dv-foot'))
     check('search: the address box shows the words; the Discover box too', page.input_value('.addr') == 'coaster' and page.input_value('.dv-q') == 'coaster')
-    check('search: Search results joins the sources', texts(page, '.dv-src') == ['Following', 'Search results'] and page.eval_on_selector('.dv-src[data-source="search"]', 'b => b.classList.contains("on")'))
+    check('search: Search results joins the sources', texts(page, '.dv-src') == ['Tile news', 'Following', 'Search results'] and page.eval_on_selector('.dv-src[data-source="search"]', 'b => b.classList.contains("on")'))
     check('search: the right column previews Following, with its new count', wait_for(lambda: '1 new' in page.inner_text('.dv-preview[data-source="following"]'), page=page))
     check('...and the previews\' small banners', wait_for(lambda: page.eval_on_selector_all('.dv-preview[data-source="following"] .dv-mini-pic img', 'is => is.length === 3 && is.every(i => i.src.startsWith("blob:"))'), page=page))
     page.screenshot(path=str(OUT / 'd3-search-wide.png'))
@@ -314,6 +326,25 @@ with sync_playwright() as pw:
     if pop: pop.close()
     page.query_selector('.post[data-uri$="3post2"] .post-open').click(); page.wait_for_selector('.link-msg')
     check('"Open post in Bluesky": the post\'s address in the app for posts', page.inner_text('.link-msg-url') == 'https://bsky.app/profile/thunderbird.cafe/post/3post2')
+    # step 6b (Q98): "Open in" for posts, in the link message
+    check('a post\'s link message offers "Open in", Bluesky first', page.eval_on_selector_all('.link-msg-app option', 'os => os.map(o => o.textContent)') == ['Bluesky', 'Blacksky', 'mu'] and page.input_value('.link-msg-app') == 'bluesky')
+    page.select_option('.link-msg-app', 'mu')
+    page.screenshot(path=str(OUT / 'd7b-open-in.png'))
+    check('...switching updates the site and the address shown', page.inner_text('.link-msg-site') == 'mu.social' and page.inner_text('.link-msg-url') == 'https://mu.social/profile/thunderbird.cafe/post/3post2')
+    check('...and every "Open post in …" on the page', set(texts(page, '.post-app-name')) == {'mu'})
+    n1 = len(popups)
+    page.click('.link-msg .actions button.primary')
+    pop = wait_for(lambda: popups[n1] if len(popups) > n1 else None, page=page)
+    check('...Open goes to the chosen app', pop is not None and pop.url.startswith('https://mu.social/profile/thunderbird.cafe/post/3post2'), pop.url if pop else 'none')
+    if pop: pop.close()
+    page.reload(); page.wait_for_selector('.post .post-open')
+    check('...remembered in this browser', set(texts(page, '.post-app-name')) == {'mu'})
+    page.query_selector('.post[data-uri$="3post2"] .post-open').click(); page.wait_for_selector('.link-msg')
+    check('...and chosen next time', page.input_value('.link-msg-app') == 'mu')
+    page.select_option('.link-msg-app', 'bluesky'); page.keyboard.press('Escape')
+    p2 = page.query_selector('.post[data-uri$="3post2"]')
+    p2.query_selector('.post-link').click(); page.wait_for_selector('.link-msg')
+    check('an ordinary link\'s message has no "Open in"', page.query_selector('.link-msg-app') is None)
     page.keyboard.press('Escape')
     page.query_selector('.post[data-uri$="3post2"] .post-link:nth-of-type(2)').click()
     page.wait_for_function("() => document.querySelector('.tab.on .tab-title')?.textContent === \"@thunderbird.cafe's tiles\"")
