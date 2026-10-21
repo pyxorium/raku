@@ -72,7 +72,7 @@ test('the address box also takes an account (its tiles) and your shelf', () => {
   assert.equal(parseTarget(SHELF_URI).kind, 'shelf');
   assert.equal(parseTarget(URI).kind, 'tile');
   assert.equal(parseTarget(`thunderbird.cafe/${RKEY}`).kind, 'tile');
-  assert.match(parseTarget('mixtape').reason, /isn't a tile's address or an account's handle/);
+  assert.deepEqual(parseTarget('mixtape'), { ok: true, kind: 'search', query: 'mixtape', uri: 'raku:search/mixtape' });   // stage 6: words search
   assert.equal(parseTarget('https://example.com/').ok, false);
   assert.equal(parseTarget('raku:tiles/not a handle').ok, false);
 });

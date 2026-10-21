@@ -126,14 +126,73 @@ function account(actor) {
   return { ok: true, kind: 'account', actor, uri: accountPageUri(actor) };
 }
 
+// ---- stage 6: Discover, search and posts ----
+//   raku:discover              the Discover page (its first source)
+//   raku:discover/<source>     one source in the centre: following, news
+//   raku:search/<words>        search results (the words percent-encoded)
+export const DISCOVER_URI = 'raku:discover';
+export const DISCOVER_SOURCES = Object.freeze(['following', 'news']);
+export const discoverUri = (source = null) => (source ? `${DISCOVER_URI}/${source}` : DISCOVER_URI);
+export const searchUri = (query) => `raku:search/${encodeURIComponent(String(query || '').trim())}`;
+export const SEARCH_MAX_CHARS = 200;
+
+// A post (Q87/Q88: posts open outside Raku for now, after the link message; a reader may come later, and
+// these addresses are kept for it). Any atproto app's post link counts, not only bsky.app's:
+//   at://<did or handle>/app.bsky.feed.post/<rkey>
+//   https://<any app>/profile/<did or handle>/post/<rkey>
+export const POST_COLLECTION = 'app.bsky.feed.post';
+export const postUri = (actor, rkey) => `at://${actor}/${POST_COLLECTION}/${rkey}`;
+/** A post's address, or null when what's given isn't one. → { ok, kind: 'post', actor, rkey, uri } or a failure */
+export function parsePost(input) {
+  const s = String(input || '').trim();
+  let actor, rkey;
+  const at = s.match(/^at:\/\/([^/?#\s]+)\/app\.bsky\.feed\.post\/([^/?#\s]+)\/?$/i);
+  if (at) { actor = at[1]; rkey = at[2]; } else {
+    let u;
+    try { u = new URL(s); } catch { return null; }
+    if (u.protocol !== 'https:') return null;
+    const m = u.pathname.match(/^\/profile\/([^/]+)\/post\/([^/]+)\/?$/);
+    if (!m) return null;
+    actor = m[1]; rkey = m[2];
+  }
+  try { actor = decodeURIComponent(actor); rkey = decodeURIComponent(rkey); } catch { return null; }
+  const a = actorAndKey(actor, rkey);
+  if (!a.ok) return a;
+  return { ok: true, kind: 'post', actor: a.actor, rkey: a.rkey, uri: postUri(a.actor, a.rkey) };
+}
+
+// Words to search for: anything typed that isn't an address of some kind (Q95: a single word with a dot is
+// tried as a handle first, before this).
+function looksLikeWords(s) {
+  if (!s || s.length > SEARCH_MAX_CHARS) return false;
+  if (s.includes('://') || /^(at|tile|raku|did|https?|mailto|javascript|data):/i.test(s)) return false;
+  return /[\p{L}\p{N}]/u.test(s);
+}
+
 /**
  * Everything the address box accepts: a tile (as parseAddress), your shelf, or an account's tiles
  * (a handle or DID on its own: @thunderbird.cafe, thunderbird.cafe, did:plc:…, at://handle, or a
- * lexicographer.space / appmosphe.re link to an account). → { ok, kind: 'tile' | 'shelf' | 'account', uri, … }
+ * lexicographer.space / appmosphe.re link to an account), Discover, a post (stage 6), or words to search
+ * for. → { ok, kind: 'tile' | 'shelf' | 'account' | 'table' | 'discover' | 'search' | 'post', uri, … }
  */
 export function parseTarget(input, { inner = false } = {}) {
   const s = String(input || '').trim();
   if (s === SHELF_URI) return { ok: true, kind: 'shelf', uri: SHELF_URI };
+  if (s === DISCOVER_URI) return { ok: true, kind: 'discover', source: null, uri: DISCOVER_URI };
+  const disc = s.match(/^raku:discover\/([a-z]{1,20})$/);
+  if (disc) {
+    if (!DISCOVER_SOURCES.includes(disc[1])) return fail("That Discover address isn't one Raku knows.");
+    return { ok: true, kind: 'discover', source: disc[1], uri: discoverUri(disc[1]) };
+  }
+  const search = s.match(/^raku:search\/(.*)$/s);
+  if (search) {
+    let q;
+    try { q = decodeURIComponent(search[1]).trim(); } catch { return fail("That search address can't be read."); }
+    if (!q || q.length > SEARCH_MAX_CHARS) return fail('Type a few words to search for tiles.');
+    return { ok: true, kind: 'search', query: q, uri: searchUri(q) };
+  }
+  const post = parsePost(s);
+  if (post) return post;
   const table = s.match(/^raku:table\/([a-z0-9-]{1,40})(?:\/([a-z0-9]{1,40}))?$/);
   if (table) {
     if (table[2] !== undefined && !TABLE_SUB.test(table[2])) return fail("That table's address isn't one Raku knows.");
@@ -156,9 +215,8 @@ export function parseTarget(input, { inner = false } = {}) {
       if (m) return account(decodeURIComponent(m[1]));
     }
   } catch { /* not a link */ }
-  if (/^[^\s:/]+$/.test(s) && !s.includes('.')) {
-    return fail(`"${s}" isn't a tile's address or an account's handle. (Searching for tiles comes later.)`);
-  }
+  // Anything else that reads as words: a search (stage 6, Q95).
+  if (looksLikeWords(s)) return { ok: true, kind: 'search', query: s, uri: searchUri(s) };
   return tile;
 }
 

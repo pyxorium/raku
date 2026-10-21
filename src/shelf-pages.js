@@ -8,7 +8,7 @@
 // An account's tiles are read live from the account's own server, newest first, 100 at a time.
 
 import { TAKEDOWNS_PAGE, tableForTile } from './config.js';
-import { atUri, accountPageUri, SHELF_URI, tableUri } from './address.js';
+import { atUri, accountPageUri, SHELF_URI, tableUri, searchUri } from './address.js';
 import { describeTile } from './tiles.js';
 import { NetError } from './net.js';
 import { h, bannerCid } from './cards.js';
@@ -177,7 +177,10 @@ export async function drawAccountTiles(ctx, actor) {
   } catch (err) {
     if (!alive()) return;
     p.state = 'error';
-    status('error', err instanceof NetError ? err.message : "Couldn't find this account.");
+    // No such handle (stage 6, Q95: a word with a dot is tried as a handle first): offer to search for it.
+    const offer = err instanceof NetError && err.code === 'no-handle'
+      ? h('button', { type: 'button', class: 'primary', onclick: () => tabs.go(tab.id, searchUri(actor)) }, `Search tiles for “${actor}”`) : null;
+    status('error', err instanceof NetError ? err.message : "Couldn't find this account.", offer);
     return;
   }
   const [handle, prof] = await Promise.all([resolver.checkedHandle(did), moderation.profile(did)]);

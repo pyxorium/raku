@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { pageCsp, oauthMetadata } from './src/config.js';
+import { pageCsp, oauthMetadata, cardTags } from './src/config.js';
 
 // The page's security policy goes into the built page only (GitHub Pages can't send headers). Vite's
 // dev server injects its own scripts, which the policy would block, so `npm run dev` runs without it;
@@ -9,6 +9,14 @@ const policy = () => ({
   apply: 'build',
   transformIndexHtml(html) {
     return html.replace('<meta name="referrer"', `<meta http-equiv="Content-Security-Policy" content="${pageCsp()}">\n  <meta name="referrer"`);
+  },
+});
+
+// Raku's link card (stage 6): the Open Graph and Twitter-card tags, written from config.js (dev and build).
+const card = () => ({
+  name: 'raku-link-card',
+  transformIndexHtml(html) {
+    return html.replace('  <title>', `  ${cardTags()}\n  <title>`);
   },
 });
 
@@ -23,7 +31,7 @@ const signInFile = () => ({
 });
 
 export default defineConfig({
-  plugins: [policy(), signInFile()],
+  plugins: [policy(), signInFile(), card()],
   // 127.0.0.1, not localhost: the sign-in needs it (the loopback sign-in comes back to 127.0.0.1). 5180, so the Foundry (5173) can run alongside.
   server: { host: '127.0.0.1', port: 5180, strictPort: true },
   preview: { host: '127.0.0.1', port: 5181, strictPort: true },

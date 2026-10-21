@@ -15,6 +15,11 @@ const PATHS = {
   newtab: ['M14 4h6v6', 'M20 4l-8.5 8.5', 'M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10'],
   // stage 4: the account button when nobody is signed in (a phone shows only this; a computer adds "Sign in")
   person: ['M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M4.5 20.5a7.5 7.5 0 0 1 15 0'],
+  // stage 6: Discover (a compass), search, Tile news, Following
+  compass: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M15.6 8.4l-2.1 5.1-5.1 2.1 2.1-5.1z'],
+  search: ['M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z', 'M15.3 15.3L20 20'],
+  news: ['M5 4.5h10.5v15H6.5A1.5 1.5 0 0 1 5 18z', 'M15.5 8.5H19v9.5a1.5 1.5 0 0 1-1.5 1.5H15.5', 'M8 8.5h4.5', 'M8 12h4.5', 'M8 15.5h4.5'],
+  people: ['M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z', 'M2.8 20a6.2 6.2 0 0 1 12.4 0', 'M15.5 4.3a3.5 3.5 0 0 1 0 6.4', 'M18 14.3a6.2 6.2 0 0 1 3.2 5.7'],
 };
 const FILLED = new Set(['star-filled']);
 export const ICON_NAMES = Object.keys(PATHS);

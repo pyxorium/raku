@@ -53,7 +53,7 @@ async function start() {
   // Another Raku tab changed your shelf: read it again.
   globalThis.addEventListener('storage', (ev) => { if (ev.key === STORAGE_KEY) shelf.reload(); });
   const keepForReturn = (info) => guarded(() => session.setItem(SIGNIN.returnKey, JSON.stringify(info)));
-  globalThis.__raku = mountRaku(root, { mothership, resolver, moderation, files: createFileStore(), shelf, auth, returned, keepForReturn });
+  globalThis.__raku = mountRaku(root, { mothership, resolver, moderation, files: createFileStore(), shelf, auth, storage, returned, keepForReturn });
   if (!returned) auth.start();
 }
 start();

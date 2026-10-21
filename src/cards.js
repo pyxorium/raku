@@ -73,8 +73,9 @@ export function createCardKit({ files }) {
    * A tile's card. The whole card opens the tile (in this tab); corner buttons open it in a new tab and,
    * on your shelf, remove it. `note` (a sentence) and `greyed` mark tiles that can't be opened.
    */
-  function tileCard({ name, description = '', by = '', note = '', greyed = false, onOpen, onOpenNew, onRemove, removeLabel }) {
-    const pic = h('div', { class: 'card-pic' });
+  function tileCard({ name, description = '', by = '', note = '', greyed = false, badge = '', onOpen, onOpenNew, onRemove, removeLabel }) {
+    // badge: a short word over the picture (stage 6: "New" in Following)
+    const pic = h('div', { class: 'card-pic' }, badge ? h('span', { class: 'card-badge' }, badge) : null);
     const title = h('span', { class: 'card-title' }, name || 'Untitled tile');
     const desc = h('span', { class: 'card-desc' }, description);
     const byLine = h('span', { class: 'card-by' }, by ? `by @${by}` : '');
@@ -117,5 +118,5 @@ export function createCardKit({ files }) {
     };
   }
 
-  return { tileCard, accountChip };
+  return { tileCard, accountChip, picture };
 }

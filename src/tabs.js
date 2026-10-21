@@ -1,7 +1,8 @@
 // The tabs, as data: which are open, which is in front, each one's history. No DOM here (tested in Node).
 //
-// A tab shows a tile (its at:// address), your shelf (raku:shelf), an account's tiles (raku:tiles/<actor>)
-// or the first screen (address null). Back and forward
+// A tab shows a tile (its at:// address), your shelf (raku:shelf), an account's tiles (raku:tiles/<actor>),
+// a table (raku:table/…), Discover or search results (raku:discover…, raku:search/…, stage 6) or the first
+// screen (address null). Back and forward
 // move through the addresses that tab has shown. The open tabs are kept in the page's own address
 // (the part after #), so a reload or a copied link reopens the same set:
 //   #t=<at:// address, encoded>,<…>&a=<the tab in front, from 0>       (an empty slot = a first screen)
@@ -82,7 +83,7 @@ export function createTabs({ max = TABS.max } = {}) {
         let v;
         try { v = decodeURIComponent(s); } catch { return null; }
         const r = parseTarget(v);
-        return r.ok ? r.uri : null;
+        return r.ok && r.kind !== 'post' ? r.uri : null;      // posts open outside Raku (stage 6), never in a tab
       });
       tabs = (uris.length ? uris : [null]).map((u) => newTab(u));
       const a = Math.min(Math.max(0, Number(p.get('a')) || 0), tabs.length - 1);

@@ -1,0 +1,365 @@
+# Raku stage 6 (Discover) browser checks, in the chat sandbox: the Discover page's columns at four widths,
+# Following (newest first, hidden ones left out, "New" since the last visit), search (the address box and the
+# Discover box: your shelf first, then appmosphe.re, only on Enter), Tile news from a stand-in feed (?feed=,
+# this computer only) with a post linking a tile, labels and the link message, and a post's address in the box.
+# Everything outside is a Playwright route (account directory, account servers, Bluesky's public API, its
+# picture server, appmosphe.re). Tiles aren't run here (check_page.py does that).
+# Usage: python3 test/browser/check_discover.py <work folder>   (servers.mjs and the replica already running,
+# as for check_page.py)
+import hashlib, io, json, sys, time
+from pathlib import Path
+from urllib.parse import urlparse, parse_qs, quote
+from PIL import Image
+from playwright.sync_api import sync_playwright
+
+W = Path(sys.argv[1])
+OUT = W / 'shots'; OUT.mkdir(exist_ok=True)
+RAKU = 'http://127.0.0.1:5180/'
+LOADER = 'http://load.tiles.lex.localhost/.well-known/web-tiles/'
+PDS = 'https://pds.fakepds.net'
+A = 'did:plc:6vxjigxrqizmbo56gojxico3'; A_H = 'thunderbird.cafe'
+P = 'did:plc:rqbqpaaluty5v47jwciowpik'; P_H = 'pyxorium.com'
+B = 'did:plc:bbbbbbbbbbbbbbbbbbbbbbbb'; B_H = 'bad.fakepds.net'          # hidden by Bluesky's moderation
+MK = 'did:plc:makeraaaaaaaaaaaaaaaaaaa'; MK_H = 'maker.fakepds.net'        # a made-up tile maker
+LABELER = 'did:plc:ar7c4by46qjdydhdevvrndac'
+SALT = 'lexicographer.space hide list v1'
+FEED = f'at://{A}/app.bsky.feed.generator/web-tiles'
+HANDLES = {A: A_H, P: P_H, B: B_H, MK: MK_H}
+
+blobs = {}
+def cid_for(data):
+    c = 'bafkrei' + hashlib.sha256(data).hexdigest()[:52]; blobs[c] = data; return c
+def png(color, size=(1280, 720)):
+    b = io.BytesIO(); Image.new('RGB', size, color).save(b, 'PNG'); return b.getvalue()
+def tile(name, created, desc='', color=(120, 120, 120)):
+    page = f'<!doctype html><h1>{name}</h1>'.encode()
+    res = {'/': {'src': {'$type': 'blob', 'ref': {'$link': cid_for(page)}, 'mimeType': 'text/html', 'size': len(page)}, 'content-type': 'text/html'}}
+    banner = png(color)
+    res['/banner.png'] = {'src': {'$type': 'blob', 'ref': {'$link': cid_for(banner)}, 'mimeType': 'image/png', 'size': len(banner)}, 'content-type': 'image/png'}
+    return {'$type': 'ing.dasl.masl', 'cid': 'bafyreimanifest', 'tile': {'name': name, 'description': desc, 'resources': res, 'screenshots': [{'src': '/banner.png'}]}, 'createdAt': created}
+
+records = {
+    (A, 'coaster2'): tile('Coaster Two', '2026-10-20T10:00:00Z', 'A second coaster', (200, 90, 60)),
+    (A, 'lantern1'): tile('Glass Lantern', '2026-10-05T10:00:00Z', 'A lantern', (60, 160, 150)),
+    (A, 'hidden1'): tile('Hidden coaster', '2026-10-21T10:00:00Z'),
+    (P, '3mx6h2wjtgq2h'): tile('Roller Coaster', '2026-10-12T10:00:00Z', 'Take your sprite to the amusement park', (90, 60, 160)),
+    (B, 'bad1'): tile('Bad coaster', '2026-10-21T11:00:00Z'),
+}
+HIDE_LIST = json.dumps({'version': 1, 'salt': SALT, 'accounts': [], 'tiles': [hashlib.sha256(f'{SALT}\n{A}\nhidden1'.encode()).hexdigest()]})
+
+def post(did, rkey, text, created, facets=None, embed_rec=None, embed_view=None, labels=None, reply=None):
+    rec = {'$type': 'app.bsky.feed.post', 'text': text, 'createdAt': created}
+    if reply: rec['reply'] = {'root': {'uri': reply[0], 'cid': 'bafyreix'}, 'parent': {'uri': reply[1], 'cid': 'bafyreix'}}
+    if facets: rec['facets'] = facets
+    if embed_rec: rec['embed'] = embed_rec
+    v = {'uri': f'at://{did}/app.bsky.feed.post/{rkey}', 'cid': 'bafyreipost' + rkey, 'author': {'did': did, 'handle': HANDLES[did], 'displayName': HANDLES[did].split('.')[0].title(), 'avatar': 'https://cdn.bsky.app/img/avatar/plain/x/av@jpeg', 'labels': []},
+         'record': rec, 'labels': labels or [], 'indexedAt': created}
+    if embed_view: v['embed'] = embed_view
+    return v
+def facet(text, sub, feat):
+    i = text.index(sub); s = len(text[:i].encode()); return {'index': {'byteStart': s, 'byteEnd': s + len(sub.encode())}, 'features': [feat]}
+
+T2 = 'New tile out: https://example.org/blog by @thunderbird.cafe #webtiles and lexicographer.space/@thunderbird.cafe/coaster2'
+POSTS = [
+    post(MK, '3post1', 'My new tile is up', '2026-10-16T11:52:53Z',
+         embed_rec={'$type': 'app.bsky.embed.external', 'external': {'uri': 'https://lexicographer.space/@pyxorium.com/3mx6h2wjtgq2h', 'title': 'Roller Coaster', 'description': 'Take your sprite to the amusement park'}},
+         embed_view={'$type': 'app.bsky.embed.external#view', 'external': {'uri': 'https://lexicographer.space/@pyxorium.com/3mx6h2wjtgq2h', 'title': 'Roller Coaster', 'description': 'Take your sprite to the amusement park', 'thumb': 'https://cdn.bsky.app/img/feed_thumbnail/plain/x/t@jpeg'}}),
+    post(A, '3post2', T2, '2026-10-20T09:00:00Z', facets=[
+        facet(T2, 'https://example.org/blog', {'$type': 'app.bsky.richtext.facet#link', 'uri': 'https://example.org/blog'}),
+        facet(T2, '@thunderbird.cafe', {'$type': 'app.bsky.richtext.facet#mention', 'did': A}),
+        facet(T2, '#webtiles', {'$type': 'app.bsky.richtext.facet#tag', 'tag': 'webtiles'}),
+        facet(T2, 'lexicographer.space/@thunderbird.cafe/coaster2', {'$type': 'app.bsky.richtext.facet#link', 'uri': 'https://lexicographer.space/@thunderbird.cafe/coaster2'})]),
+    post(A, '3post3', 'Pictures of the die', '2026-10-19T09:00:00Z', labels=[{'src': LABELER, 'val': 'graphic-media'}],
+         embed_view={'$type': 'app.bsky.embed.images#view', 'images': [{'thumb': 'https://cdn.bsky.app/img/feed_thumbnail/plain/x/p1@jpeg', 'fullsize': 'https://cdn.bsky.app/img/feed_fullsize/plain/x/p1@jpeg', 'alt': 'a die'}, {'thumb': 'https://evil.example/p.jpg'}]}),
+    post(A, '3post4', 'This one is hidden by moderation', '2026-10-18T09:00:00Z', labels=[{'src': LABELER, 'val': '!hide'}]),
+    post(P, '3post5', 'Behind a warning', '2026-10-17T09:00:00Z', labels=[{'src': LABELER, 'val': '!warn'}]),
+    post(B, '3post6', 'From a hidden account', '2026-10-17T08:00:00Z'),
+]
+# Q97: replies with their thread. The owner's example shape: a first post, a reply to it, a reply to that.
+U = lambda did, rkey: f'at://{did}/app.bsky.feed.post/{rkey}'
+TH1 = post(P, 'th1', 'Anyone noticed we could build a web of tiles?', '2026-10-15T09:00:00Z')
+TH2 = post(A, 'th2', 'If it meets someone\'s needs, it is just the web.', '2026-10-15T10:00:00Z', reply=(U(P, 'th1'), U(P, 'th1')))
+TH3 = post(MK, 'th3', 'What is the name spec about?', '2026-10-15T11:00:00Z', reply=(U(P, 'th1'), U(A, 'th2')))
+DP2 = post(A, 'dp2', 'Deep in a thread', '2026-10-14T10:00:00Z', reply=(U(P, 'dr1'), U(P, 'dmid')))
+DP3 = post(MK, 'dp3', 'Answering the deep one', '2026-10-14T11:00:00Z', reply=(U(P, 'dr1'), U(A, 'dp2')))
+LONE = post(MK, 'lone1', 'A reply sent without its thread', '2026-10-13T11:00:00Z', reply=(U(P, 'zz1'), U(P, 'zz1')))
+THREAD_ITEMS = [
+    {'post': TH3, 'reply': {'root': TH1, 'parent': TH2}},
+    {'post': TH2, 'reply': {'root': TH1, 'parent': TH1}},             # already drawn as context above: not again
+    {'post': DP3, 'reply': {'root': {'$type': 'app.bsky.feed.defs#blockedPost', 'uri': U(P, 'dr1'), 'blocked': True}, 'parent': DP2}},
+    {'post': LONE},
+]
+
+SEARCH_ANSWER = {'results': [{'uri': f'at://{P}/ing.dasl.masl/3mx6h2wjtgq2h', 'name': 'Roller Coaster'}, {'uri': f'at://{A}/ing.dasl.masl/hidden1'}, {'uri': f'at://{A}/ing.dasl.masl/missing1'}]}
+
+calls = []
+def route(r):
+    url = r.request.url; calls.append(url)
+    u = urlparse(url); q = {k: v[0] for k, v in parse_qs(u.query).items()}
+    cors = {'access-control-allow-origin': '*'}
+    def js(obj, status=200): r.fulfill(status=status, headers={**cors, 'content-type': 'application/json'}, body=json.dumps(obj))
+    if u.hostname == 'plc.directory':
+        did = u.path.strip('/'); hd = HANDLES.get(did)
+        if not hd: return js({'message': 'not found'}, 404)
+        return js({'id': did, 'alsoKnownAs': [f'at://{hd}'], 'service': [{'id': '#atproto_pds', 'type': 'AtprotoPersonalDataServer', 'serviceEndpoint': PDS}]})
+    if u.hostname == 'public.api.bsky.app':
+        if u.path.endswith('resolveHandle'):
+            did = {v: k for k, v in HANDLES.items()}.get(q.get('handle'))
+            return js({'did': did}) if did else js({'error': 'InvalidRequest', 'message': 'Unable to resolve handle'}, 400)
+        if u.path.endswith('getProfile'):
+            labels = [{'src': LABELER, 'uri': f'at://{B}', 'val': '!hide'}] if q.get('actor') == B else []
+            return js({'did': q.get('actor'), 'labels': labels, 'avatar': 'https://cdn.bsky.app/img/avatar/plain/x/av@jpeg'})
+        if u.path.endswith('getFeed'):
+            if q.get('feed') != FEED: return js({'error': 'UnknownFeed'}, 400)
+            return js({'feed': [{'post': p} for p in POSTS] + THREAD_ITEMS})
+    if u.hostname == 'appmosphe.re':
+        return js(SEARCH_ANSWER)
+    if u.hostname == 'typeahead.waow.tech':
+        return js({'actors': []})
+    if u.hostname == 'cdn.bsky.app':
+        return r.fulfill(status=200, headers={**cors, 'content-type': 'image/png'}, body=png((63, 184, 168), (64, 64)))
+    if u.hostname == 'lexicographer.space' and u.path == '/hidden-tiles.json':
+        return r.fulfill(status=200, headers={**cors, 'content-type': 'application/json'}, body=HIDE_LIST)
+    if u.hostname == 'pds.fakepds.net':
+        if u.path.endswith('getRecord'):
+            rec = records.get((q.get('repo'), q.get('rkey')))
+            if not rec: return js({'error': 'RecordNotFound'}, 400)
+            return js({'uri': f"at://{q['repo']}/ing.dasl.masl/{q['rkey']}", 'cid': 'bafyreicurrentversion' + q['rkey'], 'value': rec})
+        if u.path.endswith('listRecords'):
+            repo = q.get('repo'); limit = int(q.get('limit', 50))
+            keys = sorted([k for (d, k) in records if d == repo], key=lambda k: records[(repo, k)]['createdAt'], reverse=True)[:limit]
+            return js({'records': [{'uri': f'at://{repo}/ing.dasl.masl/{k}', 'cid': 'bafyreirecord', 'value': records[(repo, k)]} for k in keys]})
+        if u.path.endswith('getBlob'):
+            b = blobs.get(q.get('cid'))
+            return r.fulfill(status=200 if b else 404, headers={**cors, 'content-type': 'application/octet-stream'}, body=b or b'')
+    if u.hostname in ('bsky.app', 'example.org'):
+        return r.fulfill(status=200, headers={'content-type': 'text/html'}, body='<!doctype html><title>outside</title>')
+    r.fulfill(status=404, headers=cors, body='')
+
+results = []
+def check(name, cond, detail=''):
+    results.append((name, bool(cond), detail))
+    print(('PASS ' if cond else 'FAIL ') + name + (f'  [{detail}]' if detail and not cond else ''), flush=True)
+def wait_for(fn, timeout=10.0, step=0.1, page=None):
+    end = time.time() + timeout
+    while time.time() < end:
+        try:
+            v = fn()
+            if v: return v
+        except Exception: pass
+        if page: page.evaluate('1')        # keeps Playwright's routes answering while we wait
+        time.sleep(step)
+    return None
+def texts(pg, sel): return pg.eval_on_selector_all(sel, 'els => els.map(e => e.textContent.trim())')
+
+SHELF = json.dumps({'version': 1, 'tiles': [{'did': A, 'rkey': 'lantern1', 'name': 'Glass Lantern', 'by': A_H, 'keptAt': '2026-10-20T00:00:00.000Z'}],
+                    'accounts': [{'did': A, 'handle': A_H, 'keptAt': '2026-10-20T00:00:00.000Z'}, {'did': P, 'handle': P_H, 'keptAt': '2026-10-20T00:00:01.000Z'}, {'did': B, 'handle': B_H, 'keptAt': '2026-10-20T00:00:02.000Z'}]})
+
+with sync_playwright() as pw:
+    b = pw.chromium.launch(args=['--host-resolver-rules=MAP *.localhost 127.0.0.1'])
+    ctx = b.new_context(viewport={'width': 1400, 'height': 900})
+    for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**',
+                 'https://appmosphe.re/**', 'https://typeahead.waow.tech/**', 'https://bsky.app/**', 'https://example.org/**', 'https://evil.example/**']:
+        ctx.route(host, route)
+    ctx.add_init_script(f"if (!sessionStorage.getItem('seeded')) {{ localStorage.setItem('raku-shelf', {json.dumps(SHELF)}); sessionStorage.setItem('seeded', '1'); }}")
+    popups = []
+    ctx.on('page', lambda pg: popups.append(pg))
+    page = ctx.new_page()
+    policy = []
+    page.on('console', lambda m: policy.append(m.text) if 'Content Security Policy' in m.text or 'Refused' in m.text else None)
+
+    # ---------- Discover, Following ----------
+    page.goto(RAKU + '#t=raku%3Adiscover&a=0')
+    page.wait_for_selector('.discover')
+    check('Discover opens as a page in a tab, titled Discover', 'Discover' in page.title() and texts(page, '.tab.on .tab-title') == ['Discover'])
+    check('the Discover button in the top bar shows it is on', page.eval_on_selector('.bar .nav-btn[title="Discover"]', 'b => b.classList.contains("on")'))
+    check('without a feed (step 6b) the sources are Following only', texts(page, '.dv-src') == ['Following'], str(texts(page, '.dv-src')))
+    wait_for(lambda: page.eval_on_selector_all('.dv-centre .card-title', 'els => els.length >= 3 && els.every(e => e.textContent !== "…")'), page=page)
+    names = texts(page, '.dv-centre .card-title')
+    check('Following: the kept accounts\' tiles, newest first, all mixed', names == ['Coaster Two', 'Roller Coaster', 'Glass Lantern'], str(names))
+    check('Following: hidden accounts and tiles on the hide list are left out', 'Bad coaster' not in names and 'Hidden coaster' not in names)
+    check('Following: a first visit marks nothing new', page.query_selector('.dv-centre .card-badge') is None)
+    check('Following: the banners come from the tiles\' own servers', wait_for(lambda: page.eval_on_selector_all('.dv-centre .card-pic img', 'is => is.length === 3 && is.every(i => i.src.startsWith("blob:"))'), page=page))
+    check('Following: "by @handle" after the check both ways', wait_for(lambda: 'by @pyxorium.com' in texts(page, '.dv-centre .card-by'), page=page))
+    lay = page.evaluate("""() => ['.dv-left', '.dv-centre', '.dv-right'].map(s => { const r = document.querySelector(s).getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width), getComputedStyle(document.querySelector(s)).display]; })""")
+    check('wide window: three columns, the centre widest', lay[0][0] < lay[1][0] < lay[2][0] and lay[1][1] > lay[0][1] and lay[1][1] > lay[2][1] and lay[2][2] != 'none', str(lay))
+    check('the right column says how search and opening work', 'appmosphe.re' in page.inner_text('.dv-about'))
+    page.screenshot(path=str(OUT / 'd1-following-wide.png'))
+    check('the address box is empty on Discover, no star', page.input_value('.addr') == '' and not page.is_visible('.star-btn'))
+
+    # A new tile appears; the next visit (a new page load) marks it New.
+    from datetime import datetime, timezone, timedelta
+    records[(P, 'newtile1')] = tile('Brand New Tile', (datetime.now(timezone.utc) + timedelta(seconds=2)).strftime('%Y-%m-%dT%H:%M:%SZ'), 'Fresh', (230, 180, 60))
+    time.sleep(3)
+    page.reload(); page.wait_for_selector('.discover')
+    wait_for(lambda: 'Brand New Tile' in texts(page, '.dv-centre .card-title'), page=page)
+    badges = page.eval_on_selector_all('.dv-centre .card', 'cs => cs.filter(c => c.querySelector(".card-badge")).map(c => c.querySelector(".card-title").textContent)')
+    check('Following: "New" on tiles since the last visit, only those', badges == ['Brand New Tile'], str(badges))
+    check('Following: the line says how many are new', 'new since your last visit' in page.inner_text('.dv-status'))
+    page.screenshot(path=str(OUT / 'd2-following-new.png'))
+
+    # ---------- search from the address box ----------
+    before = len([c for c in calls if 'appmosphe.re' in c])
+    page.click('.addr'); page.keyboard.type('coaster', delay=40)
+    page.wait_for_timeout(600)
+    check('typing sends nothing to appmosphe.re', len([c for c in calls if 'appmosphe.re' in c]) == before)
+    page.keyboard.press('Enter')
+    page.wait_for_selector('.dv-centre h1')
+    check('Enter on words opens search results in the tab', texts(page, '.dv-centre h1') == ['Results for “coaster”'] and 'Search: coaster' in texts(page, '.tab.on .tab-title')[0])
+    asked = [c for c in calls if 'appmosphe.re' in c][before:]
+    check('one request to appmosphe.re, with only the words', asked == ['https://appmosphe.re/api/search?q=coaster'], str(asked))
+    wait_for(lambda: page.eval_on_selector_all('.dv-part:not([hidden]) .card-title', 'els => els.length >= 2 && els.every(e => e.textContent !== "…")'), page=page)
+    parts = page.evaluate("() => [...document.querySelectorAll('.dv-part')].filter(p => !p.hidden).map(p => [p.querySelector('h2').textContent, [...p.querySelectorAll('.card-title')].map(e => e.textContent)])")
+    check('search: "Already in Raku" first, found here (Following\'s tiles)', parts and parts[0][0] == 'Already in Raku' and 'Coaster Two' in parts[0][1] and 'Roller Coaster' in parts[0][1], str(parts))
+    wait_for(lambda: page.evaluate("() => [...document.querySelectorAll('.dv-part')].pop().querySelectorAll('.card').length === 1"), page=page)
+    theirs = page.evaluate("() => [...[...document.querySelectorAll('.dv-part')].pop().querySelectorAll('.card-title')].map(e => e.textContent)")
+    check('search: appmosphe.re\'s results looked up from the tiles\' servers; hidden and missing ones left out', theirs == ['Roller Coaster'], str(theirs))
+    check('search: the line says what was sent where', 'Only the words you searched for were sent' in page.inner_text('.dv-foot'))
+    check('search: the address box shows the words; the Discover box too', page.input_value('.addr') == 'coaster' and page.input_value('.dv-q') == 'coaster')
+    check('search: Search results joins the sources', texts(page, '.dv-src') == ['Following', 'Search results'] and page.eval_on_selector('.dv-src[data-source="search"]', 'b => b.classList.contains("on")'))
+    check('search: the right column previews Following, with its new count', wait_for(lambda: '1 new' in page.inner_text('.dv-preview[data-source="following"]'), page=page))
+    check('...and the previews\' small banners', wait_for(lambda: page.eval_on_selector_all('.dv-preview[data-source="following"] .dv-mini-pic img', 'is => is.length === 3 && is.every(i => i.src.startsWith("blob:"))'), page=page))
+    page.screenshot(path=str(OUT / 'd3-search-wide.png'))
+    page.click('.dv-preview[data-source="following"]')
+    page.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Following'")
+    check('a preview brings its source to the centre', texts(page, '.dv-src.on') == ['Following'])
+    check('...and the search is previewed on the right', page.is_visible('.dv-preview[data-source="search"]'))
+    page.click('.bar .nav-btn[title="Back"]')
+    page.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Results for “coaster”'")
+    check('Back returns to the search results', True)
+
+    # the Discover box
+    page.fill('.dv-q', 'lantern'); page.press('.dv-q', 'Enter')
+    page.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Results for “lantern”'")
+    wait_for(lambda: 'Glass Lantern' in texts(page, '.dv-part:not([hidden]) .card-title'), page=page)
+    check('the Discover box searches too; your kept tile is found here', 'Glass Lantern' in texts(page, '.dv-part:not([hidden]) .card-title'))
+    check('a kept account matches by handle', (page.fill('.dv-q', 'pyxorium'), page.press('.dv-q', 'Enter'), wait_for(lambda: '@pyxorium.com' in ' '.join(texts(page, '.dv-part .chip-name')), page=page))[2])
+
+    # a word with a dot: a handle first; not found, offer search
+    page.fill('.addr', 'nosuch.example'); page.press('.addr', 'Enter')
+    btn = page.wait_for_selector('.tile-status button.primary')
+    check('a word with a dot is tried as a handle; when there\'s none, search is offered', 'Search tiles for “nosuch.example”' in btn.inner_text())
+    btn.click()
+    page.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Results for “nosuch.example”'")
+    check('...and it searches', True)
+
+    # ---------- widths ----------
+    page.goto(RAKU + '#t=raku%3Adiscover%2Ffollowing&a=0'); page.wait_for_selector('.discover')
+    page.set_viewport_size({'width': 1000, 'height': 800}); page.wait_for_timeout(300)
+    mid = page.evaluate("() => [document.querySelector('.dv-left').getBoundingClientRect().width, getComputedStyle(document.querySelector('.dv-src-label')).display, getComputedStyle(document.querySelector('.dv-right')).display]")
+    check('narrower: the sources become icons, the right column stays', mid[0] <= 64 and mid[1] == 'none' and mid[2] != 'none', str(mid))
+    page.screenshot(path=str(OUT / 'd4-1000.png'))
+    page.set_viewport_size({'width': 800, 'height': 800}); page.wait_for_timeout(300)
+    check('narrower still: the right column drops', page.eval_on_selector('.dv-right', 'e => getComputedStyle(e).display') == 'none')
+    page.screenshot(path=str(OUT / 'd5-800.png'))
+    page.set_viewport_size({'width': 1400, 'height': 900})
+
+    # ---------- Tile news (a stand-in feed, ?feed= on this computer) ----------
+    page.goto(RAKU + '?loader=' + LOADER + '&feed=' + quote(FEED, safe='') + '#t=raku%3Adiscover&a=0'); page.wait_for_selector('.discover')
+    check('with a feed, Tile news comes first among the sources', texts(page, '.dv-src') == ['Tile news', 'Following'] and texts(page, '.dv-src.on') == ['Tile news'])
+    page.wait_for_selector('.post')
+    uris = page.eval_on_selector_all('.posts > *', 'ps => ps.map(p => p.dataset.uri.split("/").pop())')[:4]
+    check('posts drawn; hidden by moderation and from a hidden account left out', uris == ['3post1', '3post2', '3post3', '3post5'], str(uris))
+    p1 = page.query_selector('.post[data-uri$="3post1"]')
+    wait_for(lambda: p1.query_selector('.post-tile .card-title').inner_text() == 'Roller Coaster' and 'pyxorium' in p1.query_selector('.post-tile .card-by').inner_text(), page=page)
+    check("a post whose link card is a tile: a tile card, looked up from the tile's own server", p1.query_selector('.post-tile .card-title').inner_text() == 'Roller Coaster')
+    check('...with its banner from the tile\'s server', wait_for(lambda: p1.eval_on_selector('.post-tile .card-pic img', 'i => i.src.startsWith("blob:")'), page=page))
+    check('...and no plain link card for it', p1.query_selector('.post-ext') is None)
+    p2 = page.query_selector('.post[data-uri$="3post2"]')
+    check('rich text: links and mentions as buttons, the hashtag plain', [e.inner_text() for e in p2.query_selector_all('.post-link')] == ['https://example.org/blog', '@thunderbird.cafe', 'lexicographer.space/@thunderbird.cafe/coaster2'] and p2.query_selector('.post-tag').inner_text() == '#webtiles')
+    p3 = page.query_selector('.post[data-uri$="3post3"]')
+    check('pictures only from Bluesky\'s picture server', p3.eval_on_selector_all('.post-pics img', 'is => is.map(i => i.src)') == ['https://cdn.bsky.app/img/feed_thumbnail/plain/x/p1@jpeg'])
+    check('graphic pictures blurred behind "Show pictures"', p3.eval_on_selector('.post-pics', 'g => g.classList.contains("blurred")') and p3.query_selector('.post-show') is not None)
+    p3.query_selector('.post-show').click()
+    check('...shown on a click', not p3.eval_on_selector('.post-pics', 'g => g.classList.contains("blurred")'))
+    p5 = page.query_selector('.post[data-uri$="3post5"]')
+    check('a content warning hides the post until "Show post"', p5.query_selector('.post-text') is None and 'content warning' in p5.inner_text())
+    p5.query_selector('.post-warn button').click()
+    check('...then it shows', p5.query_selector('.post-text').inner_text() == 'Behind a warning')
+    # Q97: a reply with its thread
+    th = page.query_selector('.post-thread[data-uri$="/th3"]')
+    check('a reply comes with its thread: the first post, the post it answers, then the reply', th is not None and th.eval_on_selector_all('.post', 'ps => ps.map(p => p.dataset.uri.split("/").pop())') == ['th1', 'th2', 'th3'])
+    check('...the first two joined by the line (context), the reply last', th.eval_on_selector_all('.post', 'ps => ps.map(p => p.classList.contains("ctx"))') == [True, True, False])
+    check('...no "…" when nothing was skipped', th.query_selector('.post-gap') is None)
+    check('...only the reply has a footer: "Open thread in Bluesky"', th.eval_on_selector_all('.post-open', 'bs => bs.map(b => b.textContent.trim())') == ['Open thread in Bluesky'])
+    check('a post already drawn as context isn\'t drawn again', page.eval_on_selector_all('.posts > *', 'ps => ps.map(p => p.dataset.uri.split("/").pop())').count('th2') == 0)
+    dp = page.query_selector('.post-thread[data-uri$="/dp3"]')
+    check('a blocked first post: "Post not available"; posts skipped: "More replies in between"', dp is not None and dp.query_selector('.post.gone').inner_text() == 'Post not available.' and dp.query_selector('.post-gap') is not None and dp.eval_on_selector_all('.post', 'ps => ps.map(p => p.dataset.uri.split("/").pop())') == ['dr1', 'dp2', 'dp3'])
+    lone = page.query_selector('.posts > .post[data-uri$="/lone1"]')
+    check('a reply sent without its thread says so', lone is not None and 'A reply. Open the thread' in lone.inner_text())
+    th.query_selector('.post-open').click(); page.wait_for_selector('.link-msg')
+    check('"Open thread" goes through the link message to the reply in the app for posts', page.inner_text('.link-msg-url') == f'https://bsky.app/profile/{MK_H}/post/th3')
+    page.keyboard.press('Escape')
+    th.scroll_into_view_if_needed(); page.wait_for_timeout(200)
+    th.screenshot(path=str(OUT / 'd6b-thread.png'))
+    check('the right column previews Following', page.is_visible('.dv-preview[data-source="following"]'))
+    page.screenshot(path=str(OUT / 'd6-news-wide.png'), full_page=False)
+
+    # the link message
+    n0 = len(popups)
+    p2.query_selector('.post-link').click()
+    page.wait_for_selector('.link-msg')
+    check('a link in a post: Raku says where it goes first (site in bold, the full address)', page.inner_text('.link-msg-site') == 'example.org' and page.inner_text('.link-msg-url') == 'https://example.org/blog')
+    check('...says what asked, and to continue only if you trust the site', '@thunderbird.cafe in Tile news' in page.inner_text('.link-msg-from') and 'Only continue if you trust this site' in page.inner_text('.link-msg'))
+    check('...nothing opened yet', len(popups) == n0)
+    page.screenshot(path=str(OUT / 'd7-link-message.png'))
+    page.click('.link-msg .actions button:not(.primary)')
+    check('Cancel closes it, nothing opens', page.query_selector('.link-msg') is None and len(popups) == n0)
+    p2.query_selector('.post-link').click(); page.wait_for_selector('.link-msg'); page.keyboard.press('Escape')
+    check('Escape closes it too', page.query_selector('.link-msg') is None)
+    p2.query_selector('.post-link').click(); page.wait_for_selector('.link-msg'); page.click('.link-msg .actions button.primary')
+    pop = wait_for(lambda: popups[n0] if len(popups) > n0 else None, page=page)
+    if pop: pop.wait_for_load_state()
+    check('Open opens it in a new window, with no opener', pop is not None and pop.url == 'https://example.org/blog' and pop.evaluate('window.opener === null'), pop.url if pop else 'none')
+    if pop: pop.close()
+    page.query_selector('.post[data-uri$="3post2"] .post-open').click(); page.wait_for_selector('.link-msg')
+    check('"Open post in Bluesky": the post\'s address in the app for posts', page.inner_text('.link-msg-url') == 'https://bsky.app/profile/thunderbird.cafe/post/3post2')
+    page.keyboard.press('Escape')
+    page.query_selector('.post[data-uri$="3post2"] .post-link:nth-of-type(2)').click()
+    page.wait_for_function("() => document.querySelector('.tab.on .tab-title')?.textContent === \"@thunderbird.cafe's tiles\"")
+    check('a mention opens that account\'s tiles in Raku', True)
+    page.click('.bar .nav-btn[title="Back"]'); page.wait_for_selector('.post')
+    page.query_selector('.post[data-uri$="3post2"] .post-link:nth-of-type(3)').click()
+    wait_for(lambda: page.input_value('.addr').endswith('/ing.dasl.masl/coaster2'), page=page)
+    check('a link to a tile opens the tile in Raku, no message', page.query_selector('.link-msg') is None and page.input_value('.addr').endswith('/ing.dasl.masl/coaster2'), page.input_value('.addr'))
+    page.click('.bar .nav-btn[title="Back"]'); page.wait_for_selector('.post-tile')
+    page.query_selector('.post-tile .card-main').click()
+    wait_for(lambda: page.input_value('.addr').endswith('/ing.dasl.masl/3mx6h2wjtgq2h'), page=page)
+    check("the tile card in a post opens the tile in Raku", page.input_value('.addr').endswith('/ing.dasl.masl/3mx6h2wjtgq2h'), page.input_value('.addr'))
+
+    # a post's address in the address box
+    tabs_before = page.evaluate('location.hash')
+    page.fill('.addr', f'https://bsky.app/profile/{MK_H}/post/3post1'); page.press('.addr', 'Enter')
+    page.wait_for_selector('.link-msg')
+    check("a post's address in the box: the link message, the tab stays", page.inner_text('.link-msg-url') == f'https://bsky.app/profile/{MK_H}/post/3post1' and page.evaluate('location.hash') == tabs_before)
+    page.keyboard.press('Escape')
+
+    check("Raku's own policy refused nothing", not policy, str(policy[:3]))
+
+    # ---------- phone ----------
+    m = b.new_context(viewport={'width': 390, 'height': 800}, is_mobile=True, has_touch=True)
+    for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**', 'https://appmosphe.re/**', 'https://typeahead.waow.tech/**']:
+        m.route(host, route)
+    m.add_init_script(f"if (!sessionStorage.getItem('seeded')) {{ localStorage.setItem('raku-shelf', {json.dumps(SHELF)}); sessionStorage.setItem('seeded', '1'); }}")
+    mp = m.new_page()
+    mp.goto(RAKU + '?feed=' + quote(FEED, safe='') + '#t=raku%3Adiscover&a=0'); mp.wait_for_selector('.post')
+    tools = mp.eval_on_selector_all('.toolbar button', 'bs => bs.map(b => [b.title, Math.round(b.getBoundingClientRect().width), b.classList.contains("on")])')
+    check('phone: six toolbar buttons of 44 px, Discover among them and on', [t[0] for t in tools] == ['Back', 'Forward', 'Reload this tile', 'Your shelf', 'Discover', 'Open tabs'] and all(t[1] >= 44 for t in tools) and tools[4][2], str(tools))
+    chips = mp.evaluate("() => [getComputedStyle(document.querySelector('.dv-sources')).display, [...document.querySelectorAll('.dv-src')].map(b => b.textContent.trim()), getComputedStyle(document.querySelector('.dv-right')).display]")
+    check('phone: one column, the sources as chips across the top, no right column', chips[0] == 'flex' and chips[1] == ['Tile news', 'Following'] and chips[2] == 'none', str(chips))
+    check('phone: no sideways scroll', mp.evaluate('() => document.querySelector(".pane.front").scrollWidth <= document.querySelector(".pane.front").clientWidth + 1 && document.documentElement.scrollWidth <= 391'))
+    mp.screenshot(path=str(OUT / 'd8-phone-news.png'))
+    mp.click('.dv-src[data-source="following"]'); mp.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Following'")
+    wait_for(lambda: mp.eval_on_selector_all('.dv-centre .card-title', 'els => els.length >= 3 && els.every(e => e.textContent !== "…")'), page=mp)
+    check('phone: Following as one column of cards, no sideways scroll', mp.evaluate('() => document.querySelector(".pane.front").scrollWidth <= document.querySelector(".pane.front").clientWidth + 1'))
+    mp.screenshot(path=str(OUT / 'd9-phone-following.png'))
+    mp.goto(RAKU + '?feed=' + quote(FEED, safe='') + '#t=raku%3Adiscover%2Fnews&a=0'); mp.wait_for_selector('.post .post-open')
+    mp.query_selector('.post .post-open').click(); mp.wait_for_selector('.link-msg')
+    box = mp.eval_on_selector('.link-msg-box', 'b => { const r = b.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right), Math.round(r.bottom)]; }')
+    check('phone: the link message as a sheet from the bottom, full width', box[0] == 0 and box[1] == 390 and box[2] == 800, str(box))
+    mp.screenshot(path=str(OUT / 'd10-phone-link.png'))
+    b.close()
+
+failed = [r for r in results if not r[1]]
+print(f'\n{len(results) - len(failed)} passed, {len(failed)} failed')
+sys.exit(1 if failed else 0)

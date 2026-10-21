@@ -218,6 +218,77 @@ export const PICKS = Object.freeze([
   'at://did:plc:rqbqpaaluty5v47jwciowpik/ing.dasl.masl/3mx6h2wjtgq2h',   // pyxorium.com: Roller Coaster
 ]);
 
+// ---------- Raku's own link card (stage 6, Q93) ----------
+// When someone shares Raku's address (Bluesky, other atproto apps, chat apps), the card is built from these
+// tags in the page's head. Written into index.html by vite.config.js from here, so the address stays named in
+// one place. The pictures are public/card.png (1200 × 630) and public/banner.png (1280 × 720, a tile-style
+// banner for places that list apps beside tiles; not used by the tags).
+export const CARD = Object.freeze({
+  title: SITE.lab ? `${SITE.name} (lab)` : SITE.name,
+  description: 'A browser for atproto web tiles: tabs, a shelf, tables and tile news.',
+  image: 'card.png', width: 1200, height: 630,
+  alt: 'Raku: a turquoise raku pot beside a browser window holding tile cards in glaze colours.',
+});
+const attr = (s) => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+export function cardTags() {
+  const img = `${SITE.origin}/${CARD.image}`;
+  return [
+    ['name', 'description', CARD.description],
+    ['property', 'og:type', 'website'],
+    ['property', 'og:site_name', SITE.name],
+    ['property', 'og:title', CARD.title],
+    ['property', 'og:description', CARD.description],
+    ['property', 'og:url', `${SITE.origin}/`],
+    ['property', 'og:image', img],
+    ['property', 'og:image:width', String(CARD.width)],
+    ['property', 'og:image:height', String(CARD.height)],
+    ['property', 'og:image:alt', CARD.alt],
+    ['name', 'twitter:card', 'summary_large_image'],
+    ['name', 'twitter:title', CARD.title],
+    ['name', 'twitter:description', CARD.description],
+    ['name', 'twitter:image', img],
+  ].map(([k, n, v]) => `<meta ${k}="${n}" content="${attr(v)}">`).join('\n  ');
+}
+
+// ---------- Discover (stage 6, claude/raku-stage6-plan.md) ----------
+// The Discover page (raku:discover): sources in a left column, the chosen one in the centre, previews of the
+// others on the right (Q85, Q86). Step 6a: Following and search; step 6b adds Tile news (the hand-picked
+// "Web Tiles" feed, published from thunderbird.cafe through Graze, Q84) by filling in FEED below.
+export const FEED = null;            // step 6b: 'at://did:plc:6vxjigxrqizmbo56gojxico3/app.bsky.feed.generator/<rkey>'
+// Public reads of posts and feeds (no sign-in): one server, named here, so it can change (another AppView,
+// Q90 notes) without touching the code that draws posts.
+export const APPVIEW = BLUESKY_API;
+// Moderation services whose labels Raku follows on posts (Bluesky's first; Blacksky's or Northsky's could be added).
+export const MODERATION_SERVICES = Object.freeze([BLUESKY_MODERATION]);
+// Search (Q95, Q96): appmosphe.re's search (Robin's CORS header, live since Oct 20), only when someone
+// searches (Enter in the address box, or the search box on Discover); nothing is sent while typing.
+export const SEARCH = Object.freeze({ name: 'appmosphe.re', url: 'https://appmosphe.re/api/search', max: 24, maxBytes: 1024 * 1024 });
+// Following (Q91): the newest few tiles of each account kept on your shelf, a few accounts at a time.
+export const FOLLOWING = Object.freeze({ perAccount: 10, max: 60, keepMs: 5 * 60 * 1000, seenKey: 'raku-following-seen' });
+// Where a post opens outside Raku (Q90: a setting, step 6b; Bluesky by default). Every one of these apps
+// shows a post at https://<host>/profile/<handle or DID>/post/<record key>.
+export const POST_APPS = Object.freeze([
+  Object.freeze({ id: 'bluesky', name: 'Bluesky', host: 'bsky.app' }),
+  Object.freeze({ id: 'blacksky', name: 'Blacksky', host: 'blacksky.community' }),
+  Object.freeze({ id: 'mu', name: 'mu', host: 'mu.social' }),
+]);
+export const POST_APP_KEY = 'raku-post-app';           // localStorage: the chosen app's id (the setting comes in step 6b)
+export function postApp(storage = null) {
+  let id = null;
+  try { id = storage?.getItem(POST_APP_KEY); } catch { id = null; }
+  return POST_APPS.find((a) => a.id === id) || POST_APPS[0];
+}
+export const postLink = (app, actor, rkey) => `https://${app.host}/profile/${actor}/post/${rkey}`;
+// On this computer only: ?feed=at://…/app.bsky.feed.generator/… shows Tile news from another feed (the checks'
+// stand-in feed, or the real one before step 6b).
+export function feedUri(loc = globalThis.location) {
+  if (isLocal(loc)) {
+    const v = new URLSearchParams(loc.search).get('feed');
+    if (v && /^at:\/\/did:[a-z]+:[a-zA-Z0-9._:%-]+\/app\.bsky\.feed\.generator\/[A-Za-z0-9._~-]{1,64}$/.test(v)) return v;
+  }
+  return FEED;
+}
+
 // On this computer only (http://127.0.0.1 or localhost): ?loader=<a loading server's
 // /.well-known/web-tiles/ address>, for the browser checks' stand-in loading server.
 export function loadSourceOverride(loc = globalThis.location) {

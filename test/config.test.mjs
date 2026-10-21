@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { SITE, pageCsp, loadSourceOverride, TILE_LOAD_DOMAIN, HIDE_LIST_URL, PICKS, SIGNIN, SIGNIN_PROMISE, oauthMetadata, fullScope, TABLES } from '../src/config.js';
+import { SITE, CARD, cardTags, pageCsp, loadSourceOverride, TILE_LOAD_DOMAIN, HIDE_LIST_URL, PICKS, SIGNIN, SIGNIN_PROMISE, oauthMetadata, fullScope, TABLES } from '../src/config.js';
 import { parseAddress } from '../src/address.js';
 
 const file = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
@@ -61,4 +61,19 @@ test("the sign-in description file names Raku's own address, and asks for no mor
 test('the sign-in promise names the address and the per-game permission (Q43)', () => {
   // widened in step 5b (Q53) for the lounge
   assert.equal(SIGNIN_PROMISE, `Signing in lets ${SITE.host} save your match results from the tables you play and, if you choose to mingle, let other players see you're in a game's lounge. Each game asks for its own permission the first time. Raku doesn't touch your posts, likes, follows or anything else.`);
+});
+
+test("Raku's link card (stage 6): tags from config.js, pictures in public/, the address not written into index.html", () => {
+  const t = cardTags();
+  assert.match(t, new RegExp(`<meta property="og:image" content="${SITE.origin}/card.png">`));
+  assert.match(t, /<meta name="twitter:card" content="summary_large_image">/);
+  assert.match(t, new RegExp(`<meta property="og:title" content="${SITE.name}${SITE.lab ? ' \\(lab\\)' : ''}">`));
+  assert.doesNotMatch(t, /<script|\son\w+=/i);
+  const png = readFileSync(new URL('../public/card.png', import.meta.url));
+  assert.equal(png.readUInt32BE(16), CARD.width);
+  assert.equal(png.readUInt32BE(20), CARD.height);
+  const banner = readFileSync(new URL('../public/banner.png', import.meta.url));
+  assert.deepEqual([banner.readUInt32BE(16), banner.readUInt32BE(20)], [1280, 720]);
+  assert.ok(!file('index.html').includes(SITE.host), 'index.html names no address: the build writes the tags');
+  assert.ok(!file('vite.config.js').includes(SITE.host));
 });

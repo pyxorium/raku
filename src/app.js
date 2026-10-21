@@ -10,10 +10,12 @@
 // A tab can also show your shelf or an account's tiles (stage 2, src/shelf-pages.js), and a star at the
 // end of the address box keeps the tile or account shown (shelf-store.js).
 // Stage 4: the account menu in the top bar (account-menu.js) and saving at the tables (tables/saving.js).
+// Stage 6: Discover (discover.js), a button beside the Shelf's; words typed in the address box search; a post's
+// address opens through the link message (link-message.js), outside Raku.
 
 import { Tile } from '@dasl/tile-loader';
-import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS, TABLES, tableForTile } from './config.js';
-import { parseAddress, parseTarget, atUri, SHELF_URI, tableUri } from './address.js';
+import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS, TABLES, tableForTile, postApp, postLink } from './config.js';
+import { parseAddress, parseTarget, atUri, SHELF_URI, tableUri, DISCOVER_URI } from './address.js';
 import { createTabs, current } from './tabs.js';
 import { describeTile, sizeVerdict, createPathLoader, blobCidOf } from './tiles.js';
 import { formatBytes, NetError } from './net.js';
@@ -25,9 +27,13 @@ import { attachTypeahead } from './typeahead.js';
 import { drawTable, createPanel } from './tables/table-page.js';
 import { createPinnedLoader } from './tables/pinned.js';
 import { createAccountMenu } from './account-menu.js';
+import { createLinkMessage } from './link-message.js';
+import { createDiscover, drawDiscover } from './discover.js';
 
-export function mountRaku(root, { mothership, resolver, moderation, files, shelf, auth, returned = null, keepForReturn = () => {}, loc = globalThis.location, hist = globalThis.history, tableDeps = {} }) {
+export function mountRaku(root, { mothership, resolver, moderation, files, shelf, auth, storage = null, returned = null, keepForReturn = () => {}, loc = globalThis.location, hist = globalThis.history, tableDeps = {} }) {
   const kit = createCardKit({ files });
+  // Discover (stage 6): what it keeps while Raku is open, shared by every Discover tab.
+  const discover = createDiscover({ resolver, moderation, shelf, storage, loc });
   // Tables (stage 3): their tiles load through Raku's one mothership, but only the pinned versions.
   mothership.addLoader(createPinnedLoader({ Tile, pins: Object.values(TABLES).flatMap((t) => [t.house, t.player]), resolver }));
   const tabs = createTabs();
@@ -44,7 +50,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   const reloadBtn = h('button', { class: 'nav-btn', type: 'button', title: 'Reload this tile', 'aria-label': 'Reload this tile', onclick: () => reload(tabs.active.id) }, icon('reload', 18));
   const input = h('input', {
     class: 'addr', type: 'text', name: 'address', spellcheck: 'false', autocomplete: 'off', autocapitalize: 'off',
-    'aria-label': "A tile's address or someone's handle", placeholder: "Paste a tile's address, or type someone's handle",
+    'aria-label': "A tile's address, someone's handle, or words to search for", placeholder: "Paste a tile's address, type a handle, or search tiles",
   });
   input.addEventListener('focus', () => input.select());
   // The star (decision Q30): keeps the tile or the account this tab shows; filled turquoise when kept.
@@ -53,6 +59,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   // Handle suggestions under the box (typeahead.js): choosing one opens that account's tiles.
   attachTypeahead(input, form, { onChoose: (handle) => { input.value = handle; submitAddress(); } });
   const shelfBtn = h('button', { class: 'nav-btn', type: 'button', title: 'Your shelf', 'aria-label': 'Your shelf', onclick: () => goShelf() }, icon('shelf', 18));
+  const discoverBtn = h('button', { class: 'nav-btn', type: 'button', title: 'Discover', 'aria-label': 'Discover', onclick: () => goDiscover() }, icon('compass', 18));
   // On a phone (decision, Oct 19: option A) the address gets the whole top row, and these four go in a
   // toolbar along the bottom, each a full thumb-size target. On a computer the toolbar is hidden.
   const toolBtn = (label, title, onclick) => h('button', { class: 'tool-btn', type: 'button', title, 'aria-label': title, onclick }, label);
@@ -60,8 +67,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   const fwdTool = toolBtn(icon('forward'), 'Forward', () => tabs.forward(tabs.active.id));
   const reloadTool = toolBtn(icon('reload'), 'Reload this tile', () => reload(tabs.active.id));
   const shelfTool = toolBtn(icon('shelf'), 'Your shelf', () => goShelf());
+  const discoverTool = toolBtn(icon('compass'), 'Discover', () => goDiscover());
   const countBtn = h('button', { class: 'count', type: 'button', title: 'Open tabs', 'aria-label': 'Show open tabs', onclick: () => toggleSheet(true) }, h('span', {}, '1'));
-  const toolbar = h('nav', { class: 'toolbar', 'aria-label': 'Browsing' }, backTool, fwdTool, reloadTool, shelfTool, countBtn);
+  const toolbar = h('nav', { class: 'toolbar', 'aria-label': 'Browsing' }, backTool, fwdTool, reloadTool, shelfTool, discoverTool, countBtn);
   const noteLine = h('div', { class: 'note', role: 'status', 'aria-live': 'polite', hidden: true });
   // "Sign in in this tab instead" (Q41): what to pick up afterwards, with the open tabs.
   const keep = (info) => keepForReturn({ ...info, hash: tabs.toHash() });
@@ -80,9 +88,11 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     h('header', { class: 'chrome' },
       h('div', { class: 'strip-row' }, brand, strip, newTabBtn),
       h('div', { class: 'bar' }, h('span', { class: 'brand brand-small' }, SITE.name),
-        h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn, shelfBtn), form, menu.button),
+        h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn, shelfBtn, discoverBtn), form, menu.button),
       noteLine, menu.panel),
     stage, toolbar, sheet);
+  // Links out of Raku (a post, a link in a post): Raku says where they go and opens them on a click.
+  const linkMessage = createLinkMessage(root);
 
   function say(text) {
     clearTimeout(notice);
@@ -103,7 +113,20 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (!r.ok) { say(r.reason); return; }
     say('');
     input.blur();               // first, so the box shows the tab's own address afterwards (a table's, say)
+    // A post opens outside Raku for now (stage 6, Q87/Q88), in the app chosen for posts, after the link message.
+    if (r.kind === 'post') { linkMessage.show({ url: postLink(postApp(storage), r.actor, r.rkey), from: 'A post address you typed. Raku shows tiles, so posts open in their app.' }); return; }
     tabs.go(tabs.active.id, r.uri);
+  }
+
+  // The Discover button: like the Shelf button. A tab already on Discover comes to the front; else this tab if it
+  // shows a first screen or one of Raku's pages; else a new tab (a running tile stays open).
+  const onDiscover = (uri) => !!uri && (uri === DISCOVER_URI || uri.startsWith(`${DISCOVER_URI}/`) || uri.startsWith('raku:search/'));
+  function goDiscover() {
+    const open = tabs.list.find((t) => onDiscover(current(t)));
+    if (open) { tabs.activate(open.id); return; }
+    const here = current(tabs.active);
+    if (!here || here.startsWith('raku:')) tabs.go(tabs.active.id, DISCOVER_URI);
+    else openNew(DISCOVER_URI);
   }
 
   // The Shelf button: your shelf comes to the front. If a tab already shows it, that tab; if this tab
@@ -173,6 +196,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (target.ok && target.kind === 'shelf') { drawYourShelf(pageContext(p, tab)); drawChrome(); return; }
     if (target.ok && target.kind === 'account') { drawAccountTiles(pageContext(p, tab), target.actor); return; }
     if (target.ok && target.kind === 'table') { openTable(p, tab, target.id, target.sub); return; }
+    if (target.ok && target.kind === 'discover') { drawDiscover(pageContext(p, tab), { source: target.source }); return; }
+    if (target.ok && target.kind === 'search') { drawDiscover(pageContext(p, tab), { source: 'search', query: target.query }); return; }
     openTile(p, tab, uri);
   }
 
@@ -200,7 +225,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   function pageContext(p, tab) {
     const mine = p.attempt;
     return {
-      p, tab, kit, shelf, tabs, resolver, moderation, openNew, say, drawChrome,
+      p, tab, kit, shelf, tabs, resolver, moderation, openNew, say, drawChrome, discover, linkMessage,
       alive: () => mine === p.attempt,
       status: (kind, text, ...actions) => status(p, kind, text, ...actions),
       hideStatus: () => hideStatus(p),
@@ -380,6 +405,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       grid);
     p.el.append(box);
     for (const uri of PICKS) grid.append(pickCard(uri, tab));
+    box.append(h('div', { class: 'first-discover' },
+      h('button', { type: 'button', class: 'more', onclick: () => goDiscover() }, icon('compass', 16), 'Discover more tiles'),
+      h('span', { class: 'small-lede' }, 'Search, and new tiles from the accounts you keep.')));
     const tables = h('div', { class: 'cards tables' });
     box.append(h('h2', {}, 'Tables'), h('p', { class: 'small-lede' }, 'Groups of tiles that play together. Play the bot with no sign-in; sign in to save your matches, or to play Daisy with a friend on another computer.'), tables);
     for (const t of Object.values(TABLES)) tables.append(tableCard(t, tab));
@@ -469,6 +497,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     const onShelf = current(tab) === SHELF_URI;
     shelfBtn.classList.toggle('on', onShelf);
     shelfTool.classList.toggle('on', onShelf);
+    const onDisc = onDiscover(current(tab));
+    discoverBtn.classList.toggle('on', onDisc);
+    discoverTool.classList.toggle('on', onDisc);
     newTabBtn.disabled = tabs.full;
     countBtn.firstChild.textContent = String(tabs.list.length);
     // A pane coming to the front or going behind tells its page (step 5b: Daisy's lounge counts you as "here"

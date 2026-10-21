@@ -175,6 +175,44 @@ Decisions: `claude/raku-stage5b-plan.md` (Q51 to Q54).
   Roller Coaster. Two rows of three on a computer, one column on a phone. `check_page.py` serves
   stand-ins under the same addresses.
 
+## Stage 6, step 6a (Oct 21 2026): Discover
+
+Plan and decisions: `claude/raku-stage6-plan.md` (Q84 to Q96).
+
+- **Discover** (`raku:discover`), a page inside a tab, opened by the compass button beside the Shelf's (a
+  sixth button on the phone toolbar). Three columns on a wide window: the sources on the left, the chosen
+  one in the centre with the search box above it, previews of the others on the right (click one to bring
+  it to the centre). Narrower: the sources as icons, then no right column; a phone: one column with the
+  sources as chips. Nothing on the page runs a tile.
+- **Following** (`raku:discover/following`): the newest tiles of the accounts kept on your shelf, all mixed,
+  newest first, "New" on tiles since your last visit (remembered in this browser). Asked of each account's
+  own server, four at a time, kept five minutes; hidden accounts and tiles left out.
+- **Search** (`raku:search/<words>`): Enter on words in the address box (a word with a dot is tried as a
+  handle first; when there's no such account, a button offers the search), or the box on Discover. First
+  "Already in Raku" (your shelf, Following, the picks), matched here in the browser; then appmosphe.re,
+  asked only for the words, only on Enter. Raku reads just the tile addresses from appmosphe.re's answer
+  and looks each tile up itself, through the usual moderation.
+- **Tile news** (`raku:discover/news`): drawn and checked, but off until step 6b fills in `FEED` in
+  `src/config.js` (on this computer `?feed=at://…/app.bsky.feed.generator/…` shows any feed). Posts are drawn
+  by Raku as plain text and pictures (`src/posts.js`, `src/post-card.js`): links go through the link
+  message, a link to a tile opens it in Raku, mentions open that account's tiles, pictures only from
+  Bluesky's picture server, Bluesky's labels followed (hidden, a content warning, blurred pictures). A post
+  that links to a tile (its link card, or a link in its text) shows a tile card that opens the tile in Raku.
+  A reply is drawn like the Bluesky app does in a feed (Q97): the thread's first post, the post it answers
+  ("More replies in between" when posts were skipped), then the reply, joined by a line, with "Open thread in
+  <app>"; every post in it is checked like any other ("Post not available" when deleted, blocked or hidden),
+  and a post already drawn isn't drawn again further down. The thread comes with the feed's own answer
+  (`reply: { root, parent }`), so nothing more is fetched.
+- **The link message** (`src/link-message.js`): before anything opens outside Raku, Raku shows the site,
+  the full address, what's asking and "Only continue if you trust this site"; Open makes a new window with
+  no opener and no referrer. A post's address typed in the box opens it this way (posts open outside Raku
+  for now), in the app chosen for posts (`POST_APPS`; Bluesky by default, the setting comes in step 6b).
+- **Raku's link card** (Q93): `public/card.png` (1200 × 630) is the picture when someone shares Raku's address;
+  the Open Graph and Twitter-card tags are written into the page's head by `vite.config.js` from `CARD` /
+  `cardTags()` in `src/config.js` (so the address stays named in one place). `public/banner.png` (1280 × 720)
+  is a tile-style banner for places that list apps beside tiles. Check the card in Bluesky's composer after
+  the push (paste the address into a new post).
+
 ## Try it
 
 ```
@@ -206,7 +244,7 @@ and open http://127.0.0.1:5181/.
 | `src/tabs.js` | the tabs as data (history, the cap, the page address) |
 | `src/app.js` | the page: tab strip, address bar, panes, the first screen |
 | `src/frame-guard.js` | refusing to run inside another site's frame |
-| `src/icons.js` | Raku's own icons, drawn (back, forward, reload, new tab, close, shelf, star, person) |
+| `src/icons.js` | Raku's own icons, drawn (back, forward, reload, new tab, close, shelf, star, person; stage 6: compass, search, news, people) |
 | `src/shelf-store.js` | your shelf as data (this browser's storage, Export and Import) |
 | `src/shelf-pages.js` | the Shelf's pages: your shelf and an account's tiles |
 | `src/typeahead.js` | handle suggestions under the address box (adapted copy of Daisy's) |
@@ -215,8 +253,15 @@ and open http://127.0.0.1:5181/.
 | `src/signin-ui.js` | the sign-in form, Raku's dialog, the blocked-window choices |
 | `src/account-menu.js` | the account button and its menu |
 | `src/cards.js` | tile cards and account chips, pictures loaded as they come near |
+| `src/discover.js` | stage 6: the Discover page (sources, Following, search results, Tile news, previews) |
+| `src/following.js` | the newest tiles of the accounts on your shelf, and "New since your last visit" |
+| `src/search.js` | search: matches here in the browser, then appmosphe.re (only the tile addresses are read) |
+| `src/posts.js` | a post as data: text and facets, pictures, link cards, a linked tile, labels |
+| `src/post-card.js` | a post drawn as a card |
+| `src/bluesky.js` | public reads of feeds and posts (one server, `APPVIEW` in config) |
+| `src/link-message.js` | the link message: where a link goes, Open / Cancel |
 | `src/style.css` | the look: raku pottery, turquoise, always dark |
-| `public/` | `CNAME`, `robots.txt`, the icon |
+| `public/` | `CNAME`, `robots.txt`, the icon; stage 6: `card.png` (the link card) and `banner.png` |
 | `.github/workflows/deploy.yml` | test, build, check the policy is on the page and `oauth.json` names Raku's address, publish to GitHub Pages |
 
 ## Browser checks (in the chat sandbox)
@@ -230,6 +275,11 @@ growing game by game; several accounts; signing out; a blocked window and "Sign 
 the saved records passing the games' own checks; the phone). They need a bundle of `src/main.js` and a copy of the loading server's `public/` folder; see the
 top of each file. For the sign-in checks the bundle swaps in a stand-in for the sign-in library:
 `esbuild src/main.js --bundle --format=esm --alias:@atproto/oauth-client-browser=./test/browser/oauth-standin.js`.
+
+`check_discover.py` (69 checks, stage 6) runs the same way as `check_page.py`: Discover's columns at four widths,
+Following (order, hidden ones, "New"), search from the box and from Discover (nothing sent while typing, one request
+with only the words), a word with a dot as a handle first, Tile news from a stand-in feed with a post linking a tile,
+labels, replies with their thread, the link message (Cancel, Escape, Open with no opener), a post's address in the box, the phone.
 
 `check_daisy.py` (63 checks, stage 5) bundles and starts everything itself (Raku's page with the stand-in
 sign-in, the loader replica, daisy-tiles' stand-in relay, and the site's Daisy page bundled with a stand-in
