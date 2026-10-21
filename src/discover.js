@@ -11,7 +11,7 @@
 // Addresses (address.js): raku:discover, raku:discover/following, raku:discover/news, raku:search/<words>.
 
 import { PICKS, SEARCH, feedUri, postApp } from './config.js';
-import { atUri, discoverUri, searchUri, accountPageUri, parseAddress, SHELF_URI } from './address.js';
+import { atUri, discoverUri, searchUri, accountPageUri, parseAddress, SHELF_URI, DISCOVER_URI } from './address.js';
 import { describeTile } from './tiles.js';
 import { NetError } from './net.js';
 import { h, bannerCid } from './cards.js';
@@ -116,11 +116,19 @@ export function drawDiscover(ctx, { source = null, query = '' } = {}) {
   // ---- the search box (top of the centre) and the sources (left) ----
   const box = h('input', { type: 'search', name: 'q', class: 'dv-q', placeholder: 'Search tiles', 'aria-label': 'Search for tiles', autocomplete: 'off', spellcheck: 'false', maxlength: '200' });
   box.value = current === 'search' ? query : '';
+  // An emptied box leaves search (Q99): Discover's first source, and "Search results" gone from the sources.
+  const leave = () => {
+    discover.lastQuery = null;
+    tabs.go(tab.id, current === 'search' ? DISCOVER_URI : uriFor(current));
+  };
   const form = h('form', { class: 'dv-search', role: 'search', onsubmit: (ev) => {
     ev.preventDefault();
     const q = box.value.trim();
     if (q) tabs.go(tab.id, searchUri(q));
+    else if (discover.lastQuery) leave();
   } }, box, h('button', { type: 'submit', class: 'dv-go', title: 'Search', 'aria-label': 'Search' }, icon('search', 18)));
+  // the box's own × (a search box's clear button) empties it: leave search too
+  box.addEventListener('search', () => { if (!box.value.trim() && discover.lastQuery) leave(); });
   const nav = h('nav', { class: 'dv-sources', 'aria-label': 'Discover' },
     sources.map((s) => h('button', {
       type: 'button', class: `dv-src${s === current ? ' on' : ''}`, 'data-source': s, title: SOURCES[s].label,

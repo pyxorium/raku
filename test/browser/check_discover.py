@@ -247,6 +247,23 @@ with sync_playwright() as pw:
     check('the Discover box searches too; your kept tile is found here', 'Glass Lantern' in texts(page, '.dv-part:not([hidden]) .card-title'))
     check('a kept account matches by handle', (page.fill('.dv-q', 'pyxorium'), page.press('.dv-q', 'Enter'), wait_for(lambda: '@pyxorium.com' in ' '.join(texts(page, '.dv-part .chip-name')), page=page))[2])
 
+    # Q99: an emptied search box leaves search
+    srcs = lambda: texts(page, '.dv-src')
+    h1 = lambda t: page.wait_for_function(f"() => document.querySelector('.dv-centre h1')?.textContent === {json.dumps(t)}")
+    page.fill('.dv-q', ''); page.press('.dv-q', 'Enter'); h1('Tile news')
+    check('emptying the Discover box and Enter: back to Discover, "Search results" gone', 'Search results' not in srcs() and page.input_value('.dv-q') == '', str(srcs()))
+    page.click('.bar .nav-btn[title="Back"]'); h1('Results for “pyxorium”')
+    check('...Back still brings the search back', page.input_value('.dv-q') == 'pyxorium' and 'Search results' in srcs())
+    page.fill('.dv-q', ''); page.dispatch_event('.dv-q', 'search'); h1('Tile news')
+    check("the search box's own × leaves search too", 'Search results' not in srcs())
+    page.click('.bar .nav-btn[title="Back"]'); h1('Results for “pyxorium”')
+    page.fill('.addr', ''); page.press('.addr', 'Enter'); h1('Tile news')
+    check('emptying the address box on a search page and Enter: back to Discover', 'Search results' not in srcs() and page.input_value('.addr') == '')
+    page.reload(); page.wait_for_selector('.dv-centre h1')
+    check('...and a reload stays there, the boxes empty', page.inner_text('.dv-centre h1') == 'Tile news' and page.input_value('.dv-q') == '' and page.input_value('.addr') == '' and 'Search results' not in srcs())
+    page.fill('.addr', ''); page.press('.addr', 'Enter')
+    check('...an empty address box elsewhere only shows the hint', page.inner_text('.dv-centre h1') == 'Tile news' and page.is_visible('.note'))
+
     # a word with a dot: a handle first; not found, offer search
     page.fill('.addr', 'nosuch.example'); page.press('.addr', 'Enter')
     btn = page.wait_for_selector('.tile-status button.primary')

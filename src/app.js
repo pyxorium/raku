@@ -109,6 +109,13 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   }
 
   function submitAddress() {
+    // An emptied address box on a search page leaves search (Q99): back to Discover, without "Search results".
+    if (!input.value.trim() && String(current(tabs.active) || '').startsWith('raku:search/')) {
+      discover.lastQuery = null;
+      input.blur();
+      tabs.go(tabs.active.id, DISCOVER_URI);
+      return;
+    }
     const r = parseTarget(input.value);
     if (!r.ok) { say(r.reason); return; }
     say('');
