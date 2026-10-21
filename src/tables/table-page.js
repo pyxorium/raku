@@ -125,8 +125,9 @@ export function drawTable(ctx, id, sub = null) {
       onDone: () => { d.close(); drawAccount(); },
       goHere: (who, scope) => { keepForReturn({ kind: 'signin', table: id }); return auth.signInHere(who, scope, 'signin'); },
     });
-    d.body.append(h('h2', {}, 'Sign in to save matches'), h('p', { class: 'rk-promise' }, SIGNIN_PROMISE), form.el,
-      h('p', { class: 'small' }, `The first time, your account server asks you to approve "${table.name}": saving its match records, nothing else.`));
+    // (the box first, the promise below: Q55)
+    d.body.append(h('h2', {}, 'Sign in to save matches'), form.el,
+      h('div', { class: 'rk-details' }, h('p', {}, `The first time, your account server asks you to approve "${table.name}": saving its match records, nothing else.`), h('p', { class: 'rk-promise' }, SIGNIN_PROMISE)));
     form.focus();
   }
   const offAuth = auth.onChange(() => drawAccount());

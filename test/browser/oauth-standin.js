@@ -19,6 +19,8 @@ const PDS = 'https://pds.fakepds.net';
 const SETS = {
   'include:cafe.thunderbird.sevenup.authPlay': 'repo:cafe.thunderbird.sevenup.match',
   'include:cafe.thunderbird.daisy.authPlay': 'repo:cafe.thunderbird.daisy.match',
+  // the lounge (step 5b): the record and the pass for the relay
+  'include:cafe.thunderbird.daisy.authLounge?aud=did:web:relay.daisy.thunderbird.cafe%23daisy_relay': 'repo:cafe.thunderbird.daisy.lounge rpc:cafe.thunderbird.daisy.lounge.enter?aud=did:web:relay.daisy.thunderbird.cafe%23daisy_relay',
 };
 const expand = (scope) => String(scope || '').split(' ').filter(Boolean).map((s) => SETS[s] || s).join(' ');
 

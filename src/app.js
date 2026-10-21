@@ -464,7 +464,12 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     shelfTool.classList.toggle('on', onShelf);
     newTabBtn.disabled = tabs.full;
     countBtn.firstChild.textContent = String(tabs.list.length);
-    for (const [id, pane] of panes) pane.el.classList.toggle('front', id === tab.id);
+    // A pane coming to the front or going behind tells its page (step 5b: Daisy's lounge counts you as "here"
+    // only while its tab is in front).
+    for (const [id, pane] of panes) {
+      const on = id === tab.id;
+      if (pane.el.classList.contains('front') !== on) { pane.el.classList.toggle('front', on); pane.el.dispatchEvent(new CustomEvent('raku:front', { detail: on })); }
+    }
     document.title = current(tab) ? `${p.title} · ${SITE.name}${SITE.lab ? ' (lab)' : ''}` : `${SITE.name}${SITE.lab ? ' (lab)' : ''}`;
     if (!sheet.hidden) drawSheet();
   }

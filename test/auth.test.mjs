@@ -10,7 +10,7 @@ test('the permissions: your account plus the sets of the tables a sign-in is for
   assert.equal(scopeFor([]), 'atproto');
   assert.equal(scopeFor(['sevenup']), 'atproto include:cafe.thunderbird.sevenup.authPlay');
   assert.equal(scopeFor(['sevenup', 'daisy', 'sevenup']), 'atproto include:cafe.thunderbird.sevenup.authPlay include:cafe.thunderbird.daisy.authPlay');
-  assert.equal(fullScope(), scopeFor(Object.keys(TABLES)));
+  assert.equal(fullScope(), `${scopeFor(Object.keys(TABLES))} ${TABLES.daisy.lounge.scope}`, "oauth.json: the tables' sets and Daisy's lounge (step 5b)");
   // the server expands a set into plain permissions; either form counts
   assert.ok(coversTable('atproto repo:cafe.thunderbird.sevenup.match', TABLES.sevenup));
   assert.ok(coversTable('atproto repo:cafe.thunderbird.sevenup.match?action=create&action=update', TABLES.sevenup));
@@ -71,6 +71,10 @@ function fakeLib({ grant = (scope) => scope, callback = null, inWindow = false }
     did, scope,
     getTokenInfo: async () => ({ scope: grant(scope) }),
     fetchHandler: async (path, init) => {
+      if (path.startsWith('/xrpc/com.atproto.server.getServiceAuth')) {     // the lounge's pass (step 5b)
+        calls.push({ did, path });
+        return new Response(JSON.stringify({ token: `pass:${did}` }), { status: 200 });
+      }
       calls.push({ did, path, body: JSON.parse(init.body) });
       if (store.get(did)?.expired) return new Response(JSON.stringify({ error: 'InvalidToken' }), { status: 401 });
       return new Response(JSON.stringify({ uri: `at://${did}/x/${JSON.parse(init.body).rkey}`, cid: 'bafy' }), { status: 200 });
@@ -153,4 +157,31 @@ test('a library that fails to load: browsing is untouched, signing in says so', 
   console.error = orig;
   assert.ok(r.error);
   await assert.rejects(auth.signIn('a.example', 'atproto'), /still getting ready|isn't working/);
+});
+
+test("Daisy's lounge (step 5b): its own permission, kept by later sign-ins; the relay pass from the account's server", async () => {
+  const f = fakeLib();
+  const auth = createAuth(async () => f.lib, { storage: memStore(), loc: { hostname: 'raku.lexicographer.space', port: '' }, handleFor });
+  await auth.start();
+  const L = TABLES.daisy.lounge;
+  // signed out: one window asks for the account, "Play Daisy" and "Daisy lounge" together (Q54)
+  assert.equal(auth.loungeScopeFor(null, 'daisy'), `atproto include:cafe.thunderbird.daisy.authPlay ${L.scope}`);
+  await auth.signIn('a.example', auth.scopeFor(null, 'sevenup'));
+  assert.ok(!auth.coversLounge(A, 'daisy'));
+  assert.equal(auth.loungeScopeFor(A, 'daisy'), `atproto include:cafe.thunderbird.sevenup.authPlay include:cafe.thunderbird.daisy.authPlay ${L.scope}`, 'keeps Seven-Up');
+  await auth.signIn('a.example', auth.loungeScopeFor(A, 'daisy'));
+  assert.ok(auth.coversLounge(A, 'daisy') && auth.covers(A, 'daisy') && auth.covers(A, 'sevenup'));
+  assert.ok(auth.scopeFor(A, 'sevenup').split(' ').includes(L.scope), 'a later sign-in for a table never drops the lounge');
+  const pass = await auth.getPass(A, 'daisy');
+  assert.equal(pass, `pass:${A}`);
+  const call = f.calls.find((c) => c.path && c.path.startsWith('/xrpc/com.atproto.server.getServiceAuth'));
+  const q = new URLSearchParams(call.path.split('?')[1]);
+  assert.equal(q.get('aud'), 'did:web:relay.daisy.thunderbird.cafe#daisy_relay');
+  assert.equal(q.get('lxm'), 'cafe.thunderbird.daisy.lounge.enter');
+  assert.ok(Number(q.get('exp')) - Date.now() / 1000 <= 61, 'good for a minute');
+  // the server's expanded form counts too
+  const { coversLounge } = await import('../src/config.js');
+  assert.ok(coversLounge(`atproto repo:${L.collection} rpc:${L.enter}?aud=did:web:relay.daisy.thunderbird.cafe%23daisy_relay`, TABLES.daisy));
+  assert.ok(!coversLounge(`atproto repo:${L.collection}`, TABLES.daisy), 'the record alone is not enough: the pass is needed too');
+  assert.ok(!coversLounge(`atproto ${L.scope}`, TABLES.sevenup), 'Seven-Up has no lounge');
 });

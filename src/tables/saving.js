@@ -120,14 +120,14 @@ export function createSaver({ table, kit, auth, host, notify, keepForReturn, onS
       goHere: (who, scope) => { keepForReturn({ kind: 'save', table: table.id, result: job.result, seat: job.seat, account: job.account || null }); return auth.signInHere(who, scope, 'save'); },
       hereNote: 'Other tabs will reload. This match is kept, and this question comes back after you sign in.',
     });
+    // The order (Q55, owner): the box first, Raku's promise and what will be saved below it.
     show(() => [
       h('h2', {}, `Save this ${table.name} match?`),
       notice ? h('p', { class: 'rk-notice' }, notice) : null,
-      h('p', {}, reason || 'Sign in to save it to your account.'),
-      h('p', { class: 'rk-promise' }, SIGNIN_PROMISE),
+      h('p', { class: 'rk-lede' }, reason || 'Sign in to save it to your account.'),
       form.el,
-      details(preview),
       actions(btn('Not now', () => dialog.close())),
+      h('div', { class: 'rk-details' }, h('p', { class: 'rk-promise' }, SIGNIN_PROMISE), details(preview)),
     ]);
   }
 

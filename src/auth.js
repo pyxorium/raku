@@ -13,7 +13,7 @@
 //   - "Always" choices per account and game, in this browser (Q37).
 // Uses @atproto/oauth-client-browser 0.5.8 (as the site and the Foundry). createAuth takes the library's
 // exports (loaded when needed), so the browser checks can hand in a stand-in (test/browser/oauth-standin.js).
-import { SIGNIN, fullScope, scopeFor, coversTable, tablesCovered, TABLES } from './config.js';
+import { SIGNIN, fullScope, scopeFor, coversTable, coversLounge, tablesCovered, TABLES } from './config.js';
 
 export class SignInNeeded extends Error {}
 export class SignInStopped extends Error {}
@@ -204,10 +204,20 @@ export function createAuth(getLib, { storage, loc = globalThis.location, win = g
     /** Does this account's sign-in cover saving at the table? (Known without waiting.) */
     covers(did, tableId) { return coversTable(scopes.get(did), TABLES[tableId]); },
     known(did) { return scopes.has(did); },
-    /** The permissions to ask for when this account (or a new one: did null) signs in for a table. */
+    /** The permissions to ask for when this account (or a new one: did null) signs in for a table. The
+     *  games (and lounges, step 5b) its sign-in already allows are kept, so a new sign-in never loses them. */
     scopeFor(did, tableId) {
       const had = did ? tablesCovered(scopes.get(did)) : [];
-      return scopeFor(tableId ? [...had, tableId] : had);
+      const lounges = did ? Object.keys(TABLES).filter((id) => coversLounge(scopes.get(did), TABLES[id])).map((id) => TABLES[id].lounge.scope) : [];
+      return [scopeFor(tableId ? [...had, tableId] : had), ...lounges].join(' ');
+    },
+    /** Does this account's sign-in cover a table's lounge (step 5b)? (Known without waiting.) */
+    coversLounge(did, tableId) { return coversLounge(scopes.get(did), TABLES[tableId]); },
+    /** The permissions for turning mingling on at a table's lounge: the table's own set too (Q54: one window). */
+    loungeScopeFor(did, tableId) {
+      const base = this.scopeFor(did, tableId);
+      const L = TABLES[tableId] && TABLES[tableId].lounge;
+      return L && !base.split(' ').includes(L.scope) ? `${base} ${L.scope}` : base;
     },
 
     // Call straight from a click, before anything that waits: browsers only allow a new window then.
@@ -245,6 +255,37 @@ export function createAuth(getLib, { storage, loc = globalThis.location, win = g
       const had = client;
       forget(did);
       try { await had?.revoke(did); } catch { /* already gone */ }
+    },
+
+    // One call to the account's own server with its sign-in (step 5b: the lounge record, the relay pass).
+    // SignInNeeded when the sign-in has run out; an error with .status otherwise.
+    async call(did, nsidAndQuery, { method = 'POST', body } = {}) {
+      if (!sessions.has(did) && !(await restore(did))) throw new SignInNeeded('signed out');
+      let res;
+      try {
+        res = await sessions.get(did).fetchHandler(`/xrpc/${nsidAndQuery}`, {
+          method,
+          ...(body !== undefined ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}),
+        });
+      } catch (err) {
+        if (/token|session|refresh|revoked|auth/i.test(String(err && (err.name + ' ' + err.message)))) { forget(did, 'ran-out'); throw new SignInNeeded(String(err.message)); }
+        throw err;
+      }
+      const out = await res.json().catch(() => ({}));
+      if (res.status === 401) { forget(did, 'ran-out'); throw new SignInNeeded(out.message || 'unauthorized'); }
+      if (!res.ok) throw Object.assign(new Error(out.message || out.error || `The server answered ${res.status}`), { status: res.status, error: out.error });
+      return out;
+    },
+
+    // A pass for a game's relay lounge (step 5b): a short token from the account's own server
+    // (com.atproto.server.getServiceAuth), addressed to the relay and to entering the lounge only. Good for a
+    // minute; the relay takes each one once.
+    async getPass(did, tableId) {
+      const L = TABLES[tableId].lounge;
+      const q = new URLSearchParams({ aud: L.audience, lxm: L.enter, exp: String(Math.floor(Date.now() / 1000) + 60) });
+      const body = await this.call(did, `com.atproto.server.getServiceAuth?${q}`, { method: 'GET' });
+      if (!body || typeof body.token !== 'string') throw new Error('no pass');
+      return body.token;
     },
 
     // Writes one record (com.atproto.repo.putRecord): saving again with the same key replaces it.

@@ -49,7 +49,9 @@ test("the sign-in description file names Raku's own address, and asks for no mor
   assert.deepEqual(m.redirect_uris, [`${SITE.origin}/`]);
   assert.equal(m.client_uri, `${SITE.origin}/`);
   assert.equal(m.scope, fullScope());
-  assert.deepEqual(m.scope.split(' '), ['atproto', ...Object.values(TABLES).map((t) => t.scope)]);
+  // the tables' sets, then (step 5b) their lounges' sets
+  assert.deepEqual(m.scope.split(' '), ['atproto', ...Object.values(TABLES).map((t) => t.scope), ...Object.values(TABLES).filter((t) => t.lounge).map((t) => t.lounge.scope)]);
+  for (const t of Object.values(TABLES)) if (t.lounge) assert.match(t.lounge.scope, /^include:cafe\.thunderbird\.[a-z]+\.authLounge\?aud=did:web:[a-z.]+%23[a-z_]+$/);
   for (const t of Object.values(TABLES)) assert.match(t.scope, /^include:cafe\.thunderbird\.[a-z]+\.authPlay$/, 'a permission set, never a plain wide scope');
   assert.equal(m.dpop_bound_access_tokens, true);
   assert.equal(m.token_endpoint_auth_method, 'none');
@@ -57,5 +59,6 @@ test("the sign-in description file names Raku's own address, and asks for no mor
 });
 
 test('the sign-in promise names the address and the per-game permission (Q43)', () => {
-  assert.equal(SIGNIN_PROMISE, `Signing in lets ${SITE.host} save your match results from the tables you play. Each game asks for its own permission the first time you save. Raku doesn't touch your posts, likes, follows or anything else.`);
+  // widened in step 5b (Q53) for the lounge
+  assert.equal(SIGNIN_PROMISE, `Signing in lets ${SITE.host} save your match results from the tables you play and, if you choose to mingle, let other players see you're in a game's lounge. Each game asks for its own permission the first time. Raku doesn't touch your posts, likes, follows or anything else.`);
 });

@@ -86,6 +86,15 @@ export const TABLES = Object.freeze({
     // Two computers (stage 5): Daisy's own relay (C:\thunderbird-cafe\daisy-relay, Fly app thunderbird-daisy-relay),
     // the same one the Daisy page uses, so a table opened in Raku or on the Daisy page can be joined from either.
     relay: 'wss://relay.daisy.thunderbird.cafe/',
+    // The lounge (step 5b): the same as the Daisy page's (daisy-tiles lexicons/cafe.thunderbird.daisy.authLounge.json,
+    // "Daisy lounge"): a lounge record in your own account and a pass that proves to the relay who you are,
+    // asked only the first time you turn mingling on. The relay's lounge is at <relay>/lounge.
+    lounge: Object.freeze({
+      scope: 'include:cafe.thunderbird.daisy.authLounge?aud=did:web:relay.daisy.thunderbird.cafe%23daisy_relay',
+      collection: 'cafe.thunderbird.daisy.lounge',
+      audience: 'did:web:relay.daisy.thunderbird.cafe#daisy_relay',
+      enter: 'cafe.thunderbird.daisy.lounge.enter',
+    }),
     house: { uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3my6ucagtd32m', cid: 'bafyreib473vajcpexj5m7xcpah4dtwyzfazknnuqss4mokiclqcvgvye54' },
     player: { uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3my6uchoghd2m', cid: 'bafyreihsiqt4owq4p2bfudfwvz5qbxub3bw3q63b3ufnuepfa35p6yui7m' },
   }),
@@ -118,6 +127,11 @@ export function daisyTimers(loc = globalThis.location) {
 }
 // A table's id, as the Daisy page makes them (the relay accepts 8 to 32 of a-z and 0-9).
 export const isTableId = (x) => typeof x === 'string' && /^[a-z0-9]{8,32}$/.test(x);
+export const daisyLoungeUrl = (loc = globalThis.location) => daisyRelayUrl(loc).replace(/\/?$/, '/lounge');
+// The lounge on the page's side (the relay keeps its own times, relay lounge.js); with ?timers=short on this
+// computer "No answer" comes after 4 s.
+export const LOUNGE_TIMES = Object.freeze({ noAnswer: 60000, hereEvery: 60000, reconnect: [1000, 2000, 4000, 8000, 15000] });
+export const loungeTimes = (loc = globalThis.location) => (daisyTimers(loc) === 'short' ? { ...LOUNGE_TIMES, noAnswer: 4000 } : LOUNGE_TIMES);
 export function newTableId() {
   const b = new Uint8Array(10);
   crypto.getRandomValues(b);
@@ -141,7 +155,8 @@ export const SIGNIN = Object.freeze({
   returnKey: 'raku-signin-return',             // sessionStorage: what to pick up after "Sign in in this tab instead" (Q41)
 });
 // Shown beside "Sign in to save matches" and in the account menu (Q43).
-export const SIGNIN_PROMISE = `Signing in lets ${SITE.host} save your match results from the tables you play. Each game asks for its own permission the first time you save. Raku doesn't touch your posts, likes, follows or anything else.`;
+// Since step 5b (Q53) it also names the lounge, which only asks when you turn mingling on.
+export const SIGNIN_PROMISE = `Signing in lets ${SITE.host} save your match results from the tables you play and, if you choose to mingle, let other players see you're in a game's lounge. Each game asks for its own permission the first time. Raku doesn't touch your posts, likes, follows or anything else.`;
 export const recordLink = (uri) => `https://pdsls.dev/${uri}`;
 
 /** The permissions for a sign-in: your account, plus the sets of the given tables (ids). */
@@ -149,8 +164,17 @@ export function scopeFor(tableIds = []) {
   const sets = [...new Set(tableIds)].map((id) => TABLES[id] && TABLES[id].scope).filter(Boolean);
   return ['atproto', ...sets].join(' ');
 }
-/** Everything Raku may ever ask for (oauth.json's scope): every approved table's set. */
-export const fullScope = () => scopeFor(Object.keys(TABLES));
+/** Everything Raku may ever ask for (oauth.json's scope): every approved table's set, and their lounges' sets. */
+export const fullScope = () => [scopeFor(Object.keys(TABLES)), ...Object.values(TABLES).map((t) => t.lounge && t.lounge.scope).filter(Boolean)].join(' ');
+/** Does a sign-in's permissions cover a table's lounge? The server expands the set into the record and the pass. */
+export function coversLounge(scope, table) {
+  const L = table && table.lounge;
+  if (!L) return false;
+  const s = ` ${String(scope || '')} `;
+  if (s.includes(` ${L.scope} `)) return true;
+  const col = L.collection.replace(/\./g, '\\.');
+  return new RegExp(`\\srepo:(\\*|${col})(\\?[^\\s]*)?\\s`).test(s) && s.includes(` rpc:${L.enter}`);
+}
 /** Does a sign-in's permissions (its token's scope) cover saving at this table? The account's server
  *  expands a set into plain permissions (repo:<collection>), so either form counts. */
 export function coversTable(scope, table) {

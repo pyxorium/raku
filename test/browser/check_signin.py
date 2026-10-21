@@ -19,7 +19,8 @@ C = 'did:plc:joer5rzmwgec3dkr4srfmq45'; C_HANDLE = 'thunderbirdwine.bsky.social'
 BOT_DID = 'did:plc:hd2efebmfhpqcusfya4lguce'
 SITE_SRC = Path(sys.argv[2]) if len(sys.argv) > 2 else Path('/mnt/user-data/uploads/pyxorium.github.io/src')
 RAKU_DIR = Path(__file__).resolve().parents[2]
-PROMISE = "Signing in lets raku.lexicographer.space save your match results from the tables you play. Each game asks for its own permission the first time you save. Raku doesn't touch your posts, likes, follows or anything else."
+# (widened in step 5b, Q53, for the lounge)
+PROMISE = "Signing in lets raku.lexicographer.space save your match results from the tables you play and, if you choose to mingle, let other players see you're in a game's lounge. Each game asks for its own permission the first time. Raku doesn't touch your posts, likes, follows or anything else."
 
 def node_json(code):
     return json.loads(subprocess.run(['node', '-e', code], capture_output=True, text=True, check=True).stdout)

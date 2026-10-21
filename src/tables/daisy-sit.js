@@ -97,14 +97,16 @@ export function sitAs({ auth, table, host, say = () => {}, keepForReturn = () =>
       goHere: (who, scope) => { keepForReturn({ kind: 'sit', table: id }); return auth.signInHere(who, scope, 'sit'); },
       hereNote: 'Other tabs will reload, and this screen comes back: press the button again to sit.',
     });
-    const parts = [heading(), h('p', {}, intro()), h('p', { class: 'rk-promise' }, SIGNIN_PROMISE)];
+    // The order (Q55, owner): the heading, one short line, Continue or the box first; why and what below.
+    const parts = [heading(), h('p', { class: 'rk-lede' }, purpose === 'open' ? 'You get a link to send to a friend.' : "You'll take the other seat.")];
     if (now) {
       const go = h('button', { type: 'button', class: 'primary', onclick: () => authorize(auth.current() || now, { fromPress: true, d, status: (t) => { status.textContent = t; } }) }, `Continue as @${now.handle}`);
       parts.push(h('div', { class: 'actions' }, go), status, h('p', { class: 'small' }, 'Or sign in with another account:'), form.el);
     } else {
       parts.push(form.el, status);
     }
-    parts.push(h('div', { class: 'actions' }, h('button', { type: 'button', onclick: () => d.close() }, 'Not now')));
+    parts.push(h('div', { class: 'actions' }, h('button', { type: 'button', onclick: () => d.close() }, 'Not now')),
+      h('div', { class: 'rk-details' }, h('p', {}, intro()), h('p', { class: 'rk-promise' }, SIGNIN_PROMISE)));
     d.body.replaceChildren(...parts);
     (now ? d.body.querySelector('button.primary') : form.input)?.focus();
   }

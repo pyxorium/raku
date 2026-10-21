@@ -64,7 +64,7 @@ Decisions: `claude/raku-stage4-plan.md` (Q35 to Q43).
 - **Browsing and playing never need a sign-in.** Signing in is only for saving match results from the
   tables. Raku's promise, shown beside every sign-in: "Signing in lets raku.lexicographer.space save your
   match results from the tables you play. Each game asks for its own permission the first time you save.
-  Raku doesn't touch your posts, likes, follows or anything else."
+  Raku doesn't touch your posts, likes, follows or anything else." (Widened in step 5b for the lounge.)
 - **Where:** "Sign in to save matches" in a table's bar, or Save in a seat while signed out (Raku's prompt
   signs you in first, then asks), or the account button in the top bar (at the right on a computer, beside
   the Raku label on a phone; its menu is a sheet from the bottom there).
@@ -127,6 +127,34 @@ Decisions: `claude/raku-plan.md` section 15 (Q44 to Q50).
   `?timers=short` the short timers. Both only on 127.0.0.1, and the table link carries them to the second
   window. The page policy (`npm run preview`) names only the live relay, so play two computers on `npm run dev`.
 
+## Step 5b (Oct 21 2026): Daisy's lounge in Raku
+
+Decisions: `claude/raku-stage5b-plan.md` (Q51 to Q54).
+
+- **A Lounge on Daisy's start screen**, under the two cards: the same lounge as the Daisy page's (the same
+  record, `cafe.thunderbird.daisy.lounge/self`, and the same permission set, "Daisy lounge"), so minglers in
+  Raku and on the Daisy page see and invite each other. Turning mingling off in either place deletes the one
+  record. Adapted from the site's `src/daisy/lounge.js` (`src/tables/daisy-lounge.js`).
+- **"Here" (Q51):** you're in the lounge only while Daisy's start screen is the tab in front and Raku can be
+  seen. Another Raku tab, another browser tab or a minimized browser: you quietly leave ("away") and come
+  back when the start screen is in front again. (The quiet signal for someone arriving while you're away is
+  the next step, 5b-2.)
+- **Turning mingling on** shows the explanation first; when this browser hasn't approved "Daisy lounge" it
+  opens one window (signed out: your account, "Play Daisy" and "Daisy lounge" together). Then Raku writes the
+  lounge record, gets a pass from your account's server (`getServiceAuth`, for the relay's lounge only) and
+  enters. "Who else is mingling?", Invite ("Invite sent", "No answer" after a minute), the knock card at
+  the bottom of the tab (Play / Not now, a one-minute bar). Play: both tabs go to the new table at their
+  seats (no link to send). The same account mingling in two places: the newest wins ("mingling in another
+  window", Rejoin).
+- **Raku's promise (Q53)** now reads: "Signing in lets raku.lexicographer.space save your match results from
+  the tables you play and, if you choose to mingle, let other players see you're in a game's lounge. Each game
+  asks for its own permission the first time. Raku doesn't touch your posts, likes, follows or anything else."
+  `oauth.json`'s scope adds the lounge set (`include:cafe.thunderbird.daisy.authLounge?aud=…%23daisy_relay`);
+  it's only ever asked when you turn mingling on. A later sign-in for a game keeps the lounge permission.
+- **The sign-in dialogs (Q55)**, mingling, sitting at a table and saving: the heading, one short line, the
+  handle box (or "Continue as @x") and its button first; the explanation, the permission and Raku's promise
+  below it, smaller but always shown.
+
 ## Try it
 
 ```
@@ -183,9 +211,16 @@ the saved records passing the games' own checks; the phone). They need a bundle 
 top of each file. For the sign-in checks the bundle swaps in a stand-in for the sign-in library:
 `esbuild src/main.js --bundle --format=esm --alias:@atproto/oauth-client-browser=./test/browser/oauth-standin.js`.
 
-`check_daisy.py` (62 checks, stage 5) bundles and starts everything itself (Raku's page with the stand-in
+`check_daisy.py` (63 checks, stage 5) bundles and starts everything itself (Raku's page with the stand-in
 sign-in, the loader replica, daisy-tiles' stand-in relay, and the site's Daisy page bundled with a stand-in
 sign-in) and plays Daisy on two and three "computers" (separate browser contexts): the start screen, opening
 a table and the link, no relay to reach (the Joining box and its hint), the hover on Back to the start, signing in to sit, the join message, a reload and a relay restart mid-match, the phone
 width, whole matches that re-check (`verifyMatch`), saving, full, held, leaving and coming back, a match
 between Raku and the Daisy page (both ways), and the house version check. Usage at the top of the file.
+
+`check_lounge.py` (42 checks, step 5b) is set up the same way, with daisy-relay's lounge stand-in
+(`test/lounge-standin.mjs`, the real server.js and lounge.js with stand-in lookups) as the relay: mingling
+from signed out (one window) and from signed in (Continue, one short window), the record and the pass, who
+else is mingling, Invite / Not now / No answer, Play to one table at the right seats, "here" only while the
+start screen is the tab in front and Raku is seen, one lounge with the Daisy page, the same account in two
+places, mingling off (the record deleted), a reload while mingling, the phone width.

@@ -108,7 +108,7 @@ export function mountDaisyOnline(root, ctx) {
   let myView = null, theirView = null, joinedHere = false, mismatch = false;
   let goneAt = 0, goneTimer = null, disposed = false, slowTimer = null;
   const hello = { mine: false, theirs: false };
-  const remember = () => { if (me && me.seat) keepStore.keep(tableId, { me: { did: me.did, handle: me.handle, seat: me.seat }, other, snapshot }); };
+  const remember = () => { if (me && me.seat) keepStore.keep(tableId, { me: { did: me.did, handle: me.handle, seat: me.seat, ...(me.fromLounge ? { fromLounge: true } : {}) }, other, snapshot }); };
 
   const frames = createFrames({
     roles: ['house', 'mine', 'theirs'],
@@ -229,7 +229,7 @@ export function mountDaisyOnline(root, ctx) {
         if (disposed) return;
         // (before the first seat this load, the "Joining the table…" box says what's going on)
         if (state === 'down') setStatus(joinedHere ? 'Lost the connection to the table. Reconnecting…' : "Can't reach the relay yet. Trying again…");
-        if (state === 'connecting' && !me.seat) setStatus('Joining the table…');
+        if (state === 'connecting' && !me.seat && !me.fromLounge) setStatus('Joining the table…');
       },
       onMessage(m) {
         if (disposed) return;
@@ -320,7 +320,7 @@ export function mountDaisyOnline(root, ctx) {
       goneTimer = setInterval(show, 1000);
       return;
     }
-    if (!other) { setStatus('Waiting for the other player. Send them the link.'); return; }
+    if (!other) { setStatus(me.fromLounge ? 'Waiting for the other player to arrive…' : 'Waiting for the other player. Send them the link.'); return; }
     if (mismatch) return;
     invite.hidden = true;
     setStatus(phase === 'over' ? `Match over · playing with ${at(other.handle)}` : `Playing with ${at(other.handle)}${timers === 'short' ? ' · short timers' : ''}`);
@@ -334,7 +334,7 @@ export function mountDaisyOnline(root, ctx) {
     joining.hidden = joinedHere;
     mine.who.textContent = `You · @${me.handle}${me.seat ? ` · seat ${me.seat}` : ''}`;
     theirs.who.textContent = other ? `@${other.handle} · seat ${other.seat}${other.here ? '' : ' · away'}` : 'Waiting for the other player';
-    invite.hidden = !(me.seat === 1 && !other);
+    invite.hidden = !(me.seat === 1 && !other && !me.fromLounge);
     if (!invite.hidden) linkBox.value = shareLink(tableId, loc);
   }
   function hideTable() { seats.hidden = true; invite.hidden = true; joining.hidden = true; clearTimeout(slowTimer); }
@@ -362,11 +362,12 @@ export function mountDaisyOnline(root, ctx) {
   }
 
   // ---------- sitting ----------
-  function start(account, seatWish) {
-    me = { did: account.did, handle: account.handle, seat: account.seat || null, ask: seatWish };
+  // from (step 5b): an invitation both said yes to in the lounge: no link to send, and "@x said yes!" first.
+  function start(account, seatWish, from = null) {
+    me = { did: account.did, handle: account.handle, seat: account.kind ? null : account.seat || null, ask: seatWish, fromLounge: !!((from && from.fromLounge) || account.fromLounge) };
     lobby.hidden = true;
     showTable();
-    setStatus('Joining the table…');
+    setStatus(from && from.said ? from.said : 'Joining the table…');
     clearTimeout(slowTimer);
     slowTimer = setTimeout(slowHint, JOIN_HINT_MS);
     frames.start('house'); frames.start('mine'); frames.start('theirs');
@@ -408,7 +409,7 @@ export function mountDaisyOnline(root, ctx) {
   //   screen's "Back to the table".
   const intent = intents.get(tableId);
   intents.delete(tableId);
-  if (intent && intent.kind === 'open') start(intent, 1);
+  if (intent && intent.kind === 'open') { start(intent, intent.seat || 1, intent); }
   else {
     const kept = keepStore.kept(tableId);
     const tab = keepStore.tabAccount(tableId);
