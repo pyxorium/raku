@@ -19,7 +19,7 @@ test('the approved tables: Seven-Up and Daisy, each a house and a player tile, p
 });
 
 test("a table's own tiles are recognised, and tables have addresses", () => {
-  assert.equal(tableForTile(DID, '3my6uchoghd2m').id, 'daisy');
+  assert.equal(tableForTile(DID, '3myfnywxt6v2r').id, 'daisy');          // the coin's tiles (step 5c, Oct 21)
   assert.equal(tableForTile(DID, '3my27cwible2m').id, 'sevenup');
   assert.equal(tableForTile(DID, 'something-else'), null);
   assert.deepEqual(parseTarget('raku:table/daisy'), { ok: true, kind: 'table', id: 'daisy', sub: null, uri: tableUri('daisy') });

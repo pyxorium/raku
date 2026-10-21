@@ -95,8 +95,8 @@ export const TABLES = Object.freeze({
       audience: 'did:web:relay.daisy.thunderbird.cafe#daisy_relay',
       enter: 'cafe.thunderbird.daisy.lounge.enter',
     }),
-    house: { uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3my6ucagtd32m', cid: 'bafyreib473vajcpexj5m7xcpah4dtwyzfazknnuqss4mokiclqcvgvye54' },
-    player: { uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3my6uchoghd2m', cid: 'bafyreihsiqt4owq4p2bfudfwvz5qbxub3bw3q63b3ufnuepfa35p6yui7m' },
+    house: { uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3myfnyphiuw2t', cid: 'bafyreidwwralslcgks5hwet7adtcthwti74k7vo47bcuipbwcqmspqk5zu' },
+    player: { uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3myfnywxt6v2r', cid: 'bafyreif3zbe7lxc2wbiszai4c3yk7ltzxzaszwnsdqtxl6rtx5kiwwn2be' },
   }),
 });
 /** The table a tile belongs to (its house or player tile), or null. */
@@ -206,11 +206,16 @@ export function oauthMetadata() {
 export const TABS = Object.freeze({ max: 10 });
 export const TIMES = Object.freeze({ still: 4000, retry: 8000 });
 
-// The first screen's picks: tiles the owner chooses (claude/raku-plan.md decision 6; chosen Oct 19).
+// The first screen's picks: tiles the owner chooses (claude/raku-plan.md decision 6; chosen Oct 19,
+// replaced by these six Oct 21, in this order). Kept by DID, so a pick survives a handle change; the
+// handles are only notes. They aren't pinned: a card follows its author's changes.
 export const PICKS = Object.freeze([
-  'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3mw763im3qw2t',
-  'at://did:plc:joer5rzmwgec3dkr4srfmq45/ing.dasl.masl/3mwwhkjfvfq2o',
-  'at://did:plc:joer5rzmwgec3dkr4srfmq45/ing.dasl.masl/3mwztqi2rl2i4',
+  'at://did:plc:vryspragp5yyohzghxpgqm7i/ing.dasl.masl/3mx27cvoqvz2g',   // gabriellanonino.com: a sprite
+  'at://did:plc:qpdjl22sgfejceds2ibabye6/ing.dasl.masl/3mx2yq4ti6g2s',   // jackvalinsky.com: a glass lantern
+  'at://did:plc:jatbf7xbmjzy4uol34yyeh6t/ing.dasl.masl/3mxrdcu5qrk2d',   // justinerickson.me: Moab Red Hot
+  'at://did:plc:33k6yq7knpf5ecf532kdi5xy/ing.dasl.masl/3mxrcgrmw452v',   // center.for.cybernetic.beauty: Four On The Floor
+  'at://did:plc:mhu5ya2asqislku2audcqmtm/ing.dasl.masl/3mxjvqfkjo22o',   // lowpoly.gg: 3D CSS Saturn
+  'at://did:plc:rqbqpaaluty5v47jwciowpik/ing.dasl.masl/3mx6h2wjtgq2h',   // pyxorium.com: Roller Coaster
 ]);
 
 // On this computer only (http://127.0.0.1 or localhost): ?loader=<a loading server's

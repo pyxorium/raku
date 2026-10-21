@@ -57,11 +57,22 @@ def tile(name, resources, desc='', banner=None, icon=None):
         resources['/icon.png'] = res(icon, 'image/png'); t['icons'] = [{'src': '/icon.png', 'sizes': '256x256'}]
     return {'$type': 'ing.dasl.masl', 'cid': 'bafyreimanifest', 'tile': t, 'createdAt': '2026-10-19T00:00:00Z'}
 
+# The first screen's six picks (Oct 21): stand-ins under the picks' own accounts and record keys
+# (src/config.js PICKS), in order, each with a banner.
+PICK_ACCOUNTS = [
+    ('did:plc:vryspragp5yyohzghxpgqm7i', 'gabriellanonino.com', '3mx27cvoqvz2g', "@gabriellanonino.com's sprite"),
+    ('did:plc:qpdjl22sgfejceds2ibabye6', 'jackvalinsky.com', '3mx2yq4ti6g2s', "@jackvalinsky.com's glass lantern"),
+    ('did:plc:jatbf7xbmjzy4uol34yyeh6t', 'justinerickson.me', '3mxrdcu5qrk2d', 'Moab Red Hot'),
+    ('did:plc:33k6yq7knpf5ecf532kdi5xy', 'center.for.cybernetic.beauty', '3mxrcgrmw452v', 'Four On The Floor'),
+    ('did:plc:mhu5ya2asqislku2audcqmtm', 'lowpoly.gg', '3mxjvqfkjo22o', '3D CSS Saturn'),
+    ('did:plc:rqbqpaaluty5v47jwciowpik', 'pyxorium.com', '3mx6h2wjtgq2h', 'Roller Coaster'),
+]
+PICK_NAMES = [n for _, _, _, n in PICK_ACCOUNTS]
 records = {
     (A, '3mw763im3qw2t'): tile('Pick one', {'/': res(PLAIN('Pick one'), 'text/html')}, 'The first pick', banner=png((242, 178, 51)), icon=png((242, 178, 51), (256, 256))),
     (C, '3mwwhkjfvfq2o'): tile('Pick two', {'/': res(PLAIN('Pick two'), 'text/html')}, 'The second pick', banner=png((94, 156, 134))),
     (C, '3mwztqi2rl2i4'): tile('Pick three', {'/': res(PLAIN('Pick three'), 'text/html')}, 'The third pick', banner=png((30, 35, 64))),
-    (A, '3my6uchoghd2m'): tile('Daisy', {'/': res(PLAIN('Daisy player'), 'text/html')}, 'A dice race for two players'),
+    (A, '3myfnywxt6v2r'): tile('Daisy', {'/': res(PLAIN('Daisy player'), 'text/html')}, 'A dice race for two players'),
     (A, 'probe1'): tile('Probe tile', {'/': res(PROBE_HTML, 'text/html'), '/probe.js': res(PROBE_JS, 'text/javascript')}, icon=png((63, 184, 168), (256, 256))),
     (A, 'other1'): tile('Second tile', {'/': res(PLAIN('Second tile'), 'text/html')}),
     (A, 'large1'): tile('Long mixtape', {'/': res(PLAIN('Long mixtape'), 'text/html'), '/song.flac': {'src': {'$type': 'blob', 'ref': {'$link': 'bafkreinotdownloadedaaaaaaaaaaaaaaaaaaaa'}, 'size': 60 * MB}}}),
@@ -69,6 +80,8 @@ records = {
     (A, 'hidden1'): tile('Hidden tile', {'/': res(PLAIN('Should never show'), 'text/html')}),
     (B, 'shown1'): tile('Labelled account tile', {'/': res(PLAIN('Should never show'), 'text/html')}),
 }
+for i, (did, _, rkey, name) in enumerate(PICK_ACCOUNTS):
+    records[(did, rkey)] = tile(name, {'/': res(PLAIN(name), 'text/html')}, f'Pick {i + 1}', banner=png((40 * i, 120, 200 - 30 * i)))
 for k in range(12):
     records[(A, f'many{k}')] = tile(f'Tile {k}', {'/': res(PLAIN(f'Tile {k}'), 'text/html')})
 # stage 2: an older, flat record (not runnable here), and a tile that will be deleted after it's kept
@@ -121,12 +134,12 @@ def route(r):
     def js(obj, status=200): r.fulfill(status=status, headers={**cors, 'content-type': 'application/json'}, body=json.dumps(obj))
     if u.hostname == 'plc.directory':
         did = u.path.strip('/')
-        handle = {A: A_HANDLE, B: B_HANDLE, C: C_HANDLE, BOT_DID: 'dicesprite.thunderbird.cafe'}.get(did)
+        handle = {A: A_HANDLE, B: B_HANDLE, C: C_HANDLE, BOT_DID: 'dicesprite.thunderbird.cafe', **{d: hd for d, hd, _, _ in PICK_ACCOUNTS}}.get(did)
         if not handle: return js({'message': 'not found'}, 404)
         return js({'id': did, 'alsoKnownAs': [f'at://{handle}'], 'service': [{'id': '#atproto_pds', 'type': 'AtprotoPersonalDataServer', 'serviceEndpoint': PDS}]})
     if u.hostname == 'public.api.bsky.app':
         if u.path.endswith('resolveHandle'):
-            did = {A_HANDLE: A, B_HANDLE: B, C_HANDLE: C}.get(q.get('handle'))
+            did = {A_HANDLE: A, B_HANDLE: B, C_HANDLE: C, **{hd: d for d, hd, _, _ in PICK_ACCOUNTS}}.get(q.get('handle'))
             return js({'did': did}) if did else js({'error': 'InvalidRequest'}, 400)
         if u.path.endswith('getProfile'):
             labels = [{'src': LABELER, 'uri': f'at://{B}', 'val': '!hide', 'cts': '2026-10-01T00:00:00Z'}] if q.get('actor') == B else []
@@ -192,13 +205,13 @@ with sync_playwright() as p:
     page.goto(RAKU + '?loader=' + LOADER)
 
     # 1. first screen
-    wait_for(lambda: page.eval_on_selector_all('.picks .card-title', "els => els.length === 3 && els.every(e => e.textContent !== '…')"), 10)
+    wait_for(lambda: page.eval_on_selector_all('.picks .card-title', "els => els.length === 6 && els.every(e => e.textContent !== '…')"), 10)
     names = page.eval_on_selector_all('.picks .card-title', 'els => els.map(e => e.textContent)')
-    check('first screen: the three picks show their names from their records', names == ['Pick one', 'Pick two', 'Pick three'], str(names))
-    wait_for(lambda: page.eval_on_selector_all('.picks .card-pic img', 'els => els.length === 3 && els.every(i => i.complete)'), 10)
+    check('first screen: the six picks show their names from their records, in order', names == PICK_NAMES, str(names))
+    wait_for(lambda: page.eval_on_selector_all('.picks .card-pic img', 'els => els.length === 6 && els.every(i => i.complete)'), 10)
     check('the hide list is read from lexicographer.space', any(c == 'https://lexicographer.space/hidden-tiles.json' for c in calls))
     check('first screen: card pictures drawn from the tiles\' banners', page.eval_on_selector_all('.picks .card-pic img', 'els => els.every(i => i.src.startsWith("blob:") && i.naturalWidth === 1280)'))
-    check('first screen: "by @handle" only after the handle checks both ways', wait_for(lambda: page.eval_on_selector_all('.picks .card-by', "els => els.length === 3 && els[0].textContent === 'by @thunderbird.cafe' && els[2].textContent === 'by @thunderbirdwine.bsky.social'"), 10))
+    check('first screen: "by @handle" only after the handle checks both ways', wait_for(lambda: page.eval_on_selector_all('.picks .card-by', "els => els.length === 6 && els[0].textContent === 'by @gabriellanonino.com' && els[5].textContent === 'by @pyxorium.com'"), 10))
     check('computer: no bottom toolbar; arrows in the top bar', not page.is_visible('.toolbar') and page.is_visible('.bar .nav'))
     check('computer: back, forward, reload, the shelf and + are drawn icons, not text', page.eval_on_selector_all('.bar .nav-btn, .newtab', "bs => bs.length === 5 && bs.every(b => b.querySelector('svg.icon') && b.textContent.trim() === '')"))
     check('page title "Raku (lab)" and the lab label', page.title() == 'Raku (lab)' and '(lab)' in page.inner_text('.strip-row'))

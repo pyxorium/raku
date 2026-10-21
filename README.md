@@ -162,6 +162,19 @@ Decisions: `claude/raku-stage5b-plan.md` (Q51 to Q54).
   handle box (or "Continue as @x") and its button first; the explanation, the permission and Raku's promise
   below it, smaller but always shown.
 
+## Step 5c (Oct 21 2026): Daisy's coin, and new picks
+
+- **Daisy's coin toss** lives in Daisy's own tiles (`C:\thunderbird-cafe\daisy-tiles`, `player/coin3d.js`
+  and `shared/coin.js`): a silver coin with enamelled faces in the players' glazes, tossed on one clock
+  on every screen, with a keepsake by the first player's score. Raku needs no code for it, only the new
+  pins in `TABLES.daisy` once the new tiles are published (the house version check keeps old and new
+  apart).
+- **The first screen's picks** (`PICKS` in `src/config.js`): six tiles chosen by the owner, in order, kept
+  by DID: gabriellanonino.com's sprite, jackvalinsky.com's glass lantern, justinerickson.me's Moab Red
+  Hot, center.for.cybernetic.beauty's Four On The Floor, lowpoly.gg's 3D CSS Saturn, pyxorium.com's
+  Roller Coaster. Two rows of three on a computer, one column on a phone. `check_page.py` serves
+  stand-ins under the same addresses.
+
 ## Try it
 
 ```
