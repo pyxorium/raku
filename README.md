@@ -137,8 +137,8 @@ Decisions: `claude/raku-stage5b-plan.md` (Q51 to Q54).
   record. Adapted from the site's `src/daisy/lounge.js` (`src/tables/daisy-lounge.js`).
 - **"Here" (Q51):** you're in the lounge only while Daisy's start screen is the tab in front and Raku can be
   seen. Another Raku tab, another browser tab or a minimized browser: you quietly leave ("away") and come
-  back when the start screen is in front again. (The quiet signal for someone arriving while you're away is
-  the next step, 5b-2.)
+  back when the start screen is in front again. (Since 5b-2 you stay connected while away, listening for the
+  quiet signal below.)
 - **Turning mingling on** shows the explanation first; when this browser hasn't approved "Daisy lounge" it
   opens one window (signed out: your account, "Play Daisy" and "Daisy lounge" together). Then Raku writes the
   lounge record, gets a pass from your account's server (`getServiceAuth`, for the relay's lounge only) and
@@ -151,6 +151,13 @@ Decisions: `claude/raku-stage5b-plan.md` (Q51 to Q54).
   asks for its own permission the first time. Raku doesn't touch your posts, likes, follows or anything else."
   `oauth.json`'s scope adds the lounge set (`include:cafe.thunderbird.daisy.authLounge?aud=…%23daisy_relay`);
   it's only ever asked when you turn mingling on. A later sign-in for a game keeps the lounge permission.
+- **The quiet signal (step 5b-2, Q56 to Q59):** while Daisy's tab isn't in front (another Raku tab, another
+  browser tab, the browser minimized), Raku tells the relay "away" and stays connected as a listener: not
+  listed, can't be invited. When another mingler arrives (or comes back from away), the relay may say
+  "someone" (never who; blocks respected; at most once every 5 minutes; nobody already there counts):
+  the Daisy tab glows turquoise with ● ("Someone arrived in the Daisy lounge") and Raku's browser icon gets a
+  turquoise pip. Both clear when the Daisy tab is in front again. Listening lasts up to 2 hours away. Needs
+  the relay with "away" (daisy-relay, Oct 21); the explanation says so on Raku and on the Daisy page.
 - **The sign-in dialogs (Q55)**, mingling, sitting at a table and saving: the heading, one short line, the
   handle box (or "Continue as @x") and its button first; the explanation, the permission and Raku's promise
   below it, smaller but always shown.
@@ -218,7 +225,7 @@ a table and the link, no relay to reach (the Joining box and its hint), the hove
 width, whole matches that re-check (`verifyMatch`), saving, full, held, leaving and coming back, a match
 between Raku and the Daisy page (both ways), and the house version check. Usage at the top of the file.
 
-`check_lounge.py` (42 checks, step 5b) is set up the same way, with daisy-relay's lounge stand-in
+`check_lounge.py` (48 checks, steps 5b and 5b-2) is set up the same way, with daisy-relay's lounge stand-in
 (`test/lounge-standin.mjs`, the real server.js and lounge.js with stand-in lookups) as the relay: mingling
 from signed out (one window) and from signed in (Continue, one short window), the record and the pass, who
 else is mingling, Invite / Not now / No answer, Play to one table at the right seats, "here" only while the

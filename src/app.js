@@ -18,7 +18,7 @@ import { createTabs, current } from './tabs.js';
 import { describeTile, sizeVerdict, createPathLoader, blobCidOf } from './tiles.js';
 import { formatBytes, NetError } from './net.js';
 import { sniffPicture } from './moderation.js';
-import { icon } from './icons.js';
+import { icon, ICON_WITH_PIP } from './icons.js';
 import { h, createCardKit, bannerCid } from './cards.js';
 import { drawYourShelf, drawAccountTiles, drawShelfTeaser } from './shelf-pages.js';
 import { attachTypeahead } from './typeahead.js';
@@ -138,8 +138,11 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     let p = panes.get(tab.id);
     if (!p) {
       const el = h('section', { class: 'pane', 'data-tab': tab.id });
-      p = { el, uri: undefined, attempt: 0, timers: [], frame: null, title: 'New tab', icon: null, shownAddress: '', state: 'new', keep: null, dispose: null, panel: null, table: null };
+      p = { el, uri: undefined, attempt: 0, timers: [], frame: null, title: 'New tab', icon: null, shownAddress: '', state: 'new', keep: null, dispose: null, panel: null, table: null, mark: null };
       panes.set(tab.id, p);
+      // Step 5b-2: a page can put a quiet mark on its tab (Daisy's lounge: someone arrived while it was behind).
+      const pane = p;
+      el.addEventListener('raku:mark', (e) => { pane.mark = e.detail || null; drawChrome(); });
       stage.append(el);
     }
     return p;
@@ -155,6 +158,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     p.keep = null;
     p.panel = null;
     p.table = null;
+    p.mark = null;
     p.el.replaceChildren();
   }
 
@@ -424,7 +428,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       onclick: () => tabs.activate(tab.id),
       onauxclick: (ev) => { if (ev.button === 1) tabs.close(tab.id); },
       onkeydown: (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); tabs.activate(tab.id); } } },
-    mark, h('span', { class: 'tab-title' }, p.title), close);
+    mark, h('span', { class: 'tab-title' }, p.title),
+    p.mark ? h('span', { class: 'tab-signal', title: p.mark.title, 'aria-label': p.mark.title }, '●') : null, close);
+    if (p.mark) { b.classList.add('signal'); b.title = `${p.title}: ${p.mark.title}`; }
     return b;
   }
 
@@ -435,7 +441,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       return h('li', { class: on ? 'on' : '' },
         h('button', { type: 'button', class: 'sheet-tab', onclick: () => { tabs.activate(tab.id); toggleSheet(false); } },
           p.icon ? h('img', { class: 'tab-icon', src: p.icon, alt: '' }) : h('span', { class: 'tab-dot', 'data-state': p.state }),
-          h('span', { class: 'tab-title' }, p.title)),
+          h('span', { class: 'tab-title' }, p.title),
+          p.mark ? h('span', { class: 'tab-signal', title: p.mark.title, 'aria-label': p.mark.title }, '●') : null),
         h('button', { type: 'button', class: 'sheet-x', 'aria-label': `Close ${p.title}`, onclick: () => { tabs.close(tab.id); drawSheet(); } }, icon('close', 18)));
     }));
   }
@@ -472,6 +479,19 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     }
     document.title = current(tab) ? `${p.title} · ${SITE.name}${SITE.lab ? ' (lab)' : ''}` : `${SITE.name}${SITE.lab ? ' (lab)' : ''}`;
     if (!sheet.hidden) drawSheet();
+    drawIcon();
+  }
+
+  // Raku's browser icon: a turquoise pip while any tab has a quiet mark (step 5b-2, owner: the pip only, no
+  // change to the title).
+  let iconMarked = null;
+  function drawIcon() {
+    const marked = [...panes.values()].some((x) => x.mark);
+    countBtn.classList.toggle('signal', marked);                 // on a phone: the tab count shows it too
+    if (marked === iconMarked) return;
+    iconMarked = marked;
+    const link = document.querySelector('link[rel="icon"]');
+    if (link) link.href = marked ? ICON_WITH_PIP : '/icon.svg';
   }
 
   function sync() {

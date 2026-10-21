@@ -39,6 +39,9 @@ export function mountDaisyStart(root, { table, auth, resolver, go, setStatus, lo
     ...(loc ? { loc } : {}), ...(WebSocketImpl ? { WebSocketImpl } : {}),
     // An invitation both said yes to: this tab goes to the table, at the seat the relay gave.
     onTable: ({ table: id, seat, did, handle, said }) => { intents.set(id, { kind: 'open', did, handle, seat, fromLounge: true, said }); go(tableUri('daisy', id)); },
+    // Step 5b-2: someone arrived while this tab was behind: the quiet mark on the tab (app.js draws it, with
+    // the pip on Raku's browser icon); cleared when the tab is in front again.
+    onSignal: (on) => { (paneEl || pane())?.dispatchEvent(new CustomEvent('raku:mark', { detail: on ? { title: 'Someone arrived in the Daisy lounge' } : null })); },
   }) : null;
   // "Here" (Q51): this tab in front, and Raku itself seen (not another browser tab, not minimized).
   const pane = () => root.closest('.pane');

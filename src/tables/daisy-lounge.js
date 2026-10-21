@@ -6,7 +6,9 @@
 //   - the account is Raku's current account (the top bar); switching accounts leaves the lounge (Q54);
 //   - turning mingling on: the explanation first, then (when this browser hasn't approved it) one window for
 //     the account, "Play Daisy" and "Daisy lounge" together (Q54);
-//   - an invitation both said yes to: the tab goes to the table (raku:table/daisy/<id>) at the given seat.
+//   - an invitation both said yes to: the tab goes to the table (raku:table/daisy/<id>) at the given seat;
+//   - step 5b-2: while the tab isn't in front, the page stays connected as "away" (not listed, can't be
+//     invited) and the relay may say "someone" arrived (never who): onSignal() puts the quiet mark on the tab.
 // The record (cafe.thunderbird.daisy.lounge/self) and the permission set are the Daisy page's: minglers in
 // Raku and on the Daisy page see each other; turning mingling off in either place deletes the one record.
 import { h } from '../cards.js';
@@ -39,7 +41,7 @@ export async function profilesOf(dids, fetchImpl = (...a) => fetch(...a)) {
   return out;
 }
 
-export function mountDaisyLounge(host, { table, auth, resolver, onTable, log = () => {}, keepForReturn = () => {}, dialogHost,
+export function mountDaisyLounge(host, { table, auth, resolver, onTable, onSignal = () => {}, log = () => {}, keepForReturn = () => {}, dialogHost,
   loc = globalThis.location, WebSocketImpl = globalThis.WebSocket, fetchImpl = (...a) => fetch(...a) }) {
   const url = daisyLoungeUrl(loc);
   const TIMES = loungeTimes(loc);
@@ -70,9 +72,10 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, log = (
   // ---------- state ----------
   let account = null;          // { did, handle }: Raku's current account
   let mingling = false;        // the record exists (as far as this page knows)
-  let state = 'off';           // off | joining | here | away | idle | needs-signin | replaced | unavailable
+  let state = 'off';           // off | joining | here | away (listening, 5b-2) | stopped (2 hours away) | idle | needs-signin | replaced | unavailable
   let visible = false;         // Daisy's start screen in front and Raku seen (Q51)
   let ws = null, tries = 0, retryTimer = null, lastHereSent = 0, leaving = false, setting = 0;
+  let sentAway = false;        // what the relay was last told: away (true) or here
   let knock = null;
   const invited = new Map();   // did → { text, timer }
   let disposed = false;
@@ -87,7 +90,7 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, log = (
     if (state === 'off') note(!account ? WAIT_TEXT : auth.coversLounge(account.did, table.id) ? OFF_TEXT_READY : OFF_TEXT);
     else if (state === 'joining') note(`Joining the lounge as @${account.handle}…`);
     else if (state === 'here') note(`${ON_TEXT} (as @${account.handle}).`);
-    else if (state === 'away') note(`Mingling as @${account.handle}. You're in the lounge whenever this tab is in front.`);
+    else if (state === 'away' || state === 'stopped') note(`Mingling as @${account.handle}. You're in the lounge whenever this tab is in front.`);
   }
   const setState = (s, text) => { state = s; show(); if (text) note(text); };
   const logIn = (m) => log({ dir: 'page', from: 'lounge', to: 'Raku', kind: m.type, ...(m.why ? { note: m.why } : {}) });
@@ -106,8 +109,7 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, log = (
     if (n !== setting || !has) return;
     mingling = true;
     if (!auth.coversLounge(account.did, table.id)) setState('needs-signin', `You mingle as @${account.handle}, but this browser hasn't approved “Daisy lounge” yet.`);
-    else if (visible) join();
-    else setState('away');
+    else join();
   }
   async function hasLoungeRecord(did) {
     const { pds } = await resolver.account(did);
@@ -133,6 +135,7 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, log = (
     const approved = account && auth.coversLounge(account.did, table.id);
     const details = h('div', { class: 'rk-details' },
       h('p', {}, "While you mingle and Daisy's start screen is the tab in front, other mingling Daisy players who ask can see you and invite you to a game, and you can see and invite them (in Raku or on Daisy's own page). Players who have blocked you, or whom you've blocked, never see each other."),
+      h('p', {}, "While Daisy's tab isn't in front, Raku shows a small mark when someone arrives in the lounge. It never says who. Your arrival can show the same mark to other minglers."),
       approved ? null : h('p', {}, 'Mingling needs ', h('b', {}, 'one additional authorization'), ' from your account, ', h('b', {}, '“Daisy lounge”'), " (only this first time): a lounge record in your account (it only says that you've chosen to mingle, not whether you're here or signed in) and a pass that proves to Daisy's relay who you are. Turning mingling off deletes the record."),
       signIn || !account ? h('p', { class: 'rk-promise' }, SIGNIN_PROMISE) : null);
     const head = [h('h2', {}, 'Turn on mingling?'), h('p', { class: 'rk-lede' }, 'Other mingling Daisy players can see you and invite you while this tab is in front.')];
@@ -198,7 +201,7 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, log = (
     }
     mingling = true;
     log({ dir: 'page', from: 'Raku', to: 'your account', kind: 'lounge record', note: 'mingling on' });
-    if (visible) join(); else setState('away');
+    join();
   }
   async function turnOff() {
     sw.disabled = true;
@@ -220,27 +223,29 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, log = (
     if (state === 'needs-signin') {
       const ok = await approve(note, retryBtn);
       if (!ok) return;
-      if (mingling && visible) join(); else setState(mingling ? 'away' : 'off');
+      if (mingling) join(); else setState('off');
       return;
     }
-    if (visible) join();
+    join();
   }
 
   // ---------- the relay's lounge ----------
   function join() {
-    if (!account || !mingling || !visible || disposed) return;
+    if (!account || !mingling || disposed) return;
     if (!url) { setState('unavailable', 'The lounge needs the relay, and this page has none.'); return; }
     clearTimeout(retryTimer);
     leaving = false;
     if (ws) { try { ws.close(); } catch { /* fine */ } }
     setState('joining');
+    sentAway = !visible;
     let socket;
     try { socket = new WebSocketImpl(url); } catch { return later(); }
     ws = socket;
     socket.onopen = async () => {
       try {
         const pass = await auth.getPass(account.did, table.id);
-        if (ws === socket) { socket.send(JSON.stringify({ type: 'enter', pass })); log({ dir: 'page', from: 'Raku', to: 'lounge', kind: 'enter' }); }
+        // (away: Daisy's tab is open but not in front: in as a listener, step 5b-2)
+        if (ws === socket) { socket.send(JSON.stringify({ type: 'enter', pass, ...(visible ? {} : { away: true }) })); log({ dir: 'page', from: 'Raku', to: 'lounge', kind: visible ? 'enter' : 'enter (away)' }); }
       } catch (err) {
         console.warn('[raku] lounge pass', err);
         if (ws === socket) { leaving = true; socket.close(); }
@@ -251,7 +256,7 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, log = (
     socket.onclose = () => {
       if (ws !== socket) return;
       ws = null;
-      if (leaving || !mingling || !visible || !['joining', 'here'].includes(state)) return;
+      if (leaving || !mingling || !['joining', 'here', 'away'].includes(state)) return;
       later();
     };
     socket.onerror = () => {};
@@ -273,7 +278,15 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, log = (
   function onMessage(m) {
     logIn(m);
     switch (m.type) {
-      case 'in': tries = 0; lastHereSent = Date.now(); setState('here'); break;
+      case 'in':
+        tries = 0; lastHereSent = Date.now();
+        // the tab may have gone behind (or come back) while entering: tell the relay where we are now
+        if (sentAway !== !visible) send({ type: visible ? 'back' : 'away' });
+        sentAway = !visible;
+        setState(visible ? 'here' : 'away');
+        break;
+      case 'someone': if (!visible) onSignal(true); break;     // step 5b-2: someone arrived (no name)
+      case 'stopped': leaving = true; setState('stopped'); break;   // 2 hours away (or too many listening): quietly out
       case 'refused':
         leaving = true;
         if (m.why === 'NoLoungeRecord') { mingling = false; setState('off', 'Your account has no lounge record any more, so mingling is off.'); }
@@ -287,7 +300,7 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, log = (
       case 'knock': showKnock(m); break;
       case 'knock-gone': if (knock && knock.id === m.id) { hideKnock(); note('That invitation has run out.'); } break;
       case 'table': goToTable(m); break;
-      case 'error': if (m.why === 'too many' && m.did) markPerson(m.did, 'Wait a few minutes'); break;
+      case 'error': if (m.why === 'too many' && m.did) markPerson(m.did, 'Wait a few minutes'); break;   // ("away": a late message; fine)
     }
   }
 
@@ -374,12 +387,19 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, log = (
 
   return {
     // Q51: in the lounge only while Daisy's start screen is the tab in front and Raku can be seen.
+    // Step 5b-2: out of sight, the page stays connected as "away" (a listener); in front again, "back".
     setVisible(on) {
       if (on === visible) return;
       visible = on;
+      if (on) onSignal(false);                                  // looking now: the mark clears
       if (!account || !mingling) return;
-      if (on) { if (['away', 'joining', 'here'].includes(state)) join(); }
-      else if (['joining', 'here'].includes(state)) { leave(); setState('away'); }
+      if (state === 'here' || state === 'away') {
+        if (!on) hideKnock();                                   // an invitation on its way lapses
+        send({ type: on ? 'back' : 'away' });
+        sentAway = !on;
+        setState(on ? 'here' : 'away');
+        if (on) lastHereSent = Date.now();
+      } else if (on && ['stopped', 'idle'].includes(state)) join();
     },
     get state() { return state; }, get mingling() { return mingling; }, get account() { return account; },
     dispose() { disposed = true; leave(); offAuth(); for (const e of invited.values()) clearTimeout(e.timer); for (const ev of ['pointerdown', 'keydown']) removeEventListener(ev, touched); },

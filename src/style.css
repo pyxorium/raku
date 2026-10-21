@@ -516,3 +516,9 @@ a { color: var(--glaze-light); }
 .rk-details p { margin: 0 0 8px; }
 .rk-details .rk-promise { color: #a99c8a; }
 .rk-details .rk-record { font-size: 12.5px; }
+
+/* step 5b-2: the quiet mark on a tab (someone arrived in the Daisy lounge while the tab was behind) */
+.tab.signal .tab-dot { background: var(--glaze); box-shadow: 0 0 8px 2px rgba(63,184,168,.75); }
+.tab-signal { flex: none; display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; font-size: 9px; line-height: 1;
+  color: var(--glaze-ink); background: var(--glaze); box-shadow: 0 0 10px rgba(63,184,168,.7); }
+.count.signal { box-shadow: 0 0 0 2px var(--glaze), 0 0 12px rgba(63,184,168,.7); }

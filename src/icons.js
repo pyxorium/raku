@@ -42,3 +42,8 @@ export function icon(name, size = 22) {
   }
   return svg;
 }
+
+// Raku's own icon (public/icon.svg) with a turquoise pip in the corner, for the browser tab while a tab has a
+// quiet mark (step 5b-2). A data: address (the page policy allows data: pictures).
+const RAKU_ICON = '<rect width="64" height="64" rx="14" fill="#26211d"/><path d="M14 44c0-13 8-24 18-24s18 11 18 24c0 4-8 6-18 6s-18-2-18-6z" fill="#2fa596"/><path d="M22 30l6 6-3 7M38 27l-4 8 7 5" stroke="#1f1a16" stroke-width="2" fill="none" stroke-linecap="round"/><ellipse cx="32" cy="21" rx="9" ry="3" fill="#7fd6c8"/>';
+export const ICON_WITH_PIP = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">${RAKU_ICON}<circle cx="51" cy="13" r="11" fill="#7fffe9" stroke="#26211d" stroke-width="4"/></svg>`)}`;
