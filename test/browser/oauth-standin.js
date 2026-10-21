@@ -13,6 +13,7 @@
 const ACCOUNTS = {
   'thunderbird.cafe': 'did:plc:6vxjigxrqizmbo56gojxico3',
   'thunderbirdwine.bsky.social': 'did:plc:joer5rzmwgec3dkr4srfmq45',
+  'colorado.atprotocol.space': 'did:plc:ro563p5faldqu44apudq44k4',     // a third player (stage 5: "full")
 };
 const PDS = 'https://pds.fakepds.net';
 const SETS = {

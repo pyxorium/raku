@@ -47,7 +47,7 @@ Plans and decisions: `claude/raku-plan.md` in the Web Tile Foundry project.
 
 ## Stage 3 (Oct 20 2026): tables against the bot
 
-- **Seven-Up and Daisy** play in a tab (`raku:table/sevenup`, `raku:table/daisy`), from the first screen's
+- **Seven-Up and Daisy** play in a tab (`raku:table/sevenup`, `raku:table/daisy`; Daisy's bot since stage 5 at `raku:table/daisy/bot`), from the first screen's
   **Tables** row: you at seat 1, the bot (@dicesprite.thunderbird.cafe) at seat 2, no sign-in to play
   (saving: stage 4).
 - Each table loads only the pinned versions on Raku's approved list (`TABLES` in `src/config.js`, the same
@@ -88,6 +88,45 @@ Decisions: `claude/raku-stage4-plan.md` (Q35 to Q43).
 - Uses `@atproto/oauth-client-browser` 0.5.8 (as the site and the Foundry), loaded only when needed. On
   this computer (127.0.0.1) the sign-in is a loopback one that needs no `oauth.json`.
 
+## Stage 5 (Oct 21 2026): Daisy across two computers
+
+Decisions: `claude/raku-plan.md` section 15 (Q44 to Q50).
+
+- **One pool of tables with the Daisy page (Q44).** Raku plays the same pinned house through the same relay
+  (`wss://relay.daisy.thunderbird.cafe/`, the Fly app `thunderbird-daisy-relay`) with the Daisy page's own
+  join message, so a table opened in Raku can be joined from thunderbird.cafe/webtiles/daisy/ and the other
+  way round. A Daisy page table link pasted into the address box opens that table in Raku.
+- **Daisy's three screens:** `raku:table/daisy` is a small start screen (Q47): **Play the bot** (no
+  sign-in, `raku:table/daisy/bot`, as stage 3) and **Open a table**; a table across two computers is
+  `raku:table/daisy/<table id>`.
+- **Open a table** seats you at seat 1 and gives the link to send: Raku's own address with that table's tab
+  (`https://raku.lexicographer.space/#t=raku:table/daisy/<id>&a=0`, Q45). The friend opens it (or pastes it
+  into Raku's address box), signs in and takes the other seat.
+- **Sitting with someone needs a sign-in (Q46)**, with "Play Daisy" (the set saving already uses): the other
+  player sees a real, checked handle, and the relay keeps each seat for an account. Playing the bot still
+  needs none. You sit as the current account (the account menu switches it); already signed in with
+  "Play Daisy", no window opens.
+- **Your seat is kept in this browser for a day** (`raku-daisy-table:<table>:<did>`, with your house's
+  secret seed; it never leaves the browser): a reload, a closed tab or **Back to the start** can come back
+  to the match. The start screen says "You have a match in progress with @x. **Back to the table**".
+  Mid-match, Back to the start asks first ("If you don't come back within 2 minutes, it ends by forfeit").
+- The Daisy page's rules, unchanged: the real timers (nudge 1 min, turn 3 min, away 2 min); "full" for a
+  third player; "already sits at this table in another browser" (held) for a seated account without the
+  seat's game; the house version check (a page running another house: the table doesn't start); the
+  reconnecting status and the away countdown.
+- **Until the relay seats you**, "Joining the table…" stands where the seats go (the tiles load out of
+  sight, so they never show their card pictures); after 5 seconds it says what's likely wrong (on this
+  computer: start the stand-in relay; elsewhere: the relay can't be reached) and keeps trying.
+- **Saving** at a two-computer table goes to the account sitting there (no "Use another account"), and
+  the prompt says anyone can re-check the dice.
+- **The lounge** stays on the Daisy page for now (Q48: it comes to Raku next, step 5b). Daisy's coin is
+  its own small step after this one (Q49).
+- **On this computer:** the stand-in relay (`node scripts/relay-standin.mjs` in
+  `C:\thunderbird-cafe\daisy-tiles`, `ws://127.0.0.1:8787/`) is the default; `?relay=wss://relay.daisy.thunderbird.cafe/`
+  tries the live relay from `npm run dev` (its origin `http://127.0.0.1:5180` is allowed there), and
+  `?timers=short` the short timers. Both only on 127.0.0.1, and the table link carries them to the second
+  window. The page policy (`npm run preview`) names only the live relay, so play two computers on `npm run dev`.
+
 ## Try it
 
 ```
@@ -123,7 +162,7 @@ and open http://127.0.0.1:5181/.
 | `src/shelf-store.js` | your shelf as data (this browser's storage, Export and Import) |
 | `src/shelf-pages.js` | the Shelf's pages: your shelf and an account's tiles |
 | `src/typeahead.js` | handle suggestions under the address box (adapted copy of Daisy's) |
-| `src/tables/` | tables: the shared core, the two games' drivers, their routing rules (copies), saving (`saving.js`) and the games' record checks (copies) |
+| `src/tables/` | tables: the shared core, the two games' drivers, their routing rules (copies), saving (`saving.js`) and the games' record checks (copies); stage 5: Daisy's start screen (`daisy-start.js`), a table across two computers (`daisy-online.js`), signing in to sit (`daisy-sit.js`), what this browser keeps (`daisy-keep.js`) and the relay connection (`relay-connection.js`, a copy of the Daisy page's) |
 | `src/auth.js` | signing in: accounts on this browser, the current one, what each sign-in covers, Always, saving a record |
 | `src/signin-ui.js` | the sign-in form, Raku's dialog, the blocked-window choices |
 | `src/account-menu.js` | the account button and its menu |
@@ -136,10 +175,17 @@ and open http://127.0.0.1:5181/.
 
 `test/browser/` holds the checks run in the Claude chat sandbox (Playwright with Chromium): `servers.mjs`
 (Raku's page and an "outside" server), `loader-replica.mjs` (the loading server's own files, run locally)
-and `check_page.py` (121 checks: tabs, addresses, sizes, moderation, what a tile can reach, phone width,
+and `check_page.py` (122 checks: tabs, addresses, sizes, moderation, what a tile can reach, phone width,
 framing, both tables played to the end against the bot), and `check_signin.py` (66 checks, stage 4:
 signing in from the prompt, the bar and the menu; Allow once, Always and a save without asking; the sign-in
 growing game by game; several accounts; signing out; a blocked window and "Sign in in this tab instead";
 the saved records passing the games' own checks; the phone). They need a bundle of `src/main.js` and a copy of the loading server's `public/` folder; see the
 top of each file. For the sign-in checks the bundle swaps in a stand-in for the sign-in library:
 `esbuild src/main.js --bundle --format=esm --alias:@atproto/oauth-client-browser=./test/browser/oauth-standin.js`.
+
+`check_daisy.py` (62 checks, stage 5) bundles and starts everything itself (Raku's page with the stand-in
+sign-in, the loader replica, daisy-tiles' stand-in relay, and the site's Daisy page bundled with a stand-in
+sign-in) and plays Daisy on two and three "computers" (separate browser contexts): the start screen, opening
+a table and the link, no relay to reach (the Joining box and its hint), the hover on Back to the start, signing in to sit, the join message, a reload and a relay restart mid-match, the phone
+width, whole matches that re-check (`verifyMatch`), saving, full, held, leaving and coming back, a match
+between Raku and the Daisy page (both ways), and the house version check. Usage at the top of the file.

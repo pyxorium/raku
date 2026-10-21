@@ -6,8 +6,9 @@ import { readFile, appendFile, writeFile } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 const W = process.argv[2];
 const RAKU = process.argv[3] || new URL('../..', import.meta.url).pathname;
-const { pageCsp } = await import(join(RAKU, 'src/config.js'));
-const csp = pageCsp('load.tiles.lex.localhost', 'http');
+const { pageCsp, tableRelays } = await import(join(RAKU, 'src/config.js'));
+// Stage 5: the checks' stand-in relay for Daisy (daisy-tiles scripts/relay-standin.mjs, port 8787) as well.
+const csp = pageCsp('load.tiles.lex.localhost', 'http', [...tableRelays(), 'ws://127.0.0.1:8787']);
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.txt': 'text/plain' };
 let html = await readFile(join(RAKU, 'index.html'), 'utf8');
 html = html.replace('<meta name="referrer"', `<meta http-equiv="Content-Security-Policy" content="${csp}">\n  <meta name="referrer"`)

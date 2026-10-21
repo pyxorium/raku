@@ -353,6 +353,7 @@ a { color: var(--glaze-light); }
 .rk-promise { color: var(--muted); font-size: 12.5px; margin: 10px 0 0; max-width: 60ch; }
 .account-menu .small, .rk-dialog .small { color: #8d8172; font-size: 12.5px; }
 .linkish { border: 0; background: none; padding: 0; color: var(--glaze-light); text-decoration: underline; cursor: pointer; font: inherit; }
+.linkish:hover, .linkish:focus-visible { color: var(--glaze); text-decoration-thickness: 2px; }
 
 /* the sign-in form */
 .signin-form { display: grid; gap: 6px; margin: 8px 0 0; }
@@ -419,4 +420,48 @@ a { color: var(--glaze-light); }
     padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
   .rk-dialog { align-items: flex-end; padding: 0; }
   .rk-dialog-box { width: 100%; border-radius: 14px 14px 0 0; max-height: 92%; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* ---------- stage 5: Daisy across two computers ---------- */
+/* the start screen (raku:table/daisy) */
+.daisy-start { max-width: 860px; }
+.daisy-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.daisy-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 16px 18px; border-radius: 14px;
+  background: #221d19; border: 1px solid #3f362e; }
+.daisy-choice h2 { margin: 0; font-size: 17px; font-weight: 650; color: var(--glaze-light); }
+.daisy-choice p { margin: 0; color: var(--muted); }
+.daisy-choice .small, .daisy-start .small { font-size: 12.5px; color: #9d917f; }
+.daisy-start button.primary, .daisy-lobby button, .daisy-invite button, .daisy-leave button, .daisy-after {
+  min-height: 40px; padding: 8px 16px; border-radius: 9px; border: 1px solid var(--line); background: rgba(255,255,255,.06); color: var(--text); cursor: pointer; }
+.daisy-start button.primary, .daisy-lobby button.primary, .daisy-invite button.primary, .daisy-leave button.primary {
+  background: var(--glaze-btn); border-color: var(--glaze-btn); color: var(--glaze-ink); font-weight: 600; }
+.daisy-start-note { min-height: 1em; margin: 12px 0 0; color: var(--warn); font-size: 13.5px; }
+.daisy-start-note:empty { min-height: 0; }
+.daisy-lounge-soon { margin-top: 14px; }
+.daisy-going { list-style: none; margin: 0 0 14px; padding: 10px 14px; border-radius: 10px; background: rgba(63,184,168,.10); border: 1px solid rgba(63,184,168,.35); }
+.daisy-going[hidden] { display: none; }
+.daisy-going li + li { margin-top: 6px; }
+/* a table across two computers */
+.daisy-top { display: flex; justify-content: flex-end; margin: -6px 0 8px; font-size: 13px; }
+.daisy-lobby, .daisy-invite, .daisy-leave { margin-bottom: 14px; padding: 14px 16px; border-radius: 12px; background: #221d19; border: 1px solid #3f362e; }
+.daisy-lobby[hidden], .daisy-invite[hidden], .daisy-leave[hidden], .daisy-after[hidden], .table-seats[hidden] { display: none; }
+.daisy-lobby h2 { margin: 0 0 6px; font-size: 17px; color: var(--glaze-light); }
+.daisy-lobby p, .daisy-invite p, .daisy-leave p { margin: 0 0 10px; }
+.daisy-lobby .actions, .daisy-leave .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.daisy-lobby-note { margin: 10px 0 0 !important; color: #9d917f; font-size: 12.5px; }
+.daisy-link-row { display: flex; gap: 8px; }
+.dz-link { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--well); color: var(--text); font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.daisy-leave { border-color: #6a5236; }
+.daisy-after { margin-top: 14px; }
+.daisy-start button:hover, .daisy-lobby button:hover, .daisy-invite button:hover, .daisy-leave button:hover, .daisy-after:hover { border-color: var(--glaze); }
+.daisy-joining { margin-bottom: 14px; padding: 28px 16px; border-radius: 12px; background: #221d19; border: 1px solid #3f362e; text-align: center; color: var(--muted); }
+.daisy-joining[hidden], .daisy-joining-hint[hidden] { display: none; }
+.daisy-joining p { margin: 0; }
+.daisy-joining-hint { margin-top: 8px !important; color: var(--warn); font-size: 13px; max-width: 70ch; margin-left: auto !important; margin-right: auto !important; }
+/* not seated yet: the tiles load out of sight (laid out, so they're ready the moment you sit) */
+.daisy-seats-waiting { visibility: hidden; height: 0; overflow: hidden; }
+
+@media (max-width: 760px) {
+  .daisy-choices { grid-template-columns: 1fr; }
+  .daisy-link-row { flex-direction: column; }
 }

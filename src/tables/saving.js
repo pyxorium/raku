@@ -11,7 +11,9 @@
 //   - signed out: the prompt signs you in first (Q35), asking for your account and this game's set (Q36);
 //     signed in without this game's set: Allow once and Always open one short Authorize first;
 //   - "Use another account" (Q38); the blocked window's "Sign in in this tab instead" (Q41) keeps the
-//     match for the trip (keepForReturn) and the prompt comes back after it (reopen).
+//     match for the trip (keepForReturn) and the prompt comes back after it (reopen);
+//   - at a table across two computers (stage 5) the seat belongs to the account sitting there: the job
+//     names it (job.account), and the prompt saves only to that account (no "Use another account").
 import { SIGNIN_PROMISE, BOT, recordLink } from '../config.js';
 import { SignInNeeded } from '../auth.js';
 import { h } from '../cards.js';
@@ -40,8 +42,9 @@ export function createSaver({ table, kit, auth, host, notify, keepForReturn, onS
   const text = (account, result, seat) => {
     const other = otherIs(result, seat);
     const first = `This adds a public record to ${at(account.handle)}'s account (a ${table.name} match record and nothing else). `;
-    const mention = other.bot || other.did === BOT.did ? `It names ${at(other.handle)}, the table's bot, which played the other seat from this page.` : `It mentions ${at(other.handle)}, who played the other seat.`;
-    const dice = table.id === 'daisy' ? " Both players' dice came from this page, so the record shows how the match went, but nobody else can check the dice." : '';
+    const bot = other.bot || other.did === BOT.did;
+    const mention = bot ? `It names ${at(other.handle)}, the table's bot, which played the other seat from this page.` : `It mentions ${at(other.handle)}, who played the other seat.`;
+    const dice = table.id !== 'daisy' ? '' : bot ? " Both players' dice came from this page, so the record shows how the match went, but nobody else can check the dice." : ' Anyone can re-check the dice from it.';
     return first + mention + dice;
   };
   const details = (record) => h('details', { class: 'rk-record' }, h('summary', {}, 'What will be saved'), h('pre', {}, JSON.stringify(record, null, 2)));
@@ -56,30 +59,39 @@ export function createSaver({ table, kit, auth, host, notify, keepForReturn, onS
   }
   let current = null;                   // { result, seat, tell, onClose }
 
-  /** A seat asked to save (the tile's Save). tell(state, extra) answers the tile. */
-  async function request({ result, seat, tell = () => {} }) {
+  // The account a job saves to: the seat's own (two computers), else the current one.
+  const accountFor = (job) => {
+    if (!job.account) return auth.current();
+    const a = auth.list().find((x) => x.did === job.account.did);
+    return a ? { did: a.did, handle: a.handle } : null;
+  };
+
+  /** A seat asked to save (the tile's Save). tell(state, extra) answers the tile. account: the seat's own
+   *  account, when the seat belongs to one (two computers). */
+  async function request({ result, seat, tell = () => {}, account = null }) {
     if (!result) return tell('failed');
     const done = saved.get(result.matchId);
     if (done) return tell('saved', { handle: done.handle });
-    let cur = auth.current();
+    const job = { result, seat, tell, account };
+    let cur = accountFor(job);
     // Just after Raku opened, the current account's sign-in may still be coming back: wait for it, so the
     // prompt knows whether this game is already allowed (and an expired one is noticed now).
     if (cur && !auth.known(cur.did)) {
       tell('asking');
       await auth.whenReady();
       await auth.restore(cur.did);
-      cur = auth.current();
+      cur = accountFor(job);
     }
     if (cur && auth.accounts.hasAlways(cur.did, table.id) && auth.covers(cur.did, table.id)) {
       const made = makeRecord(kit, table, result, seat, cur);
-      if (!made.problem) return save(cur, made.record, { result, seat, tell }, { auto: true });
+      if (!made.problem) return save(cur, made.record, job, { auto: true });
     }
-    open({ result, seat, tell });
+    open(job);
   }
 
   /** After "Sign in in this tab instead": the prompt again, for the match kept for the trip. */
-  function reopen({ result, seat }) {
-    open({ result, seat, tell: () => {} }, { notice: auth.current() ? `Signed in as ${at(auth.current().handle)}.` : '' });
+  function reopen({ result, seat, account = null }) {
+    open({ result, seat, account, tell: () => {} }, { notice: auth.current() ? `Signed in as ${at(auth.current().handle)}.` : '' });
   }
 
   // The job the dialog is about; closing the dialog without saving tells the tile "declined".
@@ -90,8 +102,8 @@ export function createSaver({ table, kit, auth, host, notify, keepForReturn, onS
   function open(job, { notice = '' } = {}) {
     ensureJob(job);
     job.tell('asking');
-    const cur = auth.current();
-    if (!cur) askSignIn(job, { notice });
+    const cur = accountFor(job);
+    if (!cur) askSignIn(job, { notice, ...(job.account ? { handle: job.account.handle, reason: `Sign in as ${at(job.account.handle)}, the account sitting at this table, to save it.` } : {}) });
     else ask(cur, job, { notice });
   }
 
@@ -99,10 +111,13 @@ export function createSaver({ table, kit, auth, host, notify, keepForReturn, onS
   function askSignIn(job, { handle = '', reason = '', notice = '' } = {}) {
     const preview = kit.recordFor(withSeat(job.result, job.seat, { did: 'did:…:your-account', handle: 'your.handle' }), job.seat, table.house);
     const form = signInForm({
-      auth, handle, button: 'Sign in',
+      auth, handle, button: 'Sign in', lockHandle: !!job.account,
       scope: (who) => auth.scopeFor(auth.didForHandle(who), table.id),
-      onDone: () => ask(auth.current(), job, { notice: `Signed in as ${at(auth.current().handle)}.` }),
-      goHere: (who, scope) => { keepForReturn({ kind: 'save', table: table.id, result: job.result, seat: job.seat }); return auth.signInHere(who, scope, 'save'); },
+      onDone: (did) => {
+        if (job.account && did !== job.account.did) { askSignIn(job, { handle: job.account.handle, reason: `That was another account. This match can only be saved to ${at(job.account.handle)}, the account sitting at this table.` }); return; }
+        ask(accountFor(job) || auth.current(), job, { notice: `Signed in as ${at((accountFor(job) || auth.current()).handle)}.` });
+      },
+      goHere: (who, scope) => { keepForReturn({ kind: 'save', table: table.id, result: job.result, seat: job.seat, account: job.account || null }); return auth.signInHere(who, scope, 'save'); },
       hereNote: 'Other tabs will reload. This match is kept, and this question comes back after you sign in.',
     });
     show(() => [
@@ -139,7 +154,7 @@ export function createSaver({ table, kit, auth, host, notify, keepForReturn, onS
         if (!popup) {
           blockedHolder.replaceChildren(blockedBox({
             onRetry: () => go(always),
-            onHere: () => { keepForReturn({ kind: 'save', table: table.id, result: job.result, seat: job.seat }); auth.signInHere(account.handle.includes('.') ? account.handle : account.did, auth.scopeFor(account.did, table.id), 'save').catch((err) => { status.textContent = `Couldn't sign in: ${err.message}`; }); },
+            onHere: () => { keepForReturn({ kind: 'save', table: table.id, result: job.result, seat: job.seat, account: job.account || null }); auth.signInHere(account.handle.includes('.') ? account.handle : account.did, auth.scopeFor(account.did, table.id), 'save').catch((err) => { status.textContent = `Couldn't sign in: ${err.message}`; }); },
             hereNote: 'Other tabs will reload. This match is kept, and this question comes back after you sign in.',
           }));
           return;
@@ -150,8 +165,8 @@ export function createSaver({ table, kit, auth, host, notify, keepForReturn, onS
         setBusy(true);
         try {
           const did = await auth.signIn(account.handle.includes('.') ? account.handle : account.did, auth.scopeFor(account.did, table.id), { signal: waiting.signal });
-          if (did !== account.did) { setBusy(false); ask(auth.current(), job, { notice: `Signed in as ${at(auth.current().handle)}.` }); return; }
-          who = auth.current();
+          if (did !== account.did) { setBusy(false); ask(accountFor(job) || auth.current(), job, { notice: job.account ? `That was another account. This match can only be saved to ${at(job.account.handle)}.` : `Signed in as ${at(auth.current().handle)}.` }); return; }
+          who = accountFor(job) || auth.current();
         } catch (err) {
           setBusy(false);
           status.textContent = err?.message || "Couldn't sign in.";
@@ -173,7 +188,8 @@ export function createSaver({ table, kit, auth, host, notify, keepForReturn, onS
       h('p', {}, text(account, job.result, job.seat)),
       covered ? null : h('p', { class: 'rk-ask' }, `${table.name} asks for its own permission the first time you save: a small window from your account server opens to approve it.`),
       details(made.record),
-      h('p', { class: 'rk-other' }, h('button', { type: 'button', class: 'linkish', onclick: () => choose(account, job) }, others.length ? 'Use another account' : 'Use another account (sign in)')),
+      job.account ? h('p', { class: 'rk-other small' }, `${at(account.handle)} is the account sitting at this table, so the match is saved there.`)
+        : h('p', { class: 'rk-other' }, h('button', { type: 'button', class: 'linkish', onclick: () => choose(account, job) }, others.length ? 'Use another account' : 'Use another account (sign in)')),
       blockedHolder, status,
       actions(yes, all, no),
       h('p', { class: 'small' }, '"Always" saves this game\'s matches for this account without asking, in this browser only. Turn it off in the account menu.'),

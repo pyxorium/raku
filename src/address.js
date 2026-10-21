@@ -9,7 +9,7 @@
 //   @<did or handle>/<rkey>
 // Everything here is plain string work: no network, so it's tested in Node.
 
-import { COLLECTION } from './config.js';
+import { COLLECTION, SITE } from './config.js';
 
 export const DID_PLC = /^did:plc:[a-z2-7]{24}$/;
 export const DID_WEB = /^did:web:[a-z0-9.-]+(%3[Aa][0-9]+)?$/i;
@@ -104,8 +104,14 @@ export const shortForm = (actor, rkey) => `@${actor}/${rkey}`;
 //   raku:shelf             your shelf
 //   raku:tiles/<actor>     an account's tiles (a handle or a DID)
 export const SHELF_URI = 'raku:shelf';
-//   raku:table/<id>        a table (stage 3: sevenup, daisy)
-export const tableUri = (id) => `raku:table/${id}`;
+//   raku:table/<id>        a table (stage 3: sevenup, daisy); for Daisy, its start screen (stage 5)
+//   raku:table/daisy/bot   Daisy against the bot (stage 5)
+//   raku:table/daisy/<table id>   one Daisy table across two computers (stage 5): the link a player sends
+export const tableUri = (id, sub = null) => (sub ? `raku:table/${id}/${sub}` : `raku:table/${id}`);
+const TABLE_SUB = /^(bot|[a-z0-9]{8,32})$/;
+// The Daisy page's own table links (thunderbird.cafe/webtiles/daisy/?table=…) open the same table in Raku:
+// both run the same pinned house through the same relay (stage 5, Q44).
+const DAISY_PAGE = { host: 'thunderbird.cafe', path: '/webtiles/daisy/' };
 export const accountPageUri = (actor) => `raku:tiles/${actor}`;
 
 function account(actor) {
@@ -125,11 +131,16 @@ function account(actor) {
  * (a handle or DID on its own: @thunderbird.cafe, thunderbird.cafe, did:plc:…, at://handle, or a
  * lexicographer.space / appmosphe.re link to an account). → { ok, kind: 'tile' | 'shelf' | 'account', uri, … }
  */
-export function parseTarget(input) {
+export function parseTarget(input, { inner = false } = {}) {
   const s = String(input || '').trim();
   if (s === SHELF_URI) return { ok: true, kind: 'shelf', uri: SHELF_URI };
-  const table = s.match(/^raku:table\/([a-z0-9-]{1,40})$/);
-  if (table) return { ok: true, kind: 'table', id: table[1], uri: tableUri(table[1]) };
+  const table = s.match(/^raku:table\/([a-z0-9-]{1,40})(?:\/([a-z0-9]{1,40}))?$/);
+  if (table) {
+    if (table[2] !== undefined && !TABLE_SUB.test(table[2])) return fail("That table's address isn't one Raku knows.");
+    return { ok: true, kind: 'table', id: table[1], sub: table[2] || null, uri: tableUri(table[1], table[2] || null) };
+  }
+  const link = otherLink(s, inner);
+  if (link) return link;
   const page = s.match(/^raku:tiles\/([^/\s]+)$/);
   if (page) return account(decodeURIComponent(page[1]));
   const tile = parseAddress(s);
@@ -149,4 +160,30 @@ export function parseTarget(input) {
     return fail(`"${s}" isn't a tile's address or an account's handle. (Searching for tiles comes later.)`);
   }
   return tile;
+}
+
+// A link to a Daisy table on the Daisy page, or a Raku link (raku.lexicographer.space/#t=…), pasted into the
+// address box: what it opens. A Raku link opens the tab it had in front. → a target, or null.
+function otherLink(s, inner) {
+  let u;
+  try { u = new URL(s); } catch { return null; }
+  if (u.protocol !== 'https:') return null;
+  const host = u.hostname.toLowerCase();
+  if ((host === DAISY_PAGE.host || host === `www.${DAISY_PAGE.host}`) && u.pathname === DAISY_PAGE.path) {
+    const t = u.searchParams.get('table');
+    // A match against the bot lives in the browser that started it: its link opens Daisy's start screen.
+    if (t && TABLE_SUB.test(t) && t !== 'bot' && u.searchParams.get('bot') !== '1') return { ok: true, kind: 'table', id: 'daisy', sub: t, uri: tableUri('daisy', t) };
+    return { ok: true, kind: 'table', id: 'daisy', sub: null, uri: tableUri('daisy') };
+  }
+  if (host === SITE.host && !inner) {
+    const p = new URLSearchParams(u.hash.replace(/^#/, ''));
+    const list = (p.get('t') || '').split(',');
+    const a = Math.min(Math.max(0, Number(p.get('a')) || 0), list.length - 1);
+    let one = list[a] || '';
+    try { one = decodeURIComponent(one); } catch { return null; }
+    if (!one) return null;
+    const r = parseTarget(one, { inner: true });
+    return r.ok ? r : null;
+  }
+  return null;
 }

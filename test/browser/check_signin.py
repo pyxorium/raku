@@ -216,7 +216,7 @@ with sync_playwright() as p:
 
     # ---------- 3. Daisy: signed in, but without Daisy's set → Always (one more Authorize) ----------
     tp.click('.newtab')
-    tp.fill('.addr', 'raku:table/daisy'); tp.press('.addr', 'Enter')
+    tp.fill('.addr', 'raku:table/daisy/bot'); tp.press('.addr', 'Enter')   # stage 5: the bot has its own address
     ok = wait_for(lambda: tp.inner_text('.pane.front .table-bar h1') == 'Daisy', 10)
     check("Daisy's bar: signed in as @thunderbird.cafe; Daisy asks for its permission at your first save", ok and wait_for(lambda: '@thunderbird.cafe ✓' in acct(tp) and 'Daisy asks for its permission at your first save' in acct(tp), 5), acct(tp))
     mine = tp.frame_locator('.pane.front .seat-mine iframe').frame_locator('iframe')
@@ -315,7 +315,7 @@ with sync_playwright() as p:
     # ---------- 6. the bar's "Sign in to save matches", and a sign-in that is turned down ----------
     cctx = new_context(b)
     cp = cctx.new_page()
-    cp.goto(RAKU + '?loader=' + LOADER + '#t=raku%3Atable%2Fdaisy&a=0')
+    cp.goto(RAKU + '?loader=' + LOADER + '#t=raku%3Atable%2Fdaisy%2Fbot&a=0')
     wait_for(lambda: cp.is_visible('.pane.front .signin-btn'), 10)
     cp.click('.pane.front .signin-btn')
     check('the bar\'s button opens Raku\'s sign-in, with the promise and what the game will ask', wait_for(lambda: cp.is_visible(dialog) and PROMISE in cp.inner_text(dialog) and 'approve "Daisy"' in cp.inner_text(dialog), 5))

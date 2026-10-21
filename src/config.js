@@ -17,6 +17,10 @@ export const SITE = Object.freeze({
 // so every tile runs on its own origin.
 export const TILE_LOAD_DOMAIN = 'load.tiles.lexicographer.space';
 
+// This computer (http://127.0.0.1 or localhost): the only place the testing switches (?loader=, ?relay=,
+// ?timers=) do anything.
+export const isLocal = (loc) => !!loc && ['127.0.0.1', 'localhost'].includes(loc.hostname);
+
 // Public lookups.
 export const HANDLE_RESOLVER = 'https://public.api.bsky.app';
 export const PLC_DIRECTORY = 'https://plc.directory';
@@ -79,6 +83,9 @@ export const TABLES = Object.freeze({
     page: 'https://thunderbird.cafe/webtiles/daisy/',
     scope: 'include:cafe.thunderbird.daisy.authPlay',      // "Play Daisy" (daisy-tiles lexicons/)
     collection: 'cafe.thunderbird.daisy.match',
+    // Two computers (stage 5): Daisy's own relay (C:\thunderbird-cafe\daisy-relay, Fly app thunderbird-daisy-relay),
+    // the same one the Daisy page uses, so a table opened in Raku or on the Daisy page can be joined from either.
+    relay: 'wss://relay.daisy.thunderbird.cafe/',
     house: { uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3my6ucagtd32m', cid: 'bafyreib473vajcpexj5m7xcpah4dtwyzfazknnuqss4mokiclqcvgvye54' },
     player: { uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3my6uchoghd2m', cid: 'bafyreihsiqt4owq4p2bfudfwvz5qbxub3bw3q63b3ufnuepfa35p6yui7m' },
   }),
@@ -89,6 +96,33 @@ export function tableForTile(did, rkey) {
   return Object.values(TABLES).find((t) => t.house.uri === uri || t.player.uri === uri) || null;
 }
 export const TABLE_TIMES = Object.freeze({ still: 4000, retry: 8000, heartbeat: 3000, misses: 2, tick: 1000 });
+
+// ---------- Daisy across two computers (stage 5, claude/raku-plan.md section 15) ----------
+// The same rules as the Daisy page (the site's src/daisy/config.js), so the two can share a table:
+// - the relay: the live one, or on this computer the stand-in (node scripts/relay-standin.mjs in
+//   C:\thunderbird-cafe\daisy-tiles), or ?relay=… (this computer only), e.g. ?relay=wss://relay.daisy.thunderbird.cafe/;
+// - the timers: the real ones (nudge 1 min, turn 3 min, away 2 min), or ?timers=short on this computer only
+//   (both pages must ask for the same set, or the houses won't start the table);
+// - this browser keeps your seat and your house's state (with its secret seed) for a day, under Raku's own
+//   names (a seat taken in Raku lives in Raku; the Daisy page keeps its own).
+export const DAISY_LOCAL_RELAY = 'ws://127.0.0.1:8787/';
+export const DAISY_AWAY_MS = Object.freeze({ real: 120000, short: 20000 });
+export const DAISY_KEEP = Object.freeze({ tablePrefix: 'raku-daisy-table:', tabPrefix: 'raku-daisy-tab:', keepFor: 24 * 60 * 60 * 1000 });
+export function daisyRelayUrl(loc = globalThis.location) {
+  if (!isLocal(loc)) return TABLES.daisy.relay;
+  const v = new URLSearchParams(loc.search).get('relay');
+  return v && /^wss?:\/\/[a-z0-9.-]+(:\d+)?\/?$/i.test(v) ? v : DAISY_LOCAL_RELAY;
+}
+export function daisyTimers(loc = globalThis.location) {
+  return isLocal(loc) && new URLSearchParams(loc.search).get('timers') === 'short' ? 'short' : 'real';
+}
+// A table's id, as the Daisy page makes them (the relay accepts 8 to 32 of a-z and 0-9).
+export const isTableId = (x) => typeof x === 'string' && /^[a-z0-9]{8,32}$/.test(x);
+export function newTableId() {
+  const b = new Uint8Array(10);
+  crypto.getRandomValues(b);
+  return [...b].map((x) => 'abcdefghijkmnopqrstuvwxyz23456789'[x % 33]).join('');
+}
 
 // ---------- signing in and saving (stage 4, claude/raku-stage4-plan.md) ----------
 // Browsing never needs a sign-in. Signing in is only for saving match results from the tables, and each
@@ -157,7 +191,6 @@ export const PICKS = Object.freeze([
 
 // On this computer only (http://127.0.0.1 or localhost): ?loader=<a loading server's
 // /.well-known/web-tiles/ address>, for the browser checks' stand-in loading server.
-const isLocal = (loc) => !!loc && ['127.0.0.1', 'localhost'].includes(loc.hostname);
 export function loadSourceOverride(loc = globalThis.location) {
   if (!isLocal(loc)) return null;
   const v = new URLSearchParams(loc.search).get('loader');
@@ -168,9 +201,11 @@ export function loadSourceOverride(loc = globalThis.location) {
 // frame-ancestors can't be set this way, so src/frame-guard.js refuses to run inside a frame instead).
 // - scripts and styles only from Raku itself;
 // - pictures only Raku's own, made here from downloaded bytes (blob:), or avatars from Bluesky's picture server;
-// - connections over https (lookups, the authors' account servers, Bluesky's public API);
+// - connections over https (lookups, the authors' account servers, Bluesky's public API), and the tables'
+//   own relays (stage 5: wss://relay.daisy.thunderbird.cafe/), named one by one;
 // - frames only from the tile loading server.
-export function pageCsp(loadDomain = TILE_LOAD_DOMAIN, scheme = 'https') {
+export const tableRelays = () => [...new Set(Object.values(TABLES).map((t) => t.relay).filter(Boolean).map((u) => new URL(u).origin))];
+export function pageCsp(loadDomain = TILE_LOAD_DOMAIN, scheme = 'https', relays = tableRelays()) {
   const base = loadDomain.replace(/^load\./, '');
   return [
     "default-src 'self'",
@@ -178,7 +213,7 @@ export function pageCsp(loadDomain = TILE_LOAD_DOMAIN, scheme = 'https') {
     "style-src 'self'",
     "img-src 'self' blob: data: https://cdn.bsky.app",
     "font-src 'self'",
-    "connect-src 'self' https:",
+    ["connect-src 'self' https:", ...relays].join(' '),
     `frame-src ${scheme}://${loadDomain} ${scheme}://*.${base}`,
     "worker-src 'none'",
     "manifest-src 'self'",
