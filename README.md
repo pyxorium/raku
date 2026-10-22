@@ -269,6 +269,17 @@ Plan and decisions: `claude/raku-stage6c-plan.md` (Q106 to Q111).
   no link message). A sentence on what a tile is and "New to tiles?" (dasl.ing) at the top. The list is
   `MAKE` in `src/config.js`.
 
+## Faster picks, Northsky (Oct 22 2026)
+
+Plan and decisions: `claude/raku-launch-plan.md` (Q128 to Q130).
+
+- **The first screen's picks** draw their banners from appmosphe.re's copies (`https://appmosphe.re/img/<DID>/<CID>`,
+  an ordinary picture, no referrer) instead of downloading them in full from six authors' servers; when
+  appmosphe.re has no copy, the picture comes from the author's server as before. Search results that
+  appmosphe.re itself gave do the same. **Your shelf, an account's tiles, Following, posts' tile cards and
+  "Already in Raku" still load from the authors' servers**, so appmosphe.re never learns what you keep (Q129).
+- **Northsky** joins "Open in" for posts (`northsky.app`).
+
 ## Try it
 
 ```

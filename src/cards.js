@@ -60,11 +60,13 @@ export function createCardKit({ files }) {
    *  and checked; or (stage 6c, Q122) a picture at an https address ({ url }: appmosphe.re's /img/ copies, which can't
    *  be downloaded by a page), drawn as an ordinary picture in its own lane: the browser loads it when it comes near
    *  the screen, sends no referrer, and draws it only if it is a picture. */
-  function picture(holder, { pds, did, cid, url }) {
+  // fallback (Q129): where to load the picture from when the address has none (appmosphe.re never copied it):
+  // the tile's own file, as above.
+  function picture(holder, { pds, did, cid, url, fallback = null }) {
     if (url) {
       if (!/^https:\/\//.test(url)) return;
       const img = h('img', { src: url, alt: '', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' });
-      img.addEventListener('error', () => img.remove());
+      img.addEventListener('error', () => { img.remove(); if (fallback && fallback.cid) picture(holder, fallback); });
       holder.append(img);
       return;
     }

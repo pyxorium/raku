@@ -5,6 +5,7 @@
 # Usage: python3 test/browser/check_page.py <work folder> [the site's src folder, for the two games' memory tiles]
 #        (servers.mjs and the replica already running)
 import hashlib, io, json, sys, time, re
+from urllib.parse import quote
 from pathlib import Path
 from PIL import Image
 from playwright.sync_api import sync_playwright
@@ -68,6 +69,9 @@ PICK_ACCOUNTS = [
     ('did:plc:rqbqpaaluty5v47jwciowpik', 'pyxorium.com', '3mx6h2wjtgq2h', 'Roller Coaster'),
 ]
 PICK_NAMES = [n for _, _, _, n in PICK_ACCOUNTS]
+# Q128/Q129: appmosphe.re keeps copies of the first three picks' banners (its /img/ answers carry no CORS header,
+# like the real site); the last three it never copied, so those fall back to the authors' own servers.
+COPIED = {d for d, _, _, _ in PICK_ACCOUNTS[:3]}
 records = {
     (A, '3mw763im3qw2t'): tile('Pick one', {'/': res(PLAIN('Pick one'), 'text/html')}, 'The first pick', banner=png((242, 178, 51)), icon=png((242, 178, 51), (256, 256))),
     (C, '3mwwhkjfvfq2o'): tile('Pick two', {'/': res(PLAIN('Pick two'), 'text/html')}, 'The second pick', banner=png((94, 156, 134))),
@@ -132,6 +136,10 @@ def route(r):
     u = urlparse(url); q = {k: v[0] for k, v in parse_qs(u.query).items()}
     cors = {'access-control-allow-origin': '*'}
     def js(obj, status=200): r.fulfill(status=status, headers={**cors, 'content-type': 'application/json'}, body=json.dumps(obj))
+    if u.hostname == 'appmosphe.re' and u.path.startswith('/img/'):
+        parts = u.path.split('/')          # /img/<did>/<cid>
+        b = blobs.get(parts[3]) if len(parts) == 4 and parts[2] in COPIED else None
+        return r.fulfill(status=200 if b else 404, headers={'content-type': 'image/png' if b else 'text/plain'}, body=b or b'not found')
     if u.hostname == 'plc.directory':
         did = u.path.strip('/')
         handle = {A: A_HANDLE, B: B_HANDLE, C: C_HANDLE, BOT_DID: 'dicesprite.thunderbird.cafe', **{d: hd for d, hd, _, _ in PICK_ACCOUNTS}}.get(did)
@@ -194,7 +202,7 @@ def wait_for(fn, timeout=10.0, step=0.1):
 with sync_playwright() as p:
     b = p.chromium.launch(args=['--host-resolver-rules=MAP *.localhost 127.0.0.1'])
     ctx = b.new_context(viewport={'width': 1280, 'height': 800})
-    for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://192.168.1.5/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**']:
+    for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://192.168.1.5/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**', 'https://appmosphe.re/**']:
         ctx.route(host, route)
     popups = []
     ctx.on('page', lambda pg: popups.append(pg))
@@ -210,7 +218,12 @@ with sync_playwright() as p:
     check('first screen: the six picks show their names from their records, in order', names == PICK_NAMES, str(names))
     wait_for(lambda: page.eval_on_selector_all('.picks .card-pic img', 'els => els.length === 6 && els.every(i => i.complete)'), 10)
     check('the hide list is read from lexicographer.space', any(c == 'https://lexicographer.space/hidden-tiles.json' for c in calls))
-    check('first screen: card pictures drawn from the tiles\' banners', page.eval_on_selector_all('.picks .card-pic img', 'els => els.every(i => i.src.startsWith("blob:") && i.naturalWidth === 1280)'))
+    check('first screen: card pictures drawn from the tiles\' banners', page.eval_on_selector_all('.picks .card-pic img', 'els => els.every(i => i.naturalWidth === 1280)'))
+    srcs = page.eval_on_selector_all('.picks .card-pic img', 'els => els.map(i => [i.src.split(":")[0], i.referrerPolicy])')
+    check("first screen (Q128): banners from appmosphe.re's copies where it has them, no referrer; else from the author's server",
+          [x[0] for x in srcs] == ['https', 'https', 'https', 'blob', 'blob', 'blob'] and all(x[1] == 'no-referrer' for x in srcs[:3]), str(srcs))
+    copied_blobs = [c for c in calls if 'getBlob' in c and any(quote(d, safe='') in c for d in COPIED)]
+    check("...the copied ones aren't downloaded from the authors' servers", not copied_blobs, str(copied_blobs[:2]))
     check('first screen: "by @handle" only after the handle checks both ways', wait_for(lambda: page.eval_on_selector_all('.picks .card-by', "els => els.length === 6 && els[0].textContent === 'by @gabriellanonino.com' && els[5].textContent === 'by @pyxorium.com'"), 10))
     check('computer: no bottom toolbar; arrows in the top bar', not page.is_visible('.toolbar') and page.is_visible('.bar .nav'))
     check('computer: back, forward, reload, the shelf, Discover and + are drawn icons, not text', page.eval_on_selector_all('.bar .nav-btn, .newtab', "bs => bs.length === 6 && bs.every(b => b.querySelector('svg.icon') && b.textContent.trim() === '')"))

@@ -300,16 +300,20 @@ export const MAKE = Object.freeze({
 /** "foundry.thunderbird.cafe", "appmosphe.re/publish": a maker's address as shown on its card. */
 export const siteLabel = (url) => { const u = new URL(url); return (u.host + u.pathname).replace(/\/$/, ''); };
 
+// appmosphe.re's copy of one of a tile's pictures (the same address shape as Recent tiles' pictures). Used only
+// where it reveals nothing about the visitor (Q129): the first screen's picks (the same for everyone) and the
+// results of a search appmosphe.re itself answered. Never for Your shelf, Following or "Already in Raku".
+export const appmosphereCopy = (did, cid) => (did && cid ? `${RECENT.imgPrefix}${did}/${cid}` : null);
 // "Last visit" marks for Following and Recent tiles (marks.js): kept on this device only (Q111), in one entry.
 // Following's older entry (raku-following-seen) moves in the first time it's read.
 export const MARKS = Object.freeze({ key: 'raku-marks', legacy: Object.freeze({ following: 'raku-following-seen' }) });
-// Where a post opens outside Raku (Q90; chosen in the link message, Q98; Bluesky by default). Northsky joins once
-// its app's address for posts is confirmed. Every one of these apps
+// Where a post opens outside Raku (Q90; chosen in the link message, Q98; Bluesky by default). Every one of these apps
 // shows a post at https://<host>/profile/<handle or DID>/post/<record key>.
 export const POST_APPS = Object.freeze([
   Object.freeze({ id: 'bluesky', name: 'Bluesky', host: 'bsky.app' }),
   Object.freeze({ id: 'blacksky', name: 'Blacksky', host: 'blacksky.community' }),
   Object.freeze({ id: 'mu', name: 'mu', host: 'mu.social' }),
+  Object.freeze({ id: 'northsky', name: 'Northsky', host: 'northsky.app' }),   // confirmed Oct 22 (a post link from the owner)
 ]);
 export const POST_APP_KEY = 'raku-post-app';           // localStorage: the chosen app's id (chosen in the link message, Q98)
 export function postApp(storage = null) {

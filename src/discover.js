@@ -12,7 +12,7 @@
 // Addresses (address.js): raku:discover, raku:discover/news, raku:discover/recent, raku:discover/following,
 // raku:discover/make, raku:search/<words>.
 
-import { PICKS, SEARCH, RECENT, MAKE, siteLabel, feedUri, postApp } from './config.js';
+import { PICKS, SEARCH, RECENT, MAKE, siteLabel, feedUri, postApp, appmosphereCopy } from './config.js';
 import { atUri, discoverUri, searchUri, accountPageUri, parseAddress, parsePost, SHELF_URI, DISCOVER_URI } from './address.js';
 import { describeTile } from './tiles.js';
 import { NetError } from './net.js';
@@ -214,8 +214,9 @@ function tileItemCard(ctx, it, { badge = '' } = {}) {
   return card;
 }
 
-/** A card for a tile known only by its address (search results): looked up first; null when it shouldn't show. */
-function addressCard(ctx, addr, onGone) {
+/** A card for a tile known only by its address (search results): looked up first; null when it shouldn't show.
+ *  copies (Q129): draw its banner from appmosphe.re's copy (only for results appmosphe.re itself gave). */
+function addressCard(ctx, addr, onGone, { copies = false } = {}) {
   const { kit, tabs, tab, openNew, resolver, moderation } = ctx;
   let uri = addr.uri;
   const card = kit.tileCard({ name: '…', onOpen: () => tabs.go(tab.id, uri), onOpenNew: () => openNew(uri) });
@@ -228,7 +229,8 @@ function addressCard(ctx, addr, onGone) {
       if (!d.ok) { card.el.remove(); onGone(); return; }
       uri = atUri(did, addr.rkey);
       card.set({ name: d.name, description: d.description });
-      card.picture({ pds: acct.pds, did, cid: bannerCid(d.manifest) });
+      const cid = bannerCid(d.manifest);
+      card.picture(copies ? { url: appmosphereCopy(did, cid), fallback: { pds: acct.pds, did, cid } } : { pds: acct.pds, did, cid });
       resolver.checkedHandle(did).then((hd) => card.set({ by: hd || '' }));
     } catch { card.el.remove(); onGone(); }
   };
@@ -447,7 +449,7 @@ function drawSearch(ctx, into, query) {
     status.hidden = true;
     const run = limiter(4);
     for (const addr of r.remote) {
-      const c = addressCard(ctx, addr, () => { shown--; if (!shown && alive()) none(); });
+      const c = addressCard(ctx, addr, () => { shown--; if (!shown && alive()) none(); }, { copies: true });
       grid.append(c.el);
       run(c.job);
     }

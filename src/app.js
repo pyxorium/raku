@@ -14,7 +14,7 @@
 // address opens through the link message (link-message.js), outside Raku.
 
 import { Tile } from '@dasl/tile-loader';
-import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS, TABLES, tableForTile } from './config.js';
+import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS, TABLES, tableForTile, appmosphereCopy } from './config.js';
 import { parseAddress, parseTarget, atUri, SHELF_URI, tableUri, DISCOVER_URI, discoverUri } from './address.js';
 import { createTabs, current } from './tabs.js';
 import { describeTile, sizeVerdict, createPathLoader, blobCidOf } from './tiles.js';
@@ -476,7 +476,10 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       const d = describeTile(rec);
       if (!d.ok) throw new Error(d.reason);
       card.set({ name: d.name, description: d.description });
-      card.picture({ pds: acct.pds, did, cid: bannerCid(d.manifest) });
+      // the banner from appmosphe.re's copy (one fast server; the picks are the same for everyone, so this reveals
+      // nothing), else from the author's own server as before (Q128, Q129)
+      const cid = bannerCid(d.manifest);
+      card.picture({ url: appmosphereCopy(did, cid), fallback: { pds: acct.pds, did, cid } });
       resolver.checkedHandle(did).then((hd) => card.set({ by: hd || '' }));
     })().catch(() => card.set({ name: "Couldn't load this pick", greyed: true }));
     return card.el;

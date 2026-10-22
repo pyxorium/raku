@@ -6,7 +6,7 @@ import { segments, readPost, moderatePost, tileRef, ago, threadKey, groupThreads
 import { tidTime, tileTime, createFollowing } from '../src/following.js';
 import { addressesFrom, localMatches, searchAppmosphere, searchWords } from '../src/search.js';
 import { createPublicReads } from '../src/bluesky.js';
-import { FEED, SEARCH, POST_APPS, postApp, postLink, feedUri, MODERATION_SERVICES } from '../src/config.js';
+import { FEED, SEARCH, POST_APPS, postApp, postLink, feedUri, MODERATION_SERVICES, appmosphereCopy } from '../src/config.js';
 import { createTabs } from '../src/tabs.js';
 
 const DID = 'did:plc:6vxjigxrqizmbo56gojxico3';
@@ -52,6 +52,12 @@ test('config: the Web Tiles feed (step 6b), search and post apps over https, ?fe
   assert.equal(postApp({ getItem: () => 'mu' }).id, 'mu');
   assert.equal(postApp({ getItem: () => { throw new Error('blocked'); } }).id, 'bluesky');
   assert.equal(postLink(POST_APPS[0], 'thunderbird.cafe', '3abc'), 'https://bsky.app/profile/thunderbird.cafe/post/3abc');
+  // Northsky (Oct 22): the owner's own post link, rebuilt
+  assert.deepEqual(POST_APPS.map((a) => a.name), ['Bluesky', 'Blacksky', 'mu', 'Northsky']);
+  assert.equal(postLink(postApp({ getItem: () => 'northsky' }), 'thunderbird.cafe', '3my75rtv2ml26'), 'https://northsky.app/profile/thunderbird.cafe/post/3my75rtv2ml26');
+  // appmosphe.re's copy of a picture (Q129)
+  assert.equal(appmosphereCopy(PYX, 'bafkreiabc'), `https://appmosphe.re/img/${PYX}/bafkreiabc`);
+  assert.equal(appmosphereCopy(PYX, null), null);
   const f = `at://${DID}/app.bsky.feed.generator/web-tiles`;
   assert.equal(feedUri({ hostname: '127.0.0.1', search: `?feed=${encodeURIComponent(f)}` }), f);
   assert.equal(feedUri({ hostname: 'raku.lexicographer.space', search: `?feed=${encodeURIComponent(f)}` }), FEED, 'only on this computer');
