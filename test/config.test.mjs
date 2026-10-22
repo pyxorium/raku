@@ -39,7 +39,7 @@ test('the hide list comes from lexicographer.space; the picks are tile addresses
 });
 
 test("avatars only from Bluesky's picture server", () => {
-  assert.match(pageCsp(), /img-src 'self' blob: data: https:\/\/cdn\.bsky\.app;/);
+  assert.match(pageCsp(), /img-src 'self' blob: data: https:\/\/cdn\.bsky\.app https:\/\/appmosphe\.re;/, "stage 6c: Recent tiles' pictures from appmosphe.re");
 });
 
 test("the sign-in description file names Raku's own address, and asks for no more than the tables' sets", () => {

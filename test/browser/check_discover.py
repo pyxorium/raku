@@ -1,7 +1,9 @@
 # Raku stage 6 (Discover) browser checks, in the chat sandbox: the Discover page's columns at four widths,
 # Following (newest first, hidden ones left out, "New" since the last visit), search (the address box and the
 # Discover box: your shelf first, then appmosphe.re, only on Enter), Tile news from a stand-in feed (?feed=,
-# this computer only) with a post linking a tile, labels and the link message, and a post's address in the box.
+# this computer only) with a post linking a tile, labels and the link message, and a post's address in the box;
+# Recent tiles (stage 6c: appmosphe.re's list as it is, the hide list and account labels, pictures only from
+# appmosphe.re's /img/ copies, More, "New" since the last visit).
 # Everything outside is a Playwright route (account directory, account servers, Bluesky's public API, its
 # picture server, appmosphe.re). Tiles aren't run here (check_page.py does that).
 # Usage: python3 test/browser/check_discover.py <work folder>   (servers.mjs and the replica already running,
@@ -24,6 +26,8 @@ MK = 'did:plc:makeraaaaaaaaaaaaaaaaaaa'; MK_H = 'maker.fakepds.net'        # a m
 LABELER = 'did:plc:ar7c4by46qjdydhdevvrndac'
 SALT = 'lexicographer.space hide list v1'
 FEED = f'at://{A}/app.bsky.feed.generator/Web-Tiles'          # the real feed's address (config.js FEED, step 6b)
+AD = 'did:plc:adultaaaaaaaaaaaaaaaaaaa'; AD_H = 'adult.fakepds.net'      # labelled adult: pictures blurred
+NH = 'did:plc:nohandleaaaaaaaaaaaaaaaa'                                      # a handle Bluesky couldn't check
 HANDLES = {A: A_H, P: P_H, B: B_H, MK: MK_H}
 
 blobs = {}
@@ -44,6 +48,7 @@ records = {
     (A, 'hidden1'): tile('Hidden coaster', '2026-10-21T10:00:00Z'),
     (P, '3mx6h2wjtgq2h'): tile('Roller Coaster', '2026-10-12T10:00:00Z', 'Take your sprite to the amusement park', (90, 60, 160)),
     (B, 'bad1'): tile('Bad coaster', '2026-10-21T11:00:00Z'),
+    (MK, 'rc1'): tile('Pebble Garden', '2026-10-22T00:00:00Z', 'A garden of pebbles', (150, 140, 120)),   # Recent tiles (stage 6c)
 }
 HIDE_LIST = json.dumps({'version': 1, 'salt': SALT, 'accounts': [], 'tiles': [hashlib.sha256(f'{SALT}\n{A}\nhidden1'.encode()).hexdigest()]})
 
@@ -90,6 +95,28 @@ THREAD_ITEMS = [
     {'post': LONE},
 ]
 
+# Recent tiles (stage 6c): appmosphe.re's /api/tiles, its shape as checked Oct 22.
+from datetime import datetime, timezone, timedelta
+def iso(dt): return dt.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+NOW = datetime.now(timezone.utc)
+IMG = lambda did, cid: f'https://appmosphe.re/img/{did}/{cid}'
+def rt(did, rkey, name, created, shots=(), icon=None, desc=None, handle='stale.example'):
+    return {'uri': f'at://{did}/ing.dasl.masl/{rkey}', 'shortId': f'@{handle}/{rkey}', 'url': f'https://appmosphe.re/@{handle}/{rkey}', 'did': did, 'handle': handle,
+            'rkey': rkey, 'name': name, 'description': desc, 'categories': [], 'icon': icon, 'screenshots': [{'url': u, 'type': 'image/png'} for u in shots],
+            'sizing': None, 'recordCid': 'bafyreirecent' + rkey, 'createdAt': created, 'createdAtDerived': False, 'indexedAt': created,
+            'author': {'did': did, 'handle': handle, 'displayName': 'X', 'avatar': None}}
+RECENT_PAGES = {
+    1: [rt(MK, 'rc1', 'Pebble Garden', iso(NOW - timedelta(hours=3)), shots=[IMG(MK, 'bafkreipebble')], desc='A garden of pebbles'),
+        rt(A, 'hidden1', 'Hidden coaster', iso(NOW - timedelta(hours=4))),
+        rt(B, 'bad2', 'From a hidden account', iso(NOW - timedelta(hours=5))),
+        rt(AD, 'ad1', 'Late Night Tile', iso(NOW - timedelta(hours=6)), shots=[IMG(AD, 'bafkreilate')]),
+        rt(NH, 'nh1', 'Nameless Maker Tile', iso(NOW - timedelta(days=2)), icon=IMG(NH, 'bafkreiicon')),
+        rt(P, 'rc6', 'Moon Lantern', iso(NOW - timedelta(days=3)), shots=['https://evil.example/moon.png'])],
+    2: [rt(MK, 'rc7', 'Old Kiln', '2026-10-01T10:00:00.000Z', shots=[IMG(MK, 'bafkreikiln')])],
+}
+PROFILE_LABELS = {B: [{'src': LABELER, 'uri': f'at://{B}', 'val': '!hide'}], AD: [{'src': LABELER, 'uri': f'at://{AD}', 'val': 'porn'}]}
+PROFILE_HANDLES = {**HANDLES, AD: AD_H, NH: 'handle.invalid'}
+
 SEARCH_ANSWER = {'results': [{'uri': f'at://{P}/ing.dasl.masl/3mx6h2wjtgq2h', 'name': 'Roller Coaster'}, {'uri': f'at://{A}/ing.dasl.masl/hidden1'}, {'uri': f'at://{A}/ing.dasl.masl/missing1'}]}
 
 calls = []
@@ -106,6 +133,9 @@ def route(r):
         if u.path.endswith('resolveHandle'):
             did = {v: k for k, v in HANDLES.items()}.get(q.get('handle'))
             return js({'did': did}) if did else js({'error': 'InvalidRequest', 'message': 'Unable to resolve handle'}, 400)
+        if u.path.endswith('getProfiles'):
+            actors = parse_qs(u.query).get('actors', [])
+            return js({'profiles': [{'did': d, 'handle': PROFILE_HANDLES.get(d, 'handle.invalid'), 'labels': PROFILE_LABELS.get(d, [])} for d in actors]})
         if u.path.endswith('getProfile'):
             labels = [{'src': LABELER, 'uri': f'at://{B}', 'val': '!hide'}] if q.get('actor') == B else []
             return js({'did': q.get('actor'), 'labels': labels, 'avatar': 'https://cdn.bsky.app/img/avatar/plain/x/av@jpeg'})
@@ -113,6 +143,13 @@ def route(r):
             if q.get('feed') != FEED: return js({'error': 'UnknownFeed'}, 400)
             return js({'feed': [{'post': p} for p in POSTS] + THREAD_ITEMS})
     if u.hostname == 'appmosphe.re':
+        if u.path == '/api/tiles':
+            n = int(q.get('page', '1'))
+            return js({'total': sum(len(v) for v in RECENT_PAGES.values()), 'page': n, 'pages': len(RECENT_PAGES), 'tiles': RECENT_PAGES.get(n, [])})
+        if u.path.startswith('/img/'):
+            # like the real appmosphe.re (Oct 22): /img/ answers carry no CORS header, so a page can't download
+            # them, only show them as pictures (Q122)
+            return r.fulfill(status=200, headers={'content-type': 'image/png'}, body=png((214, 160, 90), (320, 180)))
         return js(SEARCH_ANSWER)
     if u.hostname == 'typeahead.waow.tech':
         return js({'actors': []})
@@ -185,7 +222,8 @@ with sync_playwright() as pw:
     page.wait_for_selector('.discover')
     check('Discover opens as a page in a tab, titled Discover', 'Discover' in page.title() and texts(page, '.tab.on .tab-title') == ['Discover'])
     check('the Discover button in the top bar shows it is on', page.eval_on_selector('.bar .nav-btn[title="Discover"]', 'b => b.classList.contains("on")'))
-    check('with the Web Tiles feed (step 6b) the sources are Tile news and Following', texts(page, '.dv-src') == ['Tile news', 'Following'], str(texts(page, '.dv-src')))
+    check('with the Web Tiles feed (step 6b) the sources are Tile news, Recent tiles (stage 6c) and Following', texts(page, '.dv-src') == ['Tile news', 'Recent tiles', 'Following'], str(texts(page, '.dv-src')))
+    check('Recent tiles has the clock icon', page.query_selector('.dv-src[data-source="recent"] .icon-clock') is not None)
     wait_for(lambda: page.eval_on_selector_all('.dv-centre .card-title', 'els => els.length >= 3 && els.every(e => e.textContent !== "…")'), page=page)
     names = texts(page, '.dv-centre .card-title')
     check('Following: the kept accounts\' tiles, newest first, all mixed', names == ['Coaster Two', 'Roller Coaster', 'Glass Lantern'], str(names))
@@ -200,7 +238,6 @@ with sync_playwright() as pw:
     check('the address box is empty on Discover, no star', page.input_value('.addr') == '' and not page.is_visible('.star-btn'))
 
     # A new tile appears; the next visit (a new page load) marks it New.
-    from datetime import datetime, timezone, timedelta
     records[(P, 'newtile1')] = tile('Brand New Tile', (datetime.now(timezone.utc) + timedelta(seconds=2)).strftime('%Y-%m-%dT%H:%M:%SZ'), 'Fresh', (230, 180, 60))
     time.sleep(3)
     page.reload(); page.wait_for_selector('.discover')
@@ -211,14 +248,15 @@ with sync_playwright() as pw:
     page.screenshot(path=str(OUT / 'd2-following-new.png'))
 
     # ---------- search from the address box ----------
-    before = len([c for c in calls if 'appmosphe.re' in c])
+    searched = lambda: [c for c in calls if 'appmosphe.re/api/search' in c]
+    before = len(searched())
     page.click('.addr'); page.keyboard.type('coaster', delay=40)
     page.wait_for_timeout(600)
-    check('typing sends nothing to appmosphe.re', len([c for c in calls if 'appmosphe.re' in c]) == before)
+    check('typing sends nothing to appmosphe.re', len(searched()) == before)
     page.keyboard.press('Enter')
     page.wait_for_selector('.dv-centre h1')
     check('Enter on words opens search results in the tab', texts(page, '.dv-centre h1') == ['Results for “coaster”'] and 'Search: coaster' in texts(page, '.tab.on .tab-title')[0])
-    asked = [c for c in calls if 'appmosphe.re' in c][before:]
+    asked = searched()[before:]
     check('one request to appmosphe.re, with only the words', asked == ['https://appmosphe.re/api/search?q=coaster'], str(asked))
     wait_for(lambda: page.eval_on_selector_all('.dv-part:not([hidden]) .card-title', 'els => els.length >= 2 && els.every(e => e.textContent !== "…")'), page=page)
     parts = page.evaluate("() => [...document.querySelectorAll('.dv-part')].filter(p => !p.hidden).map(p => [p.querySelector('h2').textContent, [...p.querySelectorAll('.card-title')].map(e => e.textContent)])")
@@ -228,7 +266,7 @@ with sync_playwright() as pw:
     check('search: appmosphe.re\'s results looked up from the tiles\' servers; hidden and missing ones left out', theirs == ['Roller Coaster'], str(theirs))
     check('search: the line says what was sent where', 'Only the words you searched for were sent' in page.inner_text('.dv-foot'))
     check('search: the address box shows the words; the Discover box too', page.input_value('.addr') == 'coaster' and page.input_value('.dv-q') == 'coaster')
-    check('search: Search results joins the sources', texts(page, '.dv-src') == ['Tile news', 'Following', 'Search results'] and page.eval_on_selector('.dv-src[data-source="search"]', 'b => b.classList.contains("on")'))
+    check('search: Search results joins the sources', texts(page, '.dv-src') == ['Tile news', 'Recent tiles', 'Following', 'Search results'] and page.eval_on_selector('.dv-src[data-source="search"]', 'b => b.classList.contains("on")'))
     check('search: the right column previews Following, with its new count', wait_for(lambda: '1 new' in page.inner_text('.dv-preview[data-source="following"]'), page=page))
     check('...and the previews\' small banners', wait_for(lambda: page.eval_on_selector_all('.dv-preview[data-source="following"] .dv-mini-pic img', 'is => is.length === 3 && is.every(i => i.src.startsWith("blob:"))'), page=page))
     page.screenshot(path=str(OUT / 'd3-search-wide.png'))
@@ -272,6 +310,61 @@ with sync_playwright() as pw:
     page.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Results for “nosuch.example”'")
     check('...and it searches', True)
 
+    # ---------- Recent tiles (stage 6c) ----------
+    page.goto(RAKU + '?loader=' + LOADER + '#t=raku%3Adiscover%2Frecent&a=0'); page.wait_for_selector('.discover')
+    seen_before = len(calls)
+    page.reload(); page.wait_for_selector('.discover')            # a fresh page load: nothing kept from the previews earlier
+    page.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Recent tiles'")
+    check('raku:discover/recent opens Recent tiles, highlighted among the sources', texts(page, '.dv-src.on') == ['Recent tiles'])
+    check('...with its line', 'as listed by appmosphe.re' in page.inner_text('.dv-head .sub'))
+    wait_for(lambda: len(texts(page, '.dv-centre .card-title')) >= 4, page=page)
+    names = texts(page, '.dv-centre .card-title')
+    check("Recent tiles: appmosphe.re's order, as it is", names == ['Pebble Garden', 'Late Night Tile', 'Nameless Maker Tile', 'Moon Lantern'], str(names))
+    check('...a tile on the hide list and an account hidden by Bluesky are left out', 'Hidden coaster' not in names and 'From a hidden account' not in names)
+    bys = texts(page, '.dv-centre .card-by')
+    check('..."by @handle" (Bluesky\'s checked handle) and when it was made', bys[0] == f'by @{MK_H} · 3h ago', str(bys))
+    check("...an account whose handle couldn't be checked shows its DID", bys[2] == f'by {NH} · 2d ago', str(bys))
+    check('...the description when there is one', texts(page, '.dv-centre .card-desc')[0] == 'A garden of pebbles')
+    check("...pictures from appmosphe.re's /img/ copies, drawn as ordinary pictures (no CORS there), no referrer", wait_for(lambda: page.eval_on_selector_all('.dv-centre .card-pic img',
+          'is => is.length === 3 && is.every(i => i.src.startsWith("https://appmosphe.re/img/") && i.referrerPolicy === "no-referrer" && i.complete && i.naturalWidth > 0)'), page=page))
+    check('...a picture from anywhere else is left out (the plain background)', page.eval_on_selector('.card:nth-child(4) .card-pic', 'p => !p.querySelector("img")'))
+    check('...an icon-only tile shows its icon whole', page.eval_on_selector('.card:nth-child(3) .card-pic', 'p => p.classList.contains("is-icon")'))
+    check('...an account labelled adult: its picture blurred', page.eval_on_selector('.card:nth-child(2) .card-pic', 'p => p.classList.contains("blurred") && getComputedStyle(p.querySelector("img")).filter.includes("blur")'))
+    recent_calls = calls[seen_before:]
+    check('...one request for the list, page 1', [c for c in recent_calls if '/api/tiles' in c] == ['https://appmosphe.re/api/tiles?page=1'], str([c for c in recent_calls if '/api/tiles' in c]))
+    check('...authors checked in one Bluesky request', len([c for c in recent_calls if 'getProfiles' in c]) == 1)
+    check("...nothing fetched from the tiles' own servers or elsewhere", not [c for c in recent_calls if 'evil.example' in c or ('getBlob' in c and any(quote(d, safe='') in c for d in (MK, AD, NH)))])   # (Following's preview on the right fetches its own banners)
+    check('...a first visit marks nothing new', page.query_selector('.dv-centre .card-badge') is None)
+    check('...More for the next page', page.is_visible('.dv-centre > .more') and page.inner_text('.dv-centre > .more') == 'More')
+    check('..."Listed by appmosphe.re"', page.inner_text('.dv-foot') == 'Listed by appmosphe.re.')
+    page.screenshot(path=str(OUT / 'd4a-recent-wide.png'))
+    page.click('.dv-centre > .more')
+    wait_for(lambda: 'Old Kiln' in texts(page, '.dv-centre .card-title'), page=page)
+    check('More adds the next page below', texts(page, '.dv-centre .card-title')[-1] == 'Old Kiln' and [c for c in calls if '/api/tiles' in c][-1] == 'https://appmosphe.re/api/tiles?page=2')
+    check("...after the last page: no More, and \"That's every tile appmosphe.re lists.\"", wait_for(lambda: not page.is_visible('.dv-centre > .more') and page.is_visible('.dv-end'), page=page) and "That's every tile appmosphe.re lists." in page.inner_text('.dv-end'))
+    check('...an older tile shows its date', 'Oct 1' in texts(page, '.dv-centre .card-by')[-1])
+    page.click('.dv-centre .card:nth-child(1) .card-main')
+    wait_for(lambda: page.input_value('.addr').endswith('/ing.dasl.masl/rc1'), page=page)
+    check('opening a card opens the tile in the tab (its latest version, from its own server)', page.input_value('.addr').endswith('/ing.dasl.masl/rc1'), page.input_value('.addr'))
+    page.click('.bar .nav-btn[title="Back"]'); page.wait_for_selector('.dv-centre .card')
+    # "New" since the last visit
+    RECENT_PAGES[1].insert(0, rt(MK, 'rcnew', 'Fresh Glaze', iso(datetime.now(timezone.utc) + timedelta(seconds=2)), shots=[IMG(MK, 'bafkreifresh')]))
+    time.sleep(3)
+    page.reload(); page.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Recent tiles'")
+    wait_for(lambda: 'Fresh Glaze' in texts(page, '.dv-centre .card-title'), page=page)
+    badges = page.eval_on_selector_all('.dv-centre .card', 'cs => cs.filter(c => c.querySelector(".card-badge")).map(c => c.querySelector(".card-title").textContent)')
+    check('Recent tiles: "New" on tiles made since the last visit, only those', badges == ['Fresh Glaze'], str(badges))
+    marks = page.evaluate("() => JSON.parse(localStorage.getItem('raku-marks'))")
+    check("the last visits kept in one entry on this device (Following's older entry moved in)", marks and marks.get('format') == 'raku-marks' and set(marks['seen']) >= {'following', 'recent'} and page.evaluate("() => localStorage.getItem('raku-following-seen')") is None, str(marks))
+    page.screenshot(path=str(OUT / 'd4b-recent-new.png'))
+    page.click('.dv-src[data-source="following"]'); page.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Following'")
+    check('the right column previews Recent tiles: its new count and small pictures', wait_for(lambda: '1 new' in page.inner_text('.dv-preview[data-source="recent"]') and page.eval_on_selector_all('.dv-preview[data-source="recent"] .dv-mini-pic img', 'is => is.length >= 2'), page=page))
+    check('...the latest three', page.eval_on_selector_all('.dv-preview[data-source="recent"] .dv-mini-title', 'es => es.map(e => e.textContent)') == ['Fresh Glaze', 'Pebble Garden', 'Late Night Tile'])
+    page.screenshot(path=str(OUT / 'd4c-recent-preview.png'))
+    page.fill('.dv-q', 'pebble'); page.press('.dv-q', 'Enter')
+    page.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Results for “pebble”'")
+    check('search: a tile already loaded in Recent tiles counts as "Already in Raku"', wait_for(lambda: 'Pebble Garden' in texts(page, '.dv-part:not([hidden]) .card-title'), page=page))
+
     # ---------- widths ----------
     page.goto(RAKU + '#t=raku%3Adiscover%2Ffollowing&a=0'); page.wait_for_selector('.discover')
     page.set_viewport_size({'width': 1000, 'height': 800}); page.wait_for_timeout(300)
@@ -285,7 +378,7 @@ with sync_playwright() as pw:
 
     # ---------- Tile news (a stand-in feed, ?feed= on this computer) ----------
     page.goto(RAKU + '?loader=' + LOADER + '&feed=' + quote(FEED, safe='') + '#t=raku%3Adiscover&a=0'); page.wait_for_selector('.discover')
-    check('with a feed, Tile news comes first among the sources', texts(page, '.dv-src') == ['Tile news', 'Following'] and texts(page, '.dv-src.on') == ['Tile news'])
+    check('with a feed, Tile news comes first among the sources', texts(page, '.dv-src') == ['Tile news', 'Recent tiles', 'Following'] and texts(page, '.dv-src.on') == ['Tile news'])
     page.wait_for_selector('.post')
     uris = page.eval_on_selector_all('.posts > *', 'ps => ps.map(p => p.dataset.uri.split("/").pop())')[:4]
     check('posts drawn; hidden by moderation and from a hidden account left out', uris == ['3post1', '3post2', '3post3', '3post5'], str(uris))
@@ -394,13 +487,17 @@ with sync_playwright() as pw:
     tools = mp.eval_on_selector_all('.toolbar button', 'bs => bs.map(b => [b.title, Math.round(b.getBoundingClientRect().width), b.classList.contains("on")])')
     check('phone: six toolbar buttons of 44 px, Discover among them and on', [t[0] for t in tools] == ['Back', 'Forward', 'Reload this tile', 'Your shelf', 'Discover', 'Open tabs'] and all(t[1] >= 44 for t in tools) and tools[4][2], str(tools))
     chips = mp.evaluate("() => [getComputedStyle(document.querySelector('.dv-sources')).display, [...document.querySelectorAll('.dv-src')].map(b => b.textContent.trim()), getComputedStyle(document.querySelector('.dv-right')).display]")
-    check('phone: one column, the sources as chips across the top, no right column', chips[0] == 'flex' and chips[1] == ['Tile news', 'Following'] and chips[2] == 'none', str(chips))
+    check('phone: one column, the sources as chips across the top, no right column', chips[0] == 'flex' and chips[1] == ['Tile news', 'Recent tiles', 'Following'] and chips[2] == 'none', str(chips))
     check('phone: no sideways scroll', mp.evaluate('() => document.querySelector(".pane.front").scrollWidth <= document.querySelector(".pane.front").clientWidth + 1 && document.documentElement.scrollWidth <= 391'))
     mp.screenshot(path=str(OUT / 'd8-phone-news.png'))
     mp.click('.dv-src[data-source="following"]'); mp.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Following'")
     wait_for(lambda: mp.eval_on_selector_all('.dv-centre .card-title', 'els => els.length >= 3 && els.every(e => e.textContent !== "…")'), page=mp)
     check('phone: Following as one column of cards, no sideways scroll', mp.evaluate('() => document.querySelector(".pane.front").scrollWidth <= document.querySelector(".pane.front").clientWidth + 1'))
     mp.screenshot(path=str(OUT / 'd9-phone-following.png'))
+    mp.click('.dv-src[data-source="recent"]'); mp.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Recent tiles'")
+    wait_for(lambda: mp.eval_on_selector_all('.dv-centre .card-pic img', 'is => is.length >= 2'), page=mp)
+    check('phone: Recent tiles as one column of cards, no sideways scroll', mp.evaluate('() => document.querySelector(".pane.front").scrollWidth <= document.querySelector(".pane.front").clientWidth + 1 && document.documentElement.scrollWidth <= 391'))
+    mp.screenshot(path=str(OUT / 'd9b-phone-recent.png'))
     mp.goto(RAKU + '?feed=' + quote(FEED, safe='') + '#t=raku%3Adiscover%2Fnews&a=0'); mp.wait_for_selector('.post .post-open')
     mp.query_selector('.post .post-open').click(); mp.wait_for_selector('.link-msg')
     box = mp.eval_on_selector('.link-msg-box', 'b => { const r = b.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right), Math.round(r.bottom)]; }')

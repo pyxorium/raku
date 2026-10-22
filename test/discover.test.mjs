@@ -179,7 +179,7 @@ test('Following: kept accounts, newest first, mixed, hidden left out, "New" sinc
   assert.equal(f.lastSeen(), null);
   assert.ok(r.items.every((i) => !f.isNew(i)), 'a first visit marks nothing');
   f.markSeen();
-  assert.equal(store.get('raku-following-seen'), String(clock));
+  assert.equal(JSON.parse(store.get('raku-marks')).seen.following, new Date(clock).toISOString(), 'kept in the marks entry (marks.js)');
   await f.load();
   assert.equal(asked.length, 3, 'kept a few minutes');
   // next page load: a new tile since the last visit

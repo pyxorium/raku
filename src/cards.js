@@ -56,8 +56,18 @@ export function createCardKit({ files }) {
     }, { rootMargin: '400px' })
     : null;
 
-  /** Loads a banner into `holder` when it comes near the screen. */
-  function picture(holder, { pds, did, cid }) {
+  /** Loads a banner into `holder` when it comes near the screen: a tile's own file ({ pds, did, cid }), downloaded
+   *  and checked; or (stage 6c, Q122) a picture at an https address ({ url }: appmosphe.re's /img/ copies, which can't
+   *  be downloaded by a page), drawn as an ordinary picture in its own lane: the browser loads it when it comes near
+   *  the screen, sends no referrer, and draws it only if it is a picture. */
+  function picture(holder, { pds, did, cid, url }) {
+    if (url) {
+      if (!/^https:\/\//.test(url)) return;
+      const img = h('img', { src: url, alt: '', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' });
+      img.addEventListener('error', () => img.remove());
+      holder.append(img);
+      return;
+    }
     holder._loadPicture = async () => {
       try {
         const buf = await files.get(pds, did, cid, { left: LIMITS.cardImageBytes });
@@ -73,12 +83,17 @@ export function createCardKit({ files }) {
    * A tile's card. The whole card opens the tile (in this tab); corner buttons open it in a new tab and,
    * on your shelf, remove it. `note` (a sentence) and `greyed` mark tiles that can't be opened.
    */
-  function tileCard({ name, description = '', by = '', note = '', greyed = false, badge = '', onOpen, onOpenNew, onRemove, removeLabel }) {
+  // by: a handle ("by @handle"), or an account's DID when no handle could be checked ("by did:plc:…");
+  // when (stage 6c): a short time after it ("3h ago").
+  const byText = (b, w) => [b ? (b.startsWith('did:') ? `by ${b}` : `by @${b}`) : '', w || ''].filter(Boolean).join(' · ');
+  function tileCard({ name, description = '', by = '', when = '', note = '', greyed = false, badge = '', onOpen, onOpenNew, onRemove, removeLabel }) {
     // badge: a short word over the picture (stage 6: "New" in Following)
     const pic = h('div', { class: 'card-pic' }, badge ? h('span', { class: 'card-badge' }, badge) : null);
     const title = h('span', { class: 'card-title' }, name || 'Untitled tile');
     const desc = h('span', { class: 'card-desc' }, description);
-    const byLine = h('span', { class: 'card-by' }, by ? `by @${by}` : '');
+    let byNow = by;
+    const whenNow = when;
+    const byLine = h('span', { class: 'card-by' }, byText(by, when));
     const noteLine = h('span', { class: 'card-note' }, note);
     const main = h('button', { type: 'button', class: 'card-main', disabled: greyed || !onOpen, onclick: () => onOpen?.(),
       onauxclick: (ev) => { if (ev.button === 1 && onOpenNew) { ev.preventDefault(); onOpenNew(); } } },
@@ -92,11 +107,18 @@ export function createCardKit({ files }) {
       set({ name: n, description: d, by: b, note: t, greyed: g }) {
         if (n !== undefined) { title.textContent = n || 'Untitled tile'; }
         if (d !== undefined) desc.textContent = d;
-        if (b !== undefined) byLine.textContent = b ? `by @${b}` : '';
+        if (b !== undefined) { byNow = b; byLine.textContent = byText(byNow, whenNow); }
         if (t !== undefined) noteLine.textContent = t;
         if (g !== undefined) { card.classList.toggle('greyed', g); main.disabled = g || !onOpen; }
       },
-      picture(ref) { if (ref?.cid) picture(pic, ref); },
+      // look (stage 6c): 'icon' draws a small picture whole instead of filling the card; 'blur' blurs it (an
+      // account labelled adult or graphic)
+      picture(ref, { look = '' } = {}) {
+        if (!ref?.cid && !ref?.url) return;
+        if (look.includes('icon')) pic.classList.add('is-icon');
+        if (look.includes('blur')) pic.classList.add('blurred');
+        picture(pic, ref);
+      },
     };
   }
 

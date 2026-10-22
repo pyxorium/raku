@@ -34,6 +34,15 @@ export function parseCodedList(json) {
   return { salt: json.salt, accounts: new Set(json.accounts), tiles: new Set(json.tiles) };
 }
 
+// Labels that blur an account's pictures (from Bluesky's moderation service, or the account's own self-labels),
+// the same values as posts.js uses for a post's pictures.
+const ADULT = new Set(['porn', 'sexual', 'nudity', 'graphic-media', 'gore']);
+/** Does an account's labels ask for its pictures to be blurred? */
+export function blurringLabels(labels, did, now = Date.now()) {
+  return (Array.isArray(labels) ? labels : []).some((l) => l && !l.neg && !(l.exp && Date.parse(l.exp) <= now)
+    && (l.src === BLUESKY_MODERATION || l.src === did) && ADULT.has(l.val));
+}
+
 /** Is this label one of Bluesky's "hide this account" labels, still in force? */
 export function hidingLabel(label, now = Date.now()) {
   if (!label || label.src !== BLUESKY_MODERATION || label.neg) return false;
@@ -86,21 +95,27 @@ export function createModeration({ fetchImpl = globalThis.fetch, listUrl = HIDE_
   // Bluesky's public profile for an account: whether its moderation hides the account, and (stage 2)
   // the avatar and display name for an account's page and kept-account chips. Avatars are only taken
   // from Bluesky's own picture server.
+  // (stage 6c) also the account's checked handle (Bluesky checks handles both ways; "handle.invalid" when not)
+  // and whether its labels blur its pictures.
+  const fromView = (v) => ({
+    hidden: (v?.labels || []).some((l) => hidingLabel(l, now())),
+    avatar: typeof v?.avatar === 'string' && v.avatar.startsWith('https://cdn.bsky.app/') ? v.avatar : null,
+    displayName: typeof v?.displayName === 'string' ? v.displayName.slice(0, 80) : '',
+    handle: typeof v?.handle === 'string' && v.handle !== 'handle.invalid' && v.handle.length <= 253 ? v.handle.toLowerCase() : '',
+    blur: blurringLabels(v?.labels, v?.did, now()),
+  });
   async function profile(did) {
     const k = bsky.get(did);
     if (k && now() - k.at < MODERATION_KEEP_MS) return k.profile;
-    const shown = { hidden: false, avatar: null, displayName: '' };
+    const shown = { hidden: false, avatar: null, displayName: '', handle: '', blur: false };
     let answer = shown;
     try {
       const r = await fetchJson(`${BLUESKY_API}/xrpc/app.bsky.actor.getProfile?actor=${encodeURIComponent(did)}`, {
         timeoutMs: 5000, maxBytes: 256 * 1024, fetchImpl,
       });
       if (r.status === 400 && /AccountTakedown/.test(r.json?.error || '')) answer = { ...shown, hidden: true };
-      else if (r.ok) {
-        const avatar = typeof r.json?.avatar === 'string' && r.json.avatar.startsWith('https://cdn.bsky.app/') ? r.json.avatar : null;
-        const displayName = typeof r.json?.displayName === 'string' ? r.json.displayName.slice(0, 80) : '';
-        answer = { hidden: (r.json?.labels || []).some((l) => hidingLabel(l, now())), avatar, displayName };
-      } else if (r.status >= 500) return shown;     // not kept: ask again next time
+      else if (r.ok) answer = fromView({ ...r.json, did });
+      else if (r.status >= 500) return shown;     // not kept: ask again next time
     } catch {
       return shown;                                  // can't reach Bluesky: show the tile, don't keep the answer
     }
@@ -108,6 +123,42 @@ export function createModeration({ fetchImpl = globalThis.fetch, listUrl = HIDE_
     return answer;
   }
   const hiddenByBluesky = async (did) => (await profile(did)).hidden;
+
+  /** Many accounts at once (stage 6c, Recent tiles): one request for every 25 (getProfiles), answers kept as
+   *  profile()'s. An account missing from the answer (taken down, deleted) is asked on its own, which says why.
+   *  → Map did -> profile */
+  async function profiles(dids) {
+    const out = new Map();
+    const ask = [];
+    for (const did of new Set(dids)) {
+      const k = bsky.get(did);
+      if (k && now() - k.at < MODERATION_KEEP_MS) out.set(did, k.profile); else ask.push(did);
+    }
+    for (let i = 0; i < ask.length; i += 25) {
+      const group = ask.slice(i, i + 25);
+      let views = null;
+      try {
+        const q = group.map((d) => `actors=${encodeURIComponent(d)}`).join('&');
+        const r = await fetchJson(`${BLUESKY_API}/xrpc/app.bsky.actor.getProfiles?${q}`, { timeoutMs: 8000, maxBytes: 2 * 1024 * 1024, fetchImpl });
+        if (r.ok && Array.isArray(r.json?.profiles)) views = r.json.profiles;
+      } catch { views = null; }
+      const got = new Map((views || []).filter((v) => v && typeof v.did === 'string').map((v) => [v.did, v]));
+      const alone = [];
+      for (const did of group) {
+        if (got.has(did)) {
+          const p = fromView(got.get(did));
+          bsky.set(did, { at: now(), profile: p });
+          out.set(did, p);
+        } else if (views === null) {
+          out.set(did, { hidden: false, avatar: null, displayName: '', handle: '', blur: false });   // Bluesky unreachable: shown, not kept (as profile())
+        } else alone.push(did);                       // missing from the answer: asked alone, which says why
+      }
+      // all together, not one after another
+      const answers = await Promise.all(alone.map((did) => profile(did)));
+      alone.forEach((did, i) => out.set(did, answers[i]));
+    }
+    return out;
+  }
 
   /** Is this tile (or its whole account) hidden? Never says which list or why. */
   async function isHidden(did, rkey) {
@@ -121,7 +172,7 @@ export function createModeration({ fetchImpl = globalThis.fetch, listUrl = HIDE_
     return a || b;
   }
 
-  return { refresh, isHidden, isAccountHidden, onHideList, hiddenByBluesky, profile, get loaded() { return !!list; } };
+  return { refresh, isHidden, isAccountHidden, onHideList, hiddenByBluesky, profile, profiles, get loaded() { return !!list; } };
 }
 
 // For the first screen's card pictures (not tiles): plain picture types only, checked by their first bytes.

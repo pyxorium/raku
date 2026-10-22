@@ -265,7 +265,19 @@ export const MODERATION_SERVICES = Object.freeze([BLUESKY_MODERATION]);
 // searches (Enter in the address box, or the search box on Discover); nothing is sent while typing.
 export const SEARCH = Object.freeze({ name: 'appmosphe.re', url: 'https://appmosphe.re/api/search', max: 24, maxBytes: 1024 * 1024 });
 // Following (Q91): the newest few tiles of each account kept on your shelf, a few accounts at a time.
-export const FOLLOWING = Object.freeze({ perAccount: 10, max: 60, keepMs: 5 * 60 * 1000, seenKey: 'raku-following-seen' });
+export const FOLLOWING = Object.freeze({ perAccount: 10, max: 60, keepMs: 5 * 60 * 1000 });
+// Recent tiles (stage 6c, Q106 to Q110): appmosphe.re's list of every tile it has seen, newest first by each
+// tile's createdAt, 30 a page (?page=N), shown in appmosphe.re's own order. Cards only; pictures are
+// appmosphe.re's copies (/img/), drawn as ordinary pictures straight from appmosphe.re (Q122: its /img/ answers
+// carry no CORS header, so they can't be downloaded and checked like the other card pictures; an <img> can't run
+// anything, an SVG included). The page policy allows pictures from RECENT.imgOrigin for this.
+export const RECENT = Object.freeze({
+  name: 'appmosphe.re', url: 'https://appmosphe.re/api/tiles', imgPrefix: 'https://appmosphe.re/img/', imgOrigin: 'https://appmosphe.re',
+  keepMs: 5 * 60 * 1000, maxBytes: 2 * 1024 * 1024, maxPages: 100,
+});
+// "Last visit" marks for Following and Recent tiles (marks.js): kept on this device only (Q111), in one entry.
+// Following's older entry (raku-following-seen) moves in the first time it's read.
+export const MARKS = Object.freeze({ key: 'raku-marks', legacy: Object.freeze({ following: 'raku-following-seen' }) });
 // Where a post opens outside Raku (Q90; chosen in the link message, Q98; Bluesky by default). Northsky joins once
 // its app's address for posts is confirmed. Every one of these apps
 // shows a post at https://<host>/profile/<handle or DID>/post/<record key>.
@@ -302,7 +314,8 @@ export function loadSourceOverride(loc = globalThis.location) {
 // The page's own security policy, a <meta> tag on the built page (GitHub Pages can't send headers;
 // frame-ancestors can't be set this way, so src/frame-guard.js refuses to run inside a frame instead).
 // - scripts and styles only from Raku itself;
-// - pictures only Raku's own, made here from downloaded bytes (blob:), or avatars from Bluesky's picture server;
+// - pictures only Raku's own, made here from downloaded bytes (blob:), avatars from Bluesky's picture server, or
+//   (stage 6c) Recent tiles' pictures from appmosphe.re's /img/ copies;
 // - connections over https (lookups, the authors' account servers, Bluesky's public API), and the tables'
 //   own relays (stage 5: wss://relay.daisy.thunderbird.cafe/), named one by one;
 // - frames only from the tile loading server.
@@ -313,7 +326,7 @@ export function pageCsp(loadDomain = TILE_LOAD_DOMAIN, scheme = 'https', relays 
     "default-src 'self'",
     "script-src 'self'",
     "style-src 'self'",
-    "img-src 'self' blob: data: https://cdn.bsky.app",
+    `img-src 'self' blob: data: https://cdn.bsky.app ${RECENT.imgOrigin}`,
     "font-src 'self'",
     ["connect-src 'self' https:", ...relays].join(' '),
     `frame-src ${scheme}://${loadDomain} ${scheme}://*.${base}`,

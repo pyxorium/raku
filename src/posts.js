@@ -193,6 +193,12 @@ export function readPost(view, { services = MODERATION_SERVICES, now = Date.now(
   };
 }
 
+/** For a card's line (stage 6c): "just now", "3h ago", "2d ago", or a date on its own ("Oct 3"). */
+export function whenText(iso, now = Date.now()) {
+  const a = ago(iso, now);
+  return !a ? '' : a === 'now' ? 'just now' : /^\d+[mhd]$/.test(a) ? `${a} ago` : a;
+}
+
 /** "now", "5m", "3h", "2d", "Oct 3", "Oct 3 2025" */
 export function ago(iso, now = Date.now()) {
   const t = Date.parse(iso);

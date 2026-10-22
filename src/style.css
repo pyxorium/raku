@@ -581,6 +581,13 @@ a { color: var(--glaze-light); }
 .dv-mini-title { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dv-mini-sub { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .dv-about { padding: 4px 4px 0; color: #8d8172; font-size: 12.5px; }
+/* stage 6c: Recent tiles. A tile with only an icon shows it whole, smaller, on the plain background; an account
+   labelled adult or graphic has its pictures blurred. */
+.card-pic.is-icon { display: grid; place-items: center; }
+.card-pic.is-icon img { width: 38%; height: auto; max-height: 70%; object-fit: contain; border-radius: 14%; }
+.card-pic.blurred img, .dv-mini-pic.blurred img { filter: blur(22px) saturate(.6); transform: scale(1.15); }
+.dv-mini-pic.is-icon img { object-fit: contain; padding: 3px; }
+.dv-end { margin-top: 14px; }
 .dv-about p { margin: 0 0 6px; }
 
 /* narrower: the sources as icons, then no right column; a phone: one column, the sources as chips */

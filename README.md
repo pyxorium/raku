@@ -227,6 +227,30 @@ Plan and decisions: `claude/raku-stage6-plan.md` (Q84 to Q96).
   box), or Enter on an empty address box while on a search page, goes back to Discover and drops "Search
   results" from the sources. Searches you ran still come back with Back.
 
+## Stage 6c, step 1 (Oct 22 2026): Recent tiles
+
+Plan and decisions: `claude/raku-stage6c-plan.md` (Q106 to Q111).
+
+- **Recent tiles** (`raku:discover/recent`, a clock in the sources, between Tile news and Following): the newest
+  tiles on the network, as appmosphe.re lists them (`GET https://appmosphe.re/api/tiles?page=N`, 30 a page,
+  newest first by each tile's `createdAt`), in appmosphe.re's own order, with More for the next page and
+  "That's every tile appmosphe.re lists." after the last. Cards only: a card opens the tile's latest version
+  from its author's own server, as everywhere else.
+- **What a card shows:** the tile's first screenshot (else its icon, drawn whole), name, description, "by
+  @handle" and how long ago it was made. Pictures come only from appmosphe.re's own copies (`/img/`), drawn as
+  ordinary pictures straight from appmosphe.re, with no referrer (its `/img/` answers carry no CORS header, so a
+  page can't download them to check them like the other card pictures; a picture drawn this way can't run
+  anything). The page policy allows pictures from `https://appmosphe.re` for this.
+- **Moderation:** tiles on the coded hide list (or whole accounts on it) are left out; each author's Bluesky
+  account is checked in one request per 25 authors (`getProfiles`): a hiding label leaves out all their tiles,
+  an adult or graphic label blurs their pictures. The handle shown is the one Bluesky checked (else the
+  account's DID).
+- **"New"** on tiles made since your last visit to Recent tiles, as in Following. The last visits (Following's
+  and Recent tiles') now live in one entry on this device, `raku-marks` (`src/marks.js`, the one door to them;
+  Following's older `raku-following-seen` moves in by itself). They stay on this device even when your shelf
+  moves to your account later (Q111).
+- Tiles already loaded in Recent tiles count in search's "Already in Raku".
+
 ## Try it
 
 ```
@@ -258,7 +282,7 @@ and open http://127.0.0.1:5181/.
 | `src/tabs.js` | the tabs as data (history, the cap, the page address) |
 | `src/app.js` | the page: tab strip, address bar, panes, the first screen |
 | `src/frame-guard.js` | refusing to run inside another site's frame |
-| `src/icons.js` | Raku's own icons, drawn (back, forward, reload, new tab, close, shelf, star, person; stage 6: compass, search, news, people) |
+| `src/icons.js` | Raku's own icons, drawn (back, forward, reload, new tab, close, shelf, star, person; stage 6: compass, search, news, people; stage 6c: clock) |
 | `src/shelf-store.js` | your shelf as data (this browser's storage, Export and Import) |
 | `src/shelf-pages.js` | the Shelf's pages: your shelf and an account's tiles |
 | `src/typeahead.js` | handle suggestions under the address box (adapted copy of Daisy's) |
@@ -267,8 +291,10 @@ and open http://127.0.0.1:5181/.
 | `src/signin-ui.js` | the sign-in form, Raku's dialog, the blocked-window choices |
 | `src/account-menu.js` | the account button and its menu |
 | `src/cards.js` | tile cards and account chips, pictures loaded as they come near |
-| `src/discover.js` | stage 6: the Discover page (sources, Following, search results, Tile news, previews) |
+| `src/discover.js` | stage 6: the Discover page (sources, Tile news, Recent tiles, Following, search results, previews) |
 | `src/following.js` | the newest tiles of the accounts on your shelf, and "New since your last visit" |
+| `src/recent.js` | stage 6c: Recent tiles, appmosphe.re's list read carefully and moderated |
+| `src/marks.js` | stage 6c: when you last visited Following and Recent tiles (this device only) |
 | `src/search.js` | search: matches here in the browser, then appmosphe.re (only the tile addresses are read) |
 | `src/posts.js` | a post as data: text and facets, pictures, link cards, a linked tile, labels |
 | `src/post-card.js` | a post drawn as a card |
@@ -290,7 +316,8 @@ the saved records passing the games' own checks; the phone). They need a bundle 
 top of each file. For the sign-in checks the bundle swaps in a stand-in for the sign-in library:
 `esbuild src/main.js --bundle --format=esm --alias:@atproto/oauth-client-browser=./test/browser/oauth-standin.js`.
 
-`check_discover.py` (85 checks, stage 6) runs the same way as `check_page.py`: Discover's columns at four widths,
+`check_discover.py` (113 checks, stage 6 and 6c) runs the same way as `check_page.py`: Discover's columns at four widths,
+Recent tiles (appmosphe.re's order, hidden ones, checked handles, blurred and icon pictures, More, "New"),
 Following (order, hidden ones, "New"), search from the box and from Discover (nothing sent while typing, one request
 with only the words), a word with a dot as a handle first, Tile news from a stand-in feed with a post linking a tile,
 labels, replies with their thread, the link message (Cancel, Escape, Open with no opener), a post's address in the box, the phone.

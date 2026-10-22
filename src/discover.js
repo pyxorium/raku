@@ -1,24 +1,27 @@
 // Discover (stage 6, claude/raku-stage6-plan.md): a page inside a tab, like your shelf.
 //
 // Three columns on a wide window (the owner's idea, like Bluesky's main screen, Q85 and Q86):
-//   left    the sources: Tile news (step 6b), Following, Search results;
+//   left    the sources: Tile news (step 6b), Recent tiles (stage 6c), Following, Search results;
 //   centre  the search box (Q95 C) and the chosen source, widest;
 //   right   previews of the other sources (the latest few of each); clicking one brings it to the centre.
 // Narrower windows: the left column shrinks to icons, then the right column drops (style.css). A phone: one
 // column, with the sources as chips across the top. Nothing on this page runs a tile: cards only, and a tile
 // opens in the tab when its card is clicked.
 //
-// Addresses (address.js): raku:discover, raku:discover/following, raku:discover/news, raku:search/<words>.
+// Addresses (address.js): raku:discover, raku:discover/news, raku:discover/recent, raku:discover/following,
+// raku:search/<words>.
 
-import { PICKS, SEARCH, feedUri, postApp } from './config.js';
+import { PICKS, SEARCH, RECENT, feedUri, postApp } from './config.js';
 import { atUri, discoverUri, searchUri, accountPageUri, parseAddress, SHELF_URI, DISCOVER_URI } from './address.js';
 import { describeTile } from './tiles.js';
 import { NetError } from './net.js';
 import { h, bannerCid } from './cards.js';
 import { icon } from './icons.js';
 import { createFollowing } from './following.js';
+import { createRecent } from './recent.js';
+import { createMarks } from './marks.js';
 import { createPublicReads } from './bluesky.js';
-import { readPost, threadContext } from './posts.js';
+import { readPost, threadContext, whenText } from './posts.js';
 import { postCard, threadCard } from './post-card.js';
 import { searchAppmosphere, localMatches } from './search.js';
 
@@ -26,7 +29,9 @@ const SEARCH_KEEP_MS = 5 * 60 * 1000;
 
 /** What Discover keeps while Raku is open (shared by every Discover tab). */
 export function createDiscover({ resolver, moderation, shelf, storage = null, loc = globalThis.location, fetchImpl = globalThis.fetch } = {}) {
-  const following = createFollowing({ resolver, moderation, shelf, storage });
+  const marks = createMarks({ storage });
+  const following = createFollowing({ resolver, moderation, shelf, storage, marks });
+  const recent = createRecent({ moderation, marks, fetchImpl });
   const reads = createPublicReads({ fetchImpl });
   const feed = feedUri(loc);
   const searches = new Map();   // query -> { at, remote, error }
@@ -64,7 +69,8 @@ export function createDiscover({ resolver, moderation, shelf, storage = null, lo
     return value;
   }
 
-  /** Tiles Raku already has in hand, for "On your shelf" matches: the picks and Following's tiles. */
+  /** Tiles Raku already has in hand, for "Already in Raku" matches: the picks, Following's tiles and the
+   *  Recent tiles already loaded. */
   async function inHand() {
     const out = [];
     const picks = await Promise.all(PICKS.map(async (uri) => {
@@ -80,11 +86,12 @@ export function createDiscover({ resolver, moderation, shelf, storage = null, lo
       const d = describeTile(it.record);
       if (d.ok) out.push({ did: it.did, rkey: it.rkey, name: d.name, description: d.description, by: '' });
     }
+    for (const t of recent.loaded()) out.push({ did: t.did, rkey: t.rkey, name: t.name, description: t.description, by: t.handle });
     return out;
   }
 
   return {
-    following, reads, feed, news, remote, inHand,
+    following, recent, reads, feed, news, remote, inHand,
     get lastQuery() { return lastQuery; },
     set lastQuery(q) { lastQuery = q; },
     cachedSearch: (q) => searches.get(q) || null,
@@ -94,6 +101,7 @@ export function createDiscover({ resolver, moderation, shelf, storage = null, lo
 
 const SOURCES = {
   news: { label: 'Tile news', icon: 'news', blurb: 'Posts about web tiles, from the Web Tiles feed.' },
+  recent: { label: 'Recent tiles', icon: 'clock', blurb: `The newest tiles on the network, as listed by ${RECENT.name}.` },
   following: { label: 'Following', icon: 'people', blurb: 'New tiles from the accounts on your shelf, newest first.' },
   search: { label: 'Search results', icon: 'search', blurb: '' },
 };
@@ -101,7 +109,7 @@ const SOURCES = {
 /** Draws Discover in a tab. ctx: the page context (app.js pageContext) with discover and linkMessage. */
 export function drawDiscover(ctx, { source = null, query = '' } = {}) {
   const { p, tab, tabs, discover, drawChrome } = ctx;
-  const sources = [...(discover.feed ? ['news'] : []), 'following'];
+  const sources = [...(discover.feed ? ['news'] : []), 'recent', 'following'];
   if (source === 'search') discover.lastQuery = query;
   if (discover.lastQuery) sources.push('search');
   const current = source || sources[0];
@@ -143,6 +151,7 @@ export function drawDiscover(ctx, { source = null, query = '' } = {}) {
 
   if (current === 'following') drawFollowing(ctx, centre);
   else if (current === 'news') drawNews(ctx, centre);
+  else if (current === 'recent') drawRecent(ctx, centre);
   else drawSearch(ctx, centre, query);
 
   const others = sources.filter((s) => s !== current);
@@ -229,6 +238,59 @@ function limiter(max) {
     }
   };
   return (job) => { queue.push(job); pump(); };
+}
+
+// ---------- Recent tiles (stage 6c) ----------
+function recentCard(ctx, t, { badge = '' } = {}) {
+  const { kit, tabs, tab, openNew } = ctx;
+  const card = kit.tileCard({ name: t.name, description: t.description, by: t.handle || t.did, when: whenText(t.createdAt), badge,
+    onOpen: () => tabs.go(tab.id, t.uri), onOpenNew: () => openNew(t.uri) });
+  if (t.picture) card.picture({ url: t.picture }, { look: `${t.pictureIsIcon ? 'icon' : ''} ${t.blur ? 'blur' : ''}` });
+  card.el.dataset.uri = t.uri;
+  return card;
+}
+
+function drawRecent(ctx, into) {
+  const { discover, alive } = ctx;
+  into.append(h('div', { class: 'dv-head' }, h('h1', {}, 'Recent tiles'), h('p', { class: 'sub' }, SOURCES.recent.blurb)));
+  const status = h('p', { class: 'dv-status' }, 'Loading recent tiles…');
+  const grid = h('div', { class: 'cards' });
+  const more = h('button', { type: 'button', class: 'more', hidden: true }, 'More');
+  const end = h('p', { class: 'dv-status dv-end', hidden: true }, `That's every tile ${RECENT.name} lists.`);
+  const foot = h('p', { class: 'dv-foot' }, `Listed by ${RECENT.name}.`);
+  into.append(status, grid, more, end, foot);
+  let next = 1;
+  const shown = new Set();
+  const page = async () => {
+    more.disabled = true;
+    more.textContent = 'Loading…';
+    try {
+      const r = await discover.recent.load(next);
+      if (!alive()) return;
+      for (const t of r.tiles) {
+        if (shown.has(t.uri)) continue;     // the list moved while reading (a new tile pushed one onto the next page)
+        shown.add(t.uri);
+        grid.append(recentCard(ctx, t, { badge: discover.recent.isNew(t) ? 'New' : '' }).el);
+      }
+      if (next === 1) discover.recent.markSeen();
+      next = r.page + 1;
+      status.hidden = !!grid.childElementCount;
+      status.textContent = grid.childElementCount ? '' : 'No tiles to show yet.';
+      more.hidden = !r.more;
+      end.hidden = r.more || !grid.childElementCount;
+    } catch (err) {
+      if (!alive()) return;
+      status.hidden = false;
+      status.textContent = `${grid.childElementCount ? 'More tiles' : 'Recent tiles'} couldn't be loaded. `;
+      status.append(h('button', { type: 'button', class: 'linkish', onclick: () => page() }, 'Try again'));
+      more.hidden = true;
+    } finally {
+      more.disabled = false;
+      more.textContent = 'More';
+    }
+  };
+  more.addEventListener('click', page);
+  page();
 }
 
 // ---------- Tile news (shown once FEED is set, step 6b; ?feed= on this computer) ----------
@@ -355,7 +417,7 @@ function preview(ctx, source, uri) {
     h('span', { class: 'dv-pv-head' }, icon(SOURCES[source].icon, 16), h('span', {}, source === 'search' ? `Search: ${discover.lastQuery}` : SOURCES[source].label), count),
     list);
   const row = (title, sub, picRef) => {
-    const pic = picRef ? h('span', { class: 'dv-mini-pic' }) : null;
+    const pic = picRef ? h('span', { class: `dv-mini-pic${picRef.look ? ` ${picRef.look}` : ''}` }) : null;
     if (pic) kit.picture(pic, picRef);
     return h('span', { class: 'dv-mini' }, pic, h('span', { class: 'dv-mini-words' }, h('span', { class: 'dv-mini-title' }, title), sub ? h('span', { class: 'dv-mini-sub' }, sub) : null));
   };
@@ -375,6 +437,13 @@ function preview(ctx, source, uri) {
         rows.push(row(d.name, hd ? `@${hd}` : '', acct ? { pds: acct.pds, did: it.did, cid: bannerCid(d.manifest) } : null));
       }
       if (alive()) fill(rows, 'No tiles yet.');
+    } else if (source === 'recent') {
+      const r = await discover.recent.load(1);
+      if (!alive()) return;
+      const n = r.tiles.filter((t) => discover.recent.isNew(t)).length;
+      count.textContent = n ? `${n} new` : '';
+      fill(r.tiles.slice(0, 3).map((t) => row(t.name, t.handle ? `@${t.handle}` : whenText(t.createdAt),
+        t.picture ? { url: t.picture, look: [t.pictureIsIcon ? 'is-icon' : '', t.blur ? 'blurred' : ''].filter(Boolean).join(' ') } : null)), 'No tiles yet.');
     } else if (source === 'news') {
       const r = await discover.news();
       if (!alive()) return;

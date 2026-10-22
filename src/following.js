@@ -4,9 +4,10 @@
 // Raku asks each kept account's own server for its latest few tiles (FOLLOWING.perAccount), four accounts at
 // a time, and keeps the answers for a few minutes; nothing goes anywhere else. Hidden accounts and tiles
 // (the coded hide list, Bluesky's moderation) are left out, and so are records Raku can't run.
-// "Your last visit" is remembered in this browser only (FOLLOWING.seenKey); the first visit marks nothing.
+// "Your last visit" is remembered on this device only (marks.js, stage 6c); the first visit marks nothing.
 
 import { FOLLOWING } from './config.js';
+import { createMarks } from './marks.js';
 import { atUri } from './address.js';
 import { describeTile } from './tiles.js';
 
@@ -41,10 +42,11 @@ function limiter(max) {
   return (job) => new Promise((ok, no) => { queue.push({ job, ok, no }); pump(); });
 }
 
-export function createFollowing({ resolver, moderation, shelf, storage = null, now = () => Date.now(), limits = FOLLOWING } = {}) {
+export function createFollowing({ resolver, moderation, shelf, storage = null, marks = null, now = () => Date.now(), limits = FOLLOWING } = {}) {
+  marks = marks || createMarks({ storage, now });
   let kept = null;          // { at, key, value }
   let loading = null;
-  let sessionSeen;          // the "last visit" this page load compares against (read once, then today's visit is stored)
+  let sessionSeen = null;   // the "last visit" this page load compares against (asked of the marks when loading)
 
   /** Everyone's newest tiles. → { items: [{ did, rkey, uri, record, time }], accounts, unreachable } */
   async function load({ fresh = false } = {}) {
@@ -54,6 +56,7 @@ export function createFollowing({ resolver, moderation, shelf, storage = null, n
     if (loading && loading.key === key) return loading.p;
     const run = limiter(4);
     const p = (async () => {
+      sessionSeen = await marks.lastSeen('following');
       let unreachable = 0;
       const lists = await Promise.all(accounts.map((a) => run(async () => {
         try {
@@ -80,20 +83,10 @@ export function createFollowing({ resolver, moderation, shelf, storage = null, n
     return p;
   }
 
-  /** The last visit's time (for "New"), the same all through this page load; null on a first visit. */
-  function lastSeen() {
-    if (sessionSeen === undefined) {
-      let v = null;
-      try { v = Number(storage?.getItem(limits.seenKey)) || null; } catch { v = null; }
-      sessionSeen = v;
-    }
-    return sessionSeen;
-  }
+  /** The last visit's time (for "New"), the same all through this page load; null on a first visit (known once loaded). */
+  const lastSeen = () => sessionSeen;
   /** Today's visit: remembered for next time (this page load keeps comparing against the earlier one). */
-  function markSeen() {
-    lastSeen();
-    try { storage?.setItem(limits.seenKey, String(now())); } catch { /* fine: no markers next time */ }
-  }
+  const markSeen = () => marks.markSeen('following');
   const isNew = (item) => { const s = lastSeen(); return !!s && item.time > s; };
 
   return { load, lastSeen, markSeen, isNew, get cached() { return kept ? kept.value : null; } };
