@@ -1,7 +1,8 @@
 // Discover (stage 6, claude/raku-stage6-plan.md): a page inside a tab, like your shelf.
 //
 // Three columns on a wide window (the owner's idea, like Bluesky's main screen, Q85 and Q86):
-//   left    the sources: Tile news (step 6b), Recent tiles (stage 6c), Following, Search results;
+//   left    the sources: Tile news (step 6b), Recent tiles (stage 6c), Following, Search results; then, set
+//           apart at the bottom, Make a tile (stage 6c: a page of tile makers, not a reading source);
 //   centre  the search box (Q95 C) and the chosen source, widest;
 //   right   previews of the other sources (the latest few of each); clicking one brings it to the centre.
 // Narrower windows: the left column shrinks to icons, then the right column drops (style.css). A phone: one
@@ -9,9 +10,9 @@
 // opens in the tab when its card is clicked.
 //
 // Addresses (address.js): raku:discover, raku:discover/news, raku:discover/recent, raku:discover/following,
-// raku:search/<words>.
+// raku:discover/make, raku:search/<words>.
 
-import { PICKS, SEARCH, RECENT, feedUri, postApp } from './config.js';
+import { PICKS, SEARCH, RECENT, MAKE, siteLabel, feedUri, postApp } from './config.js';
 import { atUri, discoverUri, searchUri, accountPageUri, parseAddress, parsePost, SHELF_URI, DISCOVER_URI } from './address.js';
 import { describeTile } from './tiles.js';
 import { NetError } from './net.js';
@@ -104,6 +105,7 @@ const SOURCES = {
   recent: { label: 'Recent tiles', icon: 'clock', blurb: `The newest tiles on the network, as listed by ${RECENT.name}.` },
   following: { label: 'Following', icon: 'people', blurb: 'New tiles from the accounts on your shelf, newest first.' },
   search: { label: 'Search results', icon: 'search', blurb: '' },
+  make: { label: 'Make a tile', icon: 'brush', blurb: '' },
 };
 
 /** Draws Discover in a tab. ctx: the page context (app.js pageContext) with discover and linkMessage. */
@@ -115,7 +117,7 @@ export function drawDiscover(ctx, { source = null, query = '' } = {}) {
   const current = source || sources[0];
   const uriFor = (s) => (s === 'search' ? searchUri(discover.lastQuery) : discoverUri(s));
 
-  p.title = current === 'search' ? `Search: ${query}` : 'Discover';
+  p.title = current === 'search' ? `Search: ${query}` : current === 'make' ? 'Make a tile' : 'Discover';
   p.shownAddress = current === 'search' ? query : '';
   p.keep = null;
   p.state = 'ready';
@@ -137,21 +139,27 @@ export function drawDiscover(ctx, { source = null, query = '' } = {}) {
   } }, box, h('button', { type: 'submit', class: 'dv-go', title: 'Search', 'aria-label': 'Search' }, icon('search', 18)));
   // the box's own × (a search box's clear button) empties it: leave search too
   box.addEventListener('search', () => { if (!box.value.trim() && discover.lastQuery) leave(); });
+  const srcButton = (s, extra = '') => h('button', {
+    type: 'button', class: `dv-src${extra}${s === current ? ' on' : ''}`, 'data-source': s, title: SOURCES[s].label,
+    'aria-current': s === current ? 'page' : null, onclick: () => tabs.go(tab.id, uriFor(s)),
+  }, icon(SOURCES[s].icon, 20), h('span', { class: 'dv-src-label' }, SOURCES[s].label));
+  // Make a tile sits apart at the bottom of the column (an icon when narrow, the last chip on a phone).
   const nav = h('nav', { class: 'dv-sources', 'aria-label': 'Discover' },
-    sources.map((s) => h('button', {
-      type: 'button', class: `dv-src${s === current ? ' on' : ''}`, 'data-source': s, title: SOURCES[s].label,
-      'aria-current': s === current ? 'page' : null, onclick: () => tabs.go(tab.id, uriFor(s)),
-    }, icon(SOURCES[s].icon, 20), h('span', { class: 'dv-src-label' }, SOURCES[s].label))));
+    sources.map((s) => srcButton(s)), h('span', { class: 'dv-src-gap', 'aria-hidden': 'true' }), srcButton('make', ' dv-make'));
   const left = h('aside', { class: 'dv-left' }, nav);
 
   // ---- centre and right ----
   const centre = h('section', { class: 'dv-centre', 'aria-label': SOURCES[current].label }, form);
   const right = h('aside', { class: 'dv-right', 'aria-label': 'More to discover' });
   p.el.append(h('div', { class: 'discover', 'data-source': current }, left, centre, right));
+  // On a phone the sources are a row of chips that scrolls sideways: bring the chosen one into view.
+  const on = nav.querySelector('.dv-src.on');
+  if (on && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = Math.max(0, on.offsetLeft - nav.offsetLeft - 16);
 
   if (current === 'following') drawFollowing(ctx, centre);
   else if (current === 'news') drawNews(ctx, centre);
   else if (current === 'recent') drawRecent(ctx, centre);
+  else if (current === 'make') drawMake(ctx, centre);
   else drawSearch(ctx, centre, query);
 
   const others = sources.filter((s) => s !== current);
@@ -238,6 +246,27 @@ function limiter(max) {
     }
   };
   return (job) => { queue.push(job); pump(); };
+}
+
+// ---------- Make a tile (stage 6c, Q101/Q102) ----------
+// Raku's own list of tile makers (config.js MAKE): Open goes straight to a new tab, no link message.
+function drawMake(ctx, into) {
+  const newTab = (url, kids, cls) => h('a', { href: url, target: '_blank', rel: 'noopener noreferrer', referrerpolicy: 'no-referrer', class: cls }, kids);
+  into.append(h('div', { class: 'dv-head' }, h('h1', {}, 'Make a tile'),
+    h('p', { class: 'sub mk-intro' }, MAKE.intro, ' ', newTab(MAKE.learn.url, MAKE.learn.text, 'mk-learn'))));
+  for (const g of MAKE.groups) {
+    const list = h('div', { class: 'mk-list' });
+    for (const m of g.makers) {
+      list.append(h('article', { class: 'mk-card', 'data-maker': m.id },
+        h('span', { class: `mk-mark mk-${m.glaze}`, 'aria-hidden': 'true' }, m.mark),
+        h('div', { class: 'mk-words' },
+          h('h3', { class: 'mk-name' }, m.name),
+          h('p', { class: 'mk-site' }, siteLabel(m.url)),
+          h('p', { class: 'mk-line' }, m.line)),
+        newTab(m.url, ['Open', icon('newtab', 16)], 'mk-open')));
+    }
+    into.append(h('section', { class: 'dv-part mk-group' }, h('h2', {}, g.title), list));
+  }
 }
 
 // ---------- Recent tiles (stage 6c) ----------

@@ -3,7 +3,8 @@
 # Discover box: your shelf first, then appmosphe.re, only on Enter), Tile news from a stand-in feed (?feed=,
 # this computer only) with a post linking a tile, labels and the link message, and a post's address in the box;
 # Recent tiles (stage 6c: appmosphe.re's list as it is, the hide list and account labels, pictures only from
-# appmosphe.re's /img/ copies, More, "New" since the last visit).
+# appmosphe.re's /img/ copies, More, "New" since the last visit); Make a tile (the makers in two groups,
+# Open in a new tab, set apart at the bottom of the sources).
 # Everything outside is a Playwright route (account directory, account servers, Bluesky's public API, its
 # picture server, appmosphe.re). Tiles aren't run here (check_page.py does that).
 # Usage: python3 test/browser/check_discover.py <work folder>   (servers.mjs and the replica already running,
@@ -171,7 +172,7 @@ def route(r):
         if u.path.endswith('getBlob'):
             b = blobs.get(q.get('cid'))
             return r.fulfill(status=200 if b else 404, headers={**cors, 'content-type': 'application/octet-stream'}, body=b or b'')
-    if u.hostname in ('bsky.app', 'example.org', 'mu.social'):
+    if u.hostname in ('bsky.app', 'example.org', 'mu.social', 'atmosynth.at', 'treeline.world', 'foundry.thunderbird.cafe', 'dasl.ing') or (u.hostname == 'appmosphe.re' and u.path == '/publish'):
         return r.fulfill(status=200, headers={'content-type': 'text/html'}, body='<!doctype html><title>outside</title>')
     r.fulfill(status=404, headers=cors, body='')
 
@@ -198,7 +199,8 @@ with sync_playwright() as pw:
     b = pw.chromium.launch(args=['--host-resolver-rules=MAP *.localhost 127.0.0.1'])
     ctx = b.new_context(viewport={'width': 1400, 'height': 900})
     for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**',
-                 'https://appmosphe.re/**', 'https://typeahead.waow.tech/**', 'https://bsky.app/**', 'https://example.org/**', 'https://mu.social/**', 'https://evil.example/**']:
+                 'https://appmosphe.re/**', 'https://typeahead.waow.tech/**', 'https://bsky.app/**', 'https://example.org/**', 'https://mu.social/**', 'https://evil.example/**',
+                 'https://atmosynth.at/**', 'https://treeline.world/**', 'https://foundry.thunderbird.cafe/**', 'https://dasl.ing/**']:
         ctx.route(host, route)
     ctx.add_init_script(f"if (!sessionStorage.getItem('seeded')) {{ localStorage.setItem('raku-shelf', {json.dumps(SHELF)}); sessionStorage.setItem('seeded', '1'); }}")
     popups = []
@@ -224,7 +226,7 @@ with sync_playwright() as pw:
     page.wait_for_selector('.discover')
     check('Discover opens as a page in a tab, titled Discover', 'Discover' in page.title() and texts(page, '.tab.on .tab-title') == ['Discover'])
     check('the Discover button in the top bar shows it is on', page.eval_on_selector('.bar .nav-btn[title="Discover"]', 'b => b.classList.contains("on")'))
-    check('with the Web Tiles feed (step 6b) the sources are Tile news, Recent tiles (stage 6c) and Following', texts(page, '.dv-src') == ['Tile news', 'Recent tiles', 'Following'], str(texts(page, '.dv-src')))
+    check('with the Web Tiles feed (step 6b) the sources are Tile news, Recent tiles (stage 6c) and Following', texts(page, '.dv-src:not(.dv-make)') == ['Tile news', 'Recent tiles', 'Following'], str(texts(page, '.dv-src')))
     check('Recent tiles has the clock icon', page.query_selector('.dv-src[data-source="recent"] .icon-clock') is not None)
     wait_for(lambda: page.eval_on_selector_all('.dv-centre .card-title', 'els => els.length >= 3 && els.every(e => e.textContent !== "…")'), page=page)
     names = texts(page, '.dv-centre .card-title')
@@ -268,7 +270,7 @@ with sync_playwright() as pw:
     check('search: appmosphe.re\'s results looked up from the tiles\' servers; hidden and missing ones left out', theirs == ['Roller Coaster'], str(theirs))
     check('search: the line says what was sent where', 'Only the words you searched for were sent' in page.inner_text('.dv-foot'))
     check('search: the address box shows the words; the Discover box too', page.input_value('.addr') == 'coaster' and page.input_value('.dv-q') == 'coaster')
-    check('search: Search results joins the sources', texts(page, '.dv-src') == ['Tile news', 'Recent tiles', 'Following', 'Search results'] and page.eval_on_selector('.dv-src[data-source="search"]', 'b => b.classList.contains("on")'))
+    check('search: Search results joins the sources', texts(page, '.dv-src:not(.dv-make)') == ['Tile news', 'Recent tiles', 'Following', 'Search results'] and page.eval_on_selector('.dv-src[data-source="search"]', 'b => b.classList.contains("on")'))
     check('search: the right column previews Following, with its new count', wait_for(lambda: '1 new' in page.inner_text('.dv-preview[data-source="following"]'), page=page))
     check('...and the previews\' small banners', wait_for(lambda: page.eval_on_selector_all('.dv-preview[data-source="following"] .dv-mini-pic img', 'is => is.length === 3 && is.every(i => i.src.startsWith("blob:"))'), page=page))
     page.screenshot(path=str(OUT / 'd3-search-wide.png'))
@@ -367,6 +369,40 @@ with sync_playwright() as pw:
     page.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Results for “pebble”'")
     check('search: a tile already loaded in Recent tiles counts as "Already in Raku"', wait_for(lambda: 'Pebble Garden' in texts(page, '.dv-part:not([hidden]) .card-title'), page=page))
 
+    # ---------- Make a tile (stage 6c) ----------
+    srcs_all = lambda pg: pg.eval_on_selector_all('.dv-sources > *', 'es => es.map(e => e.dataset.source || e.className)')
+    check('Make a tile sits apart at the bottom of the sources, with the brush', srcs_all(page)[-2:] == ['dv-src-gap', 'make'] and page.query_selector('.dv-src[data-source="make"] .icon-brush') is not None, str(srcs_all(page)))
+    before_make = len(calls)
+    page.click('.dv-src[data-source="make"]')
+    page.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Make a tile'")
+    check('it opens raku:discover/make in the centre, the tab titled Make a tile', texts(page, '.dv-src.on') == ['Make a tile'] and texts(page, '.tab.on .tab-title') == ['Make a tile'] and 'raku%3Adiscover%2Fmake' in page.evaluate('location.hash'))
+    check('...the sentence on what a tile is, and "New to tiles?" (dasl.ing, a new tab)', page.inner_text('.mk-intro').startswith('A web tile is a small page or app stored in your own atproto account. Anyone can open it in a tile browser like Raku.')
+          and page.eval_on_selector('.mk-learn', 'a => [a.textContent, a.href, a.target, a.rel].join("|")') == 'New to tiles? Read about them at dasl.ing|https://dasl.ing/|_blank|noopener noreferrer')
+    groups = page.evaluate("() => [...document.querySelectorAll('.mk-group')].map(g => [g.querySelector('h2').textContent, [...g.querySelectorAll('.mk-name')].map(e => e.textContent)])")
+    check('two groups: No code needed (alphabetical), then From your own files', groups == [['No code needed', ['ATMOSYNTH', 'Treeline', 'Web Tile Foundry']], ['From your own files', ['appmosphe.re publish']]], str(groups))
+    check('each card: its site', texts(page, '.mk-site') == ['atmosynth.at', 'treeline.world', 'foundry.thunderbird.cafe', 'appmosphe.re/publish'], str(texts(page, '.mk-site')))
+    check('...a drawn mark in a glaze colour (no logos)', page.eval_on_selector_all('.mk-mark', 'ms => ms.map(m => m.textContent + ":" + m.className.split(" ")[1])') == ['A:mk-turquoise', 'T:mk-copper', 'F:mk-cream', 'a:mk-smoke']
+          and page.query_selector('.mk-card img') is None)
+    check('...one line on what it makes and how', all(len(t) > 40 for t in texts(page, '.mk-line')) and 'Share as webtile' in texts(page, '.mk-line')[1])
+    opens = page.eval_on_selector_all('.mk-open', 'as => as.map(a => [a.textContent.trim(), a.href, a.target, a.rel])')
+    check('...Open, to the maker\'s site in a new tab, with no opener', opens == [['Open', u, '_blank', 'noopener noreferrer'] for u in ['https://atmosynth.at/', 'https://treeline.world/', 'https://foundry.thunderbird.cafe/', 'https://appmosphe.re/publish']], str(opens))
+    check('nothing is asked of the makers\' sites until you open one', not [c for c in calls[before_make:] if any(h in c for h in ('atmosynth.at', 'treeline.world', 'foundry.thunderbird.cafe', 'appmosphe.re/publish', 'dasl.ing'))])
+    pv = page.eval_on_selector_all('.dv-preview', 'ps => ps.map(p => p.dataset.source)')
+    check('the right column previews the reading sources', pv[:3] == ['news', 'recent', 'following'] and 'make' not in pv, str(pv))
+    page.screenshot(path=str(OUT / 'd4d-make-wide.png'))
+    n0 = len(popups)
+    page.click('.mk-card[data-maker="treeline"] .mk-open')
+    pop = wait_for(lambda: popups[n0] if len(popups) > n0 else None, page=page)
+    if pop: pop.wait_for_load_state()
+    check('Open: the maker\'s site in a new tab, no link message (Raku\'s own list), no opener', pop is not None and pop.url == 'https://treeline.world/' and pop.evaluate('window.opener === null') and page.query_selector('.link-msg') is None, pop.url if pop else 'none')
+    if pop: pop.close()
+    page.set_viewport_size({'width': 1000, 'height': 800}); page.wait_for_timeout(300)
+    check('narrower: Make a tile is an icon at the bottom too', page.eval_on_selector('.dv-src[data-source="make"] .dv-src-label', 'e => getComputedStyle(e).display') == 'none' and page.is_visible('.dv-src[data-source="make"] .icon-brush'))
+    page.screenshot(path=str(OUT / 'd4e-make-1000.png'))
+    page.set_viewport_size({'width': 1400, 'height': 900})
+    page.click('.bar .nav-btn[title="Back"]'); page.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent !== 'Make a tile'")
+    check('Back leaves Make a tile', True)
+
     # ---------- widths ----------
     page.goto(RAKU + '#t=raku%3Adiscover%2Ffollowing&a=0'); page.wait_for_selector('.discover')
     page.set_viewport_size({'width': 1000, 'height': 800}); page.wait_for_timeout(300)
@@ -380,7 +416,7 @@ with sync_playwright() as pw:
 
     # ---------- Tile news (a stand-in feed, ?feed= on this computer) ----------
     page.goto(RAKU + '?loader=' + LOADER + '&feed=' + quote(FEED, safe='') + '#t=raku%3Adiscover&a=0'); page.wait_for_selector('.discover')
-    check('with a feed, Tile news comes first among the sources', texts(page, '.dv-src') == ['Tile news', 'Recent tiles', 'Following'] and texts(page, '.dv-src.on') == ['Tile news'])
+    check('with a feed, Tile news comes first among the sources', texts(page, '.dv-src:not(.dv-make)') == ['Tile news', 'Recent tiles', 'Following'] and texts(page, '.dv-src.on') == ['Tile news'])
     page.wait_for_selector('.post')
     uris = page.eval_on_selector_all('.posts > *', 'ps => ps.map(p => p.dataset.uri.split("/").pop())')[:4]
     check('posts drawn; hidden by moderation and from a hidden account left out', uris == ['3post1', '3post2', '3post3', '3post5'], str(uris))
@@ -498,7 +534,7 @@ with sync_playwright() as pw:
     tools = mp.eval_on_selector_all('.toolbar button', 'bs => bs.map(b => [b.title, Math.round(b.getBoundingClientRect().width), b.classList.contains("on")])')
     check('phone: six toolbar buttons of 44 px, Discover among them and on', [t[0] for t in tools] == ['Back', 'Forward', 'Reload this tile', 'Your shelf', 'Discover', 'Open tabs'] and all(t[1] >= 44 for t in tools) and tools[4][2], str(tools))
     chips = mp.evaluate("() => [getComputedStyle(document.querySelector('.dv-sources')).display, [...document.querySelectorAll('.dv-src')].map(b => b.textContent.trim()), getComputedStyle(document.querySelector('.dv-right')).display]")
-    check('phone: one column, the sources as chips across the top, no right column', chips[0] == 'flex' and chips[1] == ['Tile news', 'Recent tiles', 'Following'] and chips[2] == 'none', str(chips))
+    check('phone: one column, the sources as chips across the top (Make a tile last), no right column', chips[0] == 'flex' and chips[1] == ['Tile news', 'Recent tiles', 'Following', 'Make a tile'] and chips[2] == 'none', str(chips))
     check('phone: no sideways scroll', mp.evaluate('() => document.querySelector(".pane.front").scrollWidth <= document.querySelector(".pane.front").clientWidth + 1 && document.documentElement.scrollWidth <= 391'))
     mp.screenshot(path=str(OUT / 'd8-phone-news.png'))
     mp.click('.dv-src[data-source="following"]'); mp.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Following'")
@@ -509,6 +545,13 @@ with sync_playwright() as pw:
     wait_for(lambda: mp.eval_on_selector_all('.dv-centre .card-pic img', 'is => is.length >= 2'), page=mp)
     check('phone: Recent tiles as one column of cards, no sideways scroll', mp.evaluate('() => document.querySelector(".pane.front").scrollWidth <= document.querySelector(".pane.front").clientWidth + 1 && document.documentElement.scrollWidth <= 391'))
     mp.screenshot(path=str(OUT / 'd9b-phone-recent.png'))
+    mp.click('.dv-src[data-source="make"]'); mp.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Make a tile'")
+    check('phone: Make a tile, cards in one column, Open buttons of 40 px or more, no sideways scroll',
+          mp.evaluate('() => document.querySelector(".pane.front").scrollWidth <= document.querySelector(".pane.front").clientWidth + 1 && document.documentElement.scrollWidth <= 391')
+          and all(hh >= 40 for hh in mp.eval_on_selector_all('.mk-open', 'as => as.map(a => a.getBoundingClientRect().height)'))
+          and mp.eval_on_selector('.mk-line', 'e => e.getBoundingClientRect().width') > 250)
+    check('phone: the chosen chip (Make a tile, the last) scrolled into view', mp.eval_on_selector('.dv-src[data-source="make"]', 'b => { const r = b.getBoundingClientRect(); return r.left >= 0 && r.right <= 390; }'))
+    mp.screenshot(path=str(OUT / 'd9c-phone-make.png'))
     mp.goto(RAKU + '?feed=' + quote(FEED, safe='') + '#t=raku%3Adiscover%2Fnews&a=0'); mp.wait_for_selector('.post .post-open')
     mp.query_selector('.post .post-open').click(); mp.wait_for_selector('.link-msg')
     box = mp.eval_on_selector('.link-msg-box', 'b => { const r = b.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right), Math.round(r.bottom)]; }')

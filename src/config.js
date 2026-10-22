@@ -275,6 +275,31 @@ export const RECENT = Object.freeze({
   name: 'appmosphe.re', url: 'https://appmosphe.re/api/tiles', imgPrefix: 'https://appmosphe.re/img/', imgOrigin: 'https://appmosphe.re',
   keepMs: 5 * 60 * 1000, maxBytes: 2 * 1024 * 1024, maxPages: 100,
 });
+// Make a tile (stage 6c, Q101/Q102, Q112 to Q118): makers of tiles, in two groups (Q113 C: "No code needed",
+// then "From your own files"; alphabetical inside each). Each card: a drawn mark (a letter in a glaze colour,
+// no logos: Q118 A), the name, the site, one line, and Open (a new tab: Raku's own list, so no link message).
+// szzt waits (on hold, Oct 21) and would join "From your own files".
+export const MAKE = Object.freeze({
+  intro: 'A web tile is a small page or app stored in your own atproto account. Anyone can open it in a tile browser like Raku.',
+  learn: Object.freeze({ text: 'New to tiles? Read about them at dasl.ing', url: 'https://dasl.ing/' }),
+  groups: Object.freeze([
+    Object.freeze({ title: 'No code needed', makers: Object.freeze([
+      Object.freeze({ id: 'atmosynth', name: 'ATMOSYNTH', url: 'https://atmosynth.at/', mark: 'A', glaze: 'turquoise',
+        line: 'Make synth patches in your browser and play them together live. Start under "Create"; you don\'t need an account to begin.' }),
+      Object.freeze({ id: 'treeline', name: 'Treeline', url: 'https://treeline.world/', mark: 'T', glaze: 'copper',
+        line: 'Outdoor fitness and adventure logs on atproto. Turn an activity, with its GPS track, into a tile with "Share as webtile".' }),
+      Object.freeze({ id: 'foundry', name: 'Web Tile Foundry', url: 'https://foundry.thunderbird.cafe/', mark: 'F', glaze: 'cream',
+        line: 'Fill in a form and publish: a walking sprite, a stained-glass lantern, a roller coaster, a mixtape or a zine.' }),
+    ]) }),
+    Object.freeze({ title: 'From your own files', makers: Object.freeze([
+      Object.freeze({ id: 'appmosphere', name: 'appmosphe.re publish', url: 'https://appmosphe.re/publish', mark: 'a', glaze: 'smoke',
+        line: 'Upload a folder with an index.html (and an optional manifest.json), or a .tile file. Preview it, publish it to your account, and update your tiles later.' }),
+    ]) }),
+  ]),
+});
+/** "foundry.thunderbird.cafe", "appmosphe.re/publish": a maker's address as shown on its card. */
+export const siteLabel = (url) => { const u = new URL(url); return (u.host + u.pathname).replace(/\/$/, ''); };
+
 // "Last visit" marks for Following and Recent tiles (marks.js): kept on this device only (Q111), in one entry.
 // Following's older entry (raku-following-seen) moves in the first time it's read.
 export const MARKS = Object.freeze({ key: 'raku-marks', legacy: Object.freeze({ following: 'raku-following-seen' }) });

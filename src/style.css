@@ -593,6 +593,31 @@ a { color: var(--glaze-light); }
   background: none; color: var(--glaze-light); font: inherit; font-size: 13px; cursor: pointer; }
 .post-more-replies:hover { border-color: var(--glaze); }
 .post-thread > .post-more-replies { margin: 0 14px 12px auto; }
+/* stage 6c: Make a tile, set apart at the bottom of the sources; its page: a card per maker */
+.dv-src-gap { display: block; height: 1px; margin: 10px 12px; background: #3a322b; }
+.mk-intro { max-width: 68ch; line-height: 1.5; }
+.mk-learn { color: var(--glaze-light); white-space: nowrap; }
+.mk-list { display: grid; gap: 10px; }
+.mk-card { display: flex; align-items: center; gap: 16px; padding: 14px 16px; border-radius: 12px; background: #221d19; border: 1px solid #3a322b; }
+.mk-mark { flex: none; width: 52px; height: 52px; display: grid; place-items: center; border-radius: 13px;
+  font: 600 26px/1 Georgia, 'Times New Roman', serif; }
+.mk-cream { background: #e9dcc6; color: #6b4a2e; }
+.mk-turquoise { background: #2fa596; color: #06201c; box-shadow: inset 0 0 0 2px #7fd6c8; }
+.mk-copper { background: #8a4a2a; color: #f3dcc8; }
+.mk-smoke { background: #3a2a22; color: #e9a07e; box-shadow: inset 0 0 0 2px #5a463a; }
+.mk-words { flex: 1; min-width: 0; }
+.mk-name { margin: 0; font-size: 16px; font-weight: 650; color: var(--text); }
+.mk-site { margin: 1px 0 4px; color: var(--glaze-light); font-size: 13px; overflow-wrap: anywhere; }
+.mk-line { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.45; max-width: 70ch; }
+.mk-open { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border-radius: 9px;
+  background: var(--glaze-btn); color: var(--glaze-ink); font-weight: 600; text-decoration: none; }
+.mk-open:hover { filter: brightness(1.08); }
+@media (max-width: 640px) {
+  .dv-src-gap { width: 1px; height: auto; margin: 6px 2px; flex: none; }
+  .mk-card { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: start; gap: 10px 14px; padding: 14px; }
+  .mk-mark { width: 44px; height: 44px; font-size: 22px; border-radius: 11px; }
+  .mk-open { grid-column: 2; justify-self: start; }
+}
 .dv-about p { margin: 0 0 6px; }
 
 /* narrower: the sources as icons, then no right column; a phone: one column, the sources as chips */

@@ -259,6 +259,16 @@ Plan and decisions: `claude/raku-stage6c-plan.md` (Q106 to Q111).
   A reply that arrives after More counts on the same card. The first screen's Tile news row and Discover's
   preview show one item per thread too. (`groupThreads` in `src/posts.js`.)
 
+## Stage 6c, step 2 (Oct 22 2026): Make a tile
+
+- **Make a tile** (`raku:discover/make`, a brush): set apart at the bottom of Discover's sources (an icon when
+  narrow, the last chip on a phone), a page in Discover's centre listing tile makers in two groups (Q113):
+  "No code needed" (ATMOSYNTH, Treeline, Web Tile Foundry) and "From your own files" (appmosphe.re publish),
+  alphabetical inside each. Each card: a drawn mark (a letter in a glaze colour; no logos, Q118), the name,
+  the site, one line on what it makes and how, and Open (the site in a new tab, no opener; Raku's own list, so
+  no link message). A sentence on what a tile is and "New to tiles?" (dasl.ing) at the top. The list is
+  `MAKE` in `src/config.js`.
+
 ## Try it
 
 ```
@@ -290,7 +300,7 @@ and open http://127.0.0.1:5181/.
 | `src/tabs.js` | the tabs as data (history, the cap, the page address) |
 | `src/app.js` | the page: tab strip, address bar, panes, the first screen |
 | `src/frame-guard.js` | refusing to run inside another site's frame |
-| `src/icons.js` | Raku's own icons, drawn (back, forward, reload, new tab, close, shelf, star, person; stage 6: compass, search, news, people; stage 6c: clock) |
+| `src/icons.js` | Raku's own icons, drawn (back, forward, reload, new tab, close, shelf, star, person; stage 6: compass, search, news, people; stage 6c: clock, brush) |
 | `src/shelf-store.js` | your shelf as data (this browser's storage, Export and Import) |
 | `src/shelf-pages.js` | the Shelf's pages: your shelf and an account's tiles |
 | `src/typeahead.js` | handle suggestions under the address box (adapted copy of Daisy's) |
@@ -299,7 +309,7 @@ and open http://127.0.0.1:5181/.
 | `src/signin-ui.js` | the sign-in form, Raku's dialog, the blocked-window choices |
 | `src/account-menu.js` | the account button and its menu |
 | `src/cards.js` | tile cards and account chips, pictures loaded as they come near |
-| `src/discover.js` | stage 6: the Discover page (sources, Tile news, Recent tiles, Following, search results, previews) |
+| `src/discover.js` | stage 6: the Discover page (sources, Tile news, Recent tiles, Following, search results, previews; Make a tile) |
 | `src/following.js` | the newest tiles of the accounts on your shelf, and "New since your last visit" |
 | `src/recent.js` | stage 6c: Recent tiles, appmosphe.re's list read carefully and moderated |
 | `src/marks.js` | stage 6c: when you last visited Following and Recent tiles (this device only) |
@@ -324,8 +334,9 @@ the saved records passing the games' own checks; the phone). They need a bundle 
 top of each file. For the sign-in checks the bundle swaps in a stand-in for the sign-in library:
 `esbuild src/main.js --bundle --format=esm --alias:@atproto/oauth-client-browser=./test/browser/oauth-standin.js`.
 
-`check_discover.py` (117 checks, stage 6 and 6c) runs the same way as `check_page.py`: Discover's columns at four widths,
-Recent tiles (appmosphe.re's order, hidden ones, checked handles, blurred and icon pictures, More, "New"),
+`check_discover.py` (132 checks, stage 6 and 6c) runs the same way as `check_page.py`: Discover's columns at four widths,
+Recent tiles (appmosphe.re's order, hidden ones, checked handles, blurred and icon pictures, More, "New"), Make a tile
+(the groups, the cards, Open in a new tab, the phone),
 Following (order, hidden ones, "New"), search from the box and from Discover (nothing sent while typing, one request
 with only the words), a word with a dot as a handle first, Tile news from a stand-in feed with a post linking a tile,
 labels, replies with their thread, the link message (Cancel, Escape, Open with no opener), a post's address in the box, the phone.

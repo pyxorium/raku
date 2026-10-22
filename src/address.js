@@ -128,10 +128,11 @@ function account(actor) {
 
 // ---- stage 6: Discover, search and posts ----
 //   raku:discover              the Discover page (its first source)
-//   raku:discover/<source>     one source in the centre: news, recent (stage 6c), following
+//   raku:discover/<source>     one source in the centre: news, recent (stage 6c), following, make (stage 6c:
+//                              Make a tile)
 //   raku:search/<words>        search results (the words percent-encoded)
 export const DISCOVER_URI = 'raku:discover';
-export const DISCOVER_SOURCES = Object.freeze(['following', 'news', 'recent']);
+export const DISCOVER_SOURCES = Object.freeze(['following', 'news', 'recent', 'make']);
 export const discoverUri = (source = null) => (source ? `${DISCOVER_URI}/${source}` : DISCOVER_URI);
 export const searchUri = (query) => `raku:search/${encodeURIComponent(String(query || '').trim())}`;
 export const SEARCH_MAX_CHARS = 200;
