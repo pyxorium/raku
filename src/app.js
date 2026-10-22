@@ -573,8 +573,12 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     countBtn.classList.toggle('signal', marked);                 // on a phone: the tab count shows it too
     if (marked === iconMarked) return;
     iconMarked = marked;
-    const link = document.querySelector('link[rel="icon"]');
-    if (link) link.href = marked ? ICON_WITH_PIP : '/icon.svg';
+    // every icon link (favicon.ico, the PNG and the SVG, Oct 22), so the pip shows whichever one the browser uses;
+    // each goes back to its own picture when the mark goes
+    for (const link of document.querySelectorAll('link[rel="icon"]')) {
+      if (!link.dataset.own) link.dataset.own = link.getAttribute('href');
+      link.href = marked ? ICON_WITH_PIP : link.dataset.own;
+    }
   }
 
   function sync() {

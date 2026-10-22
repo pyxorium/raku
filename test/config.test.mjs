@@ -77,3 +77,14 @@ test("Raku's link card (stage 6): tags from config.js, pictures in public/, the 
   assert.ok(!file('index.html').includes(SITE.host), 'index.html names no address: the build writes the tags');
   assert.ok(!file('vite.config.js').includes(SITE.host));
 });
+
+test('icons for other sites (Oct 22): favicon.ico (16, 32, 48), a 32 px PNG and a 180 px Apple icon beside the SVG, all linked', () => {
+  const html = file('index.html');
+  for (const href of ['/favicon.ico', '/favicon-32.png', '/icon.svg', '/apple-touch-icon.png']) assert.ok(html.includes(`href="${href}"`), href);
+  const png = (name) => { const b = readFileSync(new URL(`../public/${name}`, import.meta.url)); return [b.readUInt32BE(16), b.readUInt32BE(20)]; };
+  assert.deepEqual(png('favicon-32.png'), [32, 32]);
+  assert.deepEqual(png('apple-touch-icon.png'), [180, 180]);
+  const ico = readFileSync(new URL('../public/favicon.ico', import.meta.url));
+  assert.equal(ico.readUInt16LE(2), 1, 'an icon file');
+  assert.deepEqual([...Array(ico.readUInt16LE(4)).keys()].map((i) => ico[6 + i * 16] || 256).sort((a, b) => a - b), [16, 32, 48]);
+});

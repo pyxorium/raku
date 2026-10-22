@@ -293,6 +293,14 @@ Plan and decisions: `claude/raku-launch-plan.md` (Q133, Q134).
   information about what you did in the tile; Raku allows this, as every other tile host does (`TILE_POPUPS` in
   `src/config.js`, decided Oct 22), and says so on the About page.
 
+## Icons for other sites (Oct 22 2026)
+
+- Besides `public/icon.svg` (browsers' tabs), Raku now has `public/favicon.ico` (16, 32 and 48 px),
+  `public/favicon-32.png` and `public/apple-touch-icon.png` (180 px, on the bar's charcoal), all drawn from the same
+  pot and linked from `index.html`. Sites that show other sites' icons (Bluesky's profile links, link previews,
+  search results) usually want a PNG or `/favicon.ico` and skip SVG. They're also the start for stage 9's app icons.
+
+## Try it
 
 ```
 npm install
@@ -343,14 +351,14 @@ and open http://127.0.0.1:5181/.
 | `src/link-message.js` | the link message: where a link goes, Open / Cancel |
 | `src/about-page.js` | the About page: what Raku keeps, who it talks to, how tiles are kept in their box |
 | `src/style.css` | the look: raku pottery, turquoise, always dark |
-| `public/` | `CNAME`, `robots.txt`, the icon; stage 6: `card.png` (the link card) and `banner.png` |
+| `public/` | `CNAME`, `robots.txt`, the icon (`icon.svg`, and `favicon.ico`, `favicon-32.png`, `apple-touch-icon.png` for other sites); stage 6: `card.png` (the link card) and `banner.png` |
 | `.github/workflows/deploy.yml` | test, build, check the policy is on the page and `oauth.json` names Raku's address, publish to GitHub Pages |
 
 ## Browser checks (in the chat sandbox)
 
 `test/browser/` holds the checks run in the Claude chat sandbox (Playwright with Chromium): `servers.mjs`
 (Raku's page and an "outside" server), `loader-replica.mjs` (the loading server's own files, run locally)
-and `check_page.py` (124 checks: tabs, addresses, sizes, moderation, what a tile can reach, phone width,
+and `check_page.py` (126 checks: tabs, addresses, sizes, moderation, what a tile can reach, phone width,
 framing, both tables played to the end against the bot), and `check_signin.py` (66 checks, stage 4:
 signing in from the prompt, the bar and the menu; Allow once, Always and a save without asking; the sign-in
 growing game by game; several accounts; signing out; a blocked window and "Sign in in this tab instead";

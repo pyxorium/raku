@@ -392,11 +392,11 @@ try:
     bb.click('.tab:has-text("Daisy")'); wait_for(lambda: lounge_state(bb) == 'here', 8)
     ok = wait_for(lambda: a.query_selector('.tab.signal') is not None, 8)
     check('someone arrives while you are on another tab: the Daisy tab glows turquoise with ●, "Someone arrived in the Daisy lounge" (no name)', ok and a.get_attribute('.tab.signal .tab-signal', 'title') == 'Someone arrived in the Daisy lounge' and 'thunderbirdwine' not in a.inner_text('.tabstrip'))
-    check('…and Raku\'s browser icon gets its pip (the title unchanged)', a.eval_on_selector('link[rel="icon"]', 'l => l.href.startsWith("data:image/svg+xml")') and not a.title().startswith('●'))
+    check('…and Raku\'s browser icon gets its pip (the title unchanged)', a.eval_on_selector_all('link[rel="icon"]', 'ls => ls.length === 3 && ls.every(l => l.href.startsWith("data:image/svg+xml"))') and not a.title().startswith('●'))
     a.screenshot(path=str(OUT / 's5b2-mark.png'))
     a.click('.tab:has-text("Daisy")')
     ok = wait_for(lambda: lounge_state(a) == 'here', 10)
-    check('back to the Daisy tab: the mark and the pip clear', ok and not a.query_selector('.tab.signal') and a.eval_on_selector('link[rel="icon"]', 'l => l.href.endsWith("/icon.svg")'))
+    check('back to the Daisy tab: the mark and the pip clear', ok and not a.query_selector('.tab.signal') and a.eval_on_selector_all('link[rel="icon"]', 'ls => ls.map(l => l.getAttribute("href")).join(" ") === "/favicon.ico /favicon-32.png /icon.svg"'))
     time.sleep(5.2)
     check('back to the Daisy tab: in the lounge again ("back"), and listed', ok and who(bb) == ['@thunderbird.cafe'] and any(json.loads(f).get('type') == 'back' for f in a._sent if isinstance(f, str) and f.startswith('{')))
     a.close_tab = None

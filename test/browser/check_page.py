@@ -228,6 +228,10 @@ with sync_playwright() as p:
     check('computer: no bottom toolbar; arrows in the top bar', not page.is_visible('.toolbar') and page.is_visible('.bar .nav'))
     check('computer: back, forward, reload, the shelf, Discover and + are drawn icons, not text', page.eval_on_selector_all('.bar .nav-btn, .newtab', "bs => bs.length === 6 && bs.every(b => b.querySelector('svg.icon') && b.textContent.trim() === '')"))
     check('page title "Raku (lab)" and the lab label', page.title() == 'Raku (lab)' and '(lab)' in page.inner_text('.strip-row'))
+    icons = page.eval_on_selector_all('link[rel~=icon], link[rel=apple-touch-icon]', 'ls => ls.map(l => l.getAttribute("href"))')
+    check('icons for other sites: favicon.ico, a PNG, the SVG and the Apple icon are linked', icons == ['/favicon.ico', '/favicon-32.png', '/icon.svg', '/apple-touch-icon.png'], str(icons))
+    served = [(lambda r: r.ok and len(r.body()) > 0)(page.request.get(RAKU.rstrip('/') + u)) for u in ['/favicon.ico', '/favicon-32.png', '/apple-touch-icon.png']]
+    check('...and served', all(served), str(served))
     check('the built page carries its security policy', page.eval_on_selector('meta[http-equiv="Content-Security-Policy"]', 'm => m.content.includes("frame-src")'))
     check('noindex while a lab', page.eval_on_selector('meta[name=robots]', 'm => m.content') == 'noindex, nofollow')
     page.screenshot(path=str(OUT / 'first-screen.png'))
