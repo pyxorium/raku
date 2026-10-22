@@ -29,6 +29,7 @@ import { createPinnedLoader } from './tables/pinned.js';
 import { createAccountMenu } from './account-menu.js';
 import { createLinkMessage } from './link-message.js';
 import { createDiscover, drawDiscover } from './discover.js';
+import { groupThreads } from './posts.js';
 
 export function mountRaku(root, { mothership, resolver, moderation, files, shelf, auth, storage = null, returned = null, keepForReturn = () => {}, loc = globalThis.location, hist = globalThis.history, tableDeps = {} }) {
   const kit = createCardKit({ files });
@@ -436,7 +437,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     box.append(part);
     discover.news().then((r) => {
       if (mine !== p.attempt || !r.items.length) return;
-      for (const it of r.items.slice(0, 3)) {
+      // one item per thread, as on Discover (Q123)
+      for (const it of groupThreads(r.items).added.slice(0, 3).map((g) => g.item)) {
         const a = it.post.author;
         const reply = !!(it.context || it.post.replyTo);
         list.append(h('button', { type: 'button', class: 'news-item', onclick: () => tabs.go(tab.id, discoverUri('news')) },

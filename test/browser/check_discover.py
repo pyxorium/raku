@@ -87,10 +87,12 @@ TH2 = post(A, 'th2', 'If it meets someone\'s needs, it is just the web.', '2026-
 TH3 = post(MK, 'th3', 'What is the name spec about?', '2026-10-15T11:00:00Z', reply=(U(P, 'th1'), U(A, 'th2')))
 DP2 = post(A, 'dp2', 'Deep in a thread', '2026-10-14T10:00:00Z', reply=(U(P, 'dr1'), U(P, 'dmid')))
 DP3 = post(MK, 'dp3', 'Answering the deep one', '2026-10-14T11:00:00Z', reply=(U(P, 'dr1'), U(A, 'dp2')))
+TH4 = post(P, 'th4', 'Another answer to the first post', '2026-10-15T09:30:00Z', reply=(U(P, 'th1'), U(P, 'th1')))   # Q123: same thread as TH3
 LONE = post(MK, 'lone1', 'A reply sent without its thread', '2026-10-13T11:00:00Z', reply=(U(P, 'zz1'), U(P, 'zz1')))
 THREAD_ITEMS = [
     {'post': TH3, 'reply': {'root': TH1, 'parent': TH2}},
     {'post': TH2, 'reply': {'root': TH1, 'parent': TH1}},             # already drawn as context above: not again
+    {'post': TH4, 'reply': {'root': TH1, 'parent': TH1}},             # Q123: same thread, not drawn: counted on TH3's card
     {'post': DP3, 'reply': {'root': {'$type': 'app.bsky.feed.defs#blockedPost', 'uri': U(P, 'dr1'), 'blocked': True}, 'parent': DP2}},
     {'post': LONE},
 ]
@@ -405,6 +407,15 @@ with sync_playwright() as pw:
     check('...no "…" when nothing was skipped', th.query_selector('.post-gap') is None)
     check('...only the reply has a footer: "Open thread in Bluesky"', th.eval_on_selector_all('.post-open', 'bs => bs.map(b => b.textContent.trim())') == ['Open thread in Bluesky'])
     check('a post already drawn as context isn\'t drawn again', page.eval_on_selector_all('.posts > *', 'ps => ps.map(p => p.dataset.uri.split("/").pop())').count('th2') == 0)
+    # Q123: one card per thread
+    drawn_ids = page.eval_on_selector_all('.posts > *', 'ps => ps.map(p => p.dataset.uri.split("/").pop())')
+    roots = page.eval_on_selector_all('.post', 'ps => ps.map(p => p.dataset.uri.split("/").pop())')
+    check("another reply in a thread already shown: no second card, the thread's first post drawn once", 'th4' not in drawn_ids and roots.count('th1') == 1, str(drawn_ids))
+    check('...counted on the thread\'s card: "+1 more reply in this thread"', th.query_selector('.post-more-replies') is not None and th.query_selector('.post-more-replies').inner_text() == '+1 more reply in this thread')
+    th.query_selector('.post-more-replies').click(); page.wait_for_selector('.link-msg')
+    check("...which opens the thread's first post through the link message", page.inner_text('.link-msg-url') == f'https://bsky.app/profile/{P_H}/post/th1' and page.query_selector('.link-msg-app') is not None, page.inner_text('.link-msg-url'))
+    page.keyboard.press('Escape')
+    check('a thread with no other replies has no such note', page.query_selector('.post-thread[data-uri$="/dp3"] .post-more-replies') is None)
     dp = page.query_selector('.post-thread[data-uri$="/dp3"]')
     check('a blocked first post: "Post not available"; posts skipped: "More replies in between"', dp is not None and dp.query_selector('.post.gone').inner_text() == 'Post not available.' and dp.query_selector('.post-gap') is not None and dp.eval_on_selector_all('.post', 'ps => ps.map(p => p.dataset.uri.split("/").pop())') == ['dr1', 'dp2', 'dp3'])
     lone = page.query_selector('.posts > .post[data-uri$="/lone1"]')

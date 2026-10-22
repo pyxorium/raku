@@ -147,6 +147,41 @@ export function threadContext(item, opts = {}) {
   return { root, parent, gap };
 }
 
+/** Which thread a feed item belongs to (Q123): its thread's first post's address; a post on its own is the
+ *  first post of its own thread. item: { post, context } as Discover's news() gives them. */
+export function threadKey(item) {
+  return (item && item.context && item.context.root && item.context.root.uri) || (item && item.post && item.post.replyTo && item.post.replyTo.root) || (item && item.post && item.post.uri) || '';
+}
+
+/**
+ * One card per thread (Q123, C): the first item of a thread (the newest: feeds come newest first) is kept; later
+ * items from the same thread are counted on it ("+1 more reply in this thread"). An item whose post was already
+ * drawn (on its own or as a reply's context) is left out without counting: it's on the page already.
+ * `seen` carries on across pages (More): pass the same object each time.
+ * → { added: [{ item, key, more }], counted: Set of earlier groups whose count went up }
+ */
+export function groupThreads(items, seen = { threads: new Map(), posts: new Set() }) {
+  const added = [];
+  const counted = new Set();
+  for (const item of items) {
+    if (!item || !item.post) continue;
+    if (seen.posts.has(item.post.uri)) continue;
+    seen.posts.add(item.post.uri);
+    const key = threadKey(item);
+    const group = seen.threads.get(key);
+    if (group) {
+      group.more++;
+      if (!added.includes(group)) counted.add(group);
+      continue;
+    }
+    const g = { item, key, more: 0 };
+    seen.threads.set(key, g);
+    if (item.context) for (const k of ['root', 'parent']) if (item.context[k] && item.context[k].uri) seen.posts.add(item.context[k].uri);
+    added.push(g);
+  }
+  return { added, counted };
+}
+
 /**
  * One post (a PostView from a feed or app.bsky.feed.getPosts) as plain data, or null when it can't be read.
  */

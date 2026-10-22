@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseTarget, parsePost, searchUri, discoverUri } from '../src/address.js';
-import { segments, readPost, moderatePost, tileRef, ago } from '../src/posts.js';
+import { segments, readPost, moderatePost, tileRef, ago, threadKey, groupThreads } from '../src/posts.js';
 import { tidTime, tileTime, createFollowing } from '../src/following.js';
 import { addressesFrom, localMatches, searchAppmosphere, searchWords } from '../src/search.js';
 import { createPublicReads } from '../src/bluesky.js';
@@ -298,4 +298,27 @@ test('public reads: a feed item keeps its thread context', async () => {
   assert.equal(page.items[0].reply.root.record.text, 'first');
   assert.equal(page.items[1].reply, null);
   assert.equal(page.posts.length, 2);
+});
+
+test('Tile news, one card per thread (Q123): later replies counted on the first card; posts already drawn left out', () => {
+  const U = (k) => `at://${MAKER}/app.bsky.feed.post/${k}`;
+  const post = (k, replyTo = null) => ({ uri: U(k), replyTo });
+  const reply = (k, root, parent) => ({ post: post(k, { root: U(root), parent: U(parent) }), context: { root: { uri: U(root) }, parent: parent === root ? null : { uri: U(parent) } } });
+  assert.equal(threadKey({ post: post('solo') }), U('solo'));
+  assert.equal(threadKey(reply('r1', 'top', 'top')), U('top'));
+  assert.equal(threadKey({ post: post('lone', { root: U('zz'), parent: U('zz') }) }), U('zz'), 'a reply without its thread: its root still counts');
+  const seen = { threads: new Map(), posts: new Set() };
+  const one = groupThreads([
+    reply('r3', 'top', 'r2'),          // newest: kept, with top and r2 as context
+    reply('r2', 'top', 'top'),         // drawn already (as r3's context): left out, not counted
+    reply('r1', 'top', 'top'),         // same thread, not drawn yet: counted
+    { post: post('solo') },
+    { post: post('top') },             // the thread's first post on its own: drawn already
+  ], seen);
+  assert.deepEqual(one.added.map((g) => g.item.post.uri), [U('r3'), U('solo')]);
+  assert.equal(one.added[0].more, 1);
+  assert.equal(one.counted.size, 0, 'counted on a card drawn in this same batch');
+  const two = groupThreads([reply('r0', 'top', 'top'), { post: post('next') }], seen);   // More: the next page
+  assert.deepEqual(two.added.map((g) => g.item.post.uri), [U('next')]);
+  assert.deepEqual([...two.counted].map((g) => [g.item.post.uri, g.more]), [[U('r3'), 2]], 'a reply on a later page counts on the same card');
 });

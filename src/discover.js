@@ -12,7 +12,7 @@
 // raku:search/<words>.
 
 import { PICKS, SEARCH, RECENT, feedUri, postApp } from './config.js';
-import { atUri, discoverUri, searchUri, accountPageUri, parseAddress, SHELF_URI, DISCOVER_URI } from './address.js';
+import { atUri, discoverUri, searchUri, accountPageUri, parseAddress, parsePost, SHELF_URI, DISCOVER_URI } from './address.js';
 import { describeTile } from './tiles.js';
 import { NetError } from './net.js';
 import { h, bannerCid } from './cards.js';
@@ -21,7 +21,7 @@ import { createFollowing } from './following.js';
 import { createRecent } from './recent.js';
 import { createMarks } from './marks.js';
 import { createPublicReads } from './bluesky.js';
-import { readPost, threadContext, whenText } from './posts.js';
+import { readPost, threadContext, whenText, groupThreads } from './posts.js';
 import { postCard, threadCard } from './post-card.js';
 import { searchAppmosphere, localMatches } from './search.js';
 
@@ -302,20 +302,23 @@ function drawNews(ctx, into) {
   const more = h('button', { type: 'button', class: 'more', hidden: true }, 'More');
   into.append(status, list, more);
   let cursor = null;
-  const drawn = new Set();
+  const seen = { threads: new Map(), posts: new Set() };
   const postCtx = postContext(ctx, 'Tile news');
   const page = async () => {
     more.disabled = true;
     try {
       const r = await discover.news({ cursor });
       if (!alive()) return;
-      for (const it of r.items) {
-        // A post already drawn (on its own or as a reply's context) isn't drawn again further down.
-        if (drawn.has(it.post.uri)) continue;
-        drawn.add(it.post.uri);
-        if (it.context) for (const k of ['root', 'parent']) if (it.context[k] && it.context[k].uri) drawn.add(it.context[k].uri);
-        list.append(it.context ? threadCard(it.post, it.context, postCtx) : postCard(it.post, postCtx));
+      // One card per thread (Q123): a post already drawn isn't drawn again; later replies in a thread already
+      // shown are counted on its card ("+1 more reply in this thread").
+      const { added, counted } = groupThreads(r.items, seen);
+      for (const g of added) {
+        const it = g.item;
+        g.el = it.context ? threadCard(it.post, it.context, postCtx) : postCard(it.post, postCtx);
+        list.append(g.el);
+        if (g.more) moreReplies(g, postCtx);
       }
+      for (const g of counted) moreReplies(g, postCtx);
       cursor = r.cursor;
       status.textContent = list.childElementCount ? '' : 'No posts yet.';
       status.hidden = !status.textContent;
@@ -329,6 +332,21 @@ function drawNews(ctx, into) {
   };
   more.addEventListener('click', page);
   page();
+}
+
+/** "+1 more reply in this thread" on a thread's card: opens the thread's first post (through the link message). */
+function moreReplies(g, postCtx) {
+  if (!g.el) return;
+  const n = g.more;
+  const words = `+${n} more ${n === 1 ? 'reply' : 'replies'} in this thread`;
+  if (g.moreEl) { g.moreEl.firstChild.textContent = words; return; }
+  const root = g.item.context && g.item.context.root && !g.item.context.root.unavailable ? g.item.context.root : null;
+  const at = parsePost(g.key);
+  const actor = (root && root.author && root.author.handle) || (at && at.ok ? at.actor : null);
+  if (!actor || !at || !at.ok) return;
+  g.moreEl = h('button', { type: 'button', class: 'post-more-replies', title: `Open the thread in ${postCtx.app.name}`,
+    onclick: () => postCtx.linkMessage.show({ post: { actor, rkey: at.rkey }, from: `A thread in ${postCtx.from}.` }) }, words);
+  g.el.append(g.moreEl);
 }
 
 function postContext(ctx, from) {
@@ -447,7 +465,7 @@ function preview(ctx, source, uri) {
     } else if (source === 'news') {
       const r = await discover.news();
       if (!alive()) return;
-      fill(r.posts.slice(0, 3).map((post) => row(post.author.displayName || `@${post.author.handle || 'someone'}`, post.text.slice(0, 90), null)), 'No posts yet.');
+      fill(groupThreads(r.items).added.slice(0, 3).map((g) => g.item.post).map((post) => row(post.author.displayName || `@${post.author.handle || 'someone'}`, post.text.slice(0, 90), null)), 'No posts yet.');
     } else {
       const r = discover.cachedSearch(discover.lastQuery);
       const n = r ? r.remote.length : 0;

@@ -251,6 +251,14 @@ Plan and decisions: `claude/raku-stage6c-plan.md` (Q106 to Q111).
   moves to your account later (Q111).
 - Tiles already loaded in Recent tiles count in search's "Already in Raku".
 
+## Stage 6c, Tile news fix (Oct 22 2026): one card per thread
+
+- When the feed holds several replies from one thread, Tile news showed the thread's first post again for each
+  (Q123). Now the newest card of a thread stays; later replies in the same thread aren't drawn again but counted
+  on that card: "+1 more reply in this thread", which opens the thread's first post through the link message.
+  A reply that arrives after More counts on the same card. The first screen's Tile news row and Discover's
+  preview show one item per thread too. (`groupThreads` in `src/posts.js`.)
+
 ## Try it
 
 ```
@@ -316,7 +324,7 @@ the saved records passing the games' own checks; the phone). They need a bundle 
 top of each file. For the sign-in checks the bundle swaps in a stand-in for the sign-in library:
 `esbuild src/main.js --bundle --format=esm --alias:@atproto/oauth-client-browser=./test/browser/oauth-standin.js`.
 
-`check_discover.py` (113 checks, stage 6 and 6c) runs the same way as `check_page.py`: Discover's columns at four widths,
+`check_discover.py` (117 checks, stage 6 and 6c) runs the same way as `check_page.py`: Discover's columns at four widths,
 Recent tiles (appmosphe.re's order, hidden ones, checked handles, blurred and icon pictures, More, "New"),
 Following (order, hidden ones, "New"), search from the box and from Discover (nothing sent while typing, one request
 with only the words), a word with a dot as a handle first, Tile news from a stand-in feed with a post linking a tile,
