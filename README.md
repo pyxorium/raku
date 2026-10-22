@@ -280,7 +280,19 @@ Plan and decisions: `claude/raku-launch-plan.md` (Q128 to Q130).
   "Already in Raku" still load from the authors' servers**, so appmosphe.re never learns what you keep (Q129).
 - **Northsky** joins "Open in" for posts (`northsky.app`).
 
-## Try it
+## The About page (Oct 22 2026)
+
+Plan and decisions: `claude/raku-launch-plan.md` (Q133, Q134).
+
+- **About Raku** (`raku:about`, `src/about-page.js`): what Raku is, that browsing needs no sign-in, what stays in
+  this browser, who Raku talks to and why, how tiles are kept in their box, and how to report a tile. Linked from
+  the first screen's last line, the account menu's last row and Discover's right column. **Keep it true:** when
+  Raku starts talking to another server or keeps something new in the browser, change the page in the same
+  commit (`test/about.test.mjs` checks the servers named in `config.js` appear on it).
+- **New windows from tiles:** a tile can open a link in a new tab when you click it, and that link could carry
+  information about what you did in the tile; Raku allows this, as every other tile host does (`TILE_POPUPS` in
+  `src/config.js`, decided Oct 22), and says so on the About page.
+
 
 ```
 npm install
@@ -329,6 +341,7 @@ and open http://127.0.0.1:5181/.
 | `src/post-card.js` | a post drawn as a card |
 | `src/bluesky.js` | public reads of feeds and posts (one server, `APPVIEW` in config) |
 | `src/link-message.js` | the link message: where a link goes, Open / Cancel |
+| `src/about-page.js` | the About page: what Raku keeps, who it talks to, how tiles are kept in their box |
 | `src/style.css` | the look: raku pottery, turquoise, always dark |
 | `public/` | `CNAME`, `robots.txt`, the icon; stage 6: `card.png` (the link card) and `banner.png` |
 | `.github/workflows/deploy.yml` | test, build, check the policy is on the page and `oauth.json` names Raku's address, publish to GitHub Pages |
@@ -337,7 +350,7 @@ and open http://127.0.0.1:5181/.
 
 `test/browser/` holds the checks run in the Claude chat sandbox (Playwright with Chromium): `servers.mjs`
 (Raku's page and an "outside" server), `loader-replica.mjs` (the loading server's own files, run locally)
-and `check_page.py` (122 checks: tabs, addresses, sizes, moderation, what a tile can reach, phone width,
+and `check_page.py` (124 checks: tabs, addresses, sizes, moderation, what a tile can reach, phone width,
 framing, both tables played to the end against the bot), and `check_signin.py` (66 checks, stage 4:
 signing in from the prompt, the bar and the menu; Allow once, Always and a save without asking; the sign-in
 growing game by game; several accounts; signing out; a blocked window and "Sign in in this tab instead";
@@ -345,9 +358,9 @@ the saved records passing the games' own checks; the phone). They need a bundle 
 top of each file. For the sign-in checks the bundle swaps in a stand-in for the sign-in library:
 `esbuild src/main.js --bundle --format=esm --alias:@atproto/oauth-client-browser=./test/browser/oauth-standin.js`.
 
-`check_discover.py` (132 checks, stage 6 and 6c) runs the same way as `check_page.py`: Discover's columns at four widths,
+`check_discover.py` (149 checks, stage 6, 6c and the About page) runs the same way as `check_page.py`: Discover's columns at four widths,
 Recent tiles (appmosphe.re's order, hidden ones, checked handles, blurred and icon pictures, More, "New"), Make a tile
-(the groups, the cards, Open in a new tab, the phone),
+(the groups, the cards, Open in a new tab, the phone), the About page (its three links, what it says, the phone),
 Following (order, hidden ones, "New"), search from the box and from Discover (nothing sent while typing, one request
 with only the words), a word with a dot as a handle first, Tile news from a stand-in feed with a post linking a tile,
 labels, replies with their thread, the link message (Cancel, Escape, Open with no opener), a post's address in the box, the phone.

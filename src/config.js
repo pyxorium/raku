@@ -39,6 +39,9 @@ export const BLUESKY_API = 'https://public.api.bsky.app';
 export const BLUESKY_MODERATION = 'did:plc:ar7c4by46qjdydhdevvrndac';   // moderation.bsky.app
 export const MODERATION_KEEP_MS = 10 * 60 * 1000;
 export const TAKEDOWNS_PAGE = 'https://lexicographer.space/takedowns';
+// The About page (raku:about): who makes Raku (a handle, opened as that account's tiles) and its public code.
+export const MADE_BY = 'thunderbird.cafe';
+export const SOURCE_CODE = 'https://github.com/pyxorium/raku';
 
 // Sizes and times. A tile's size is what its record says its files add up to.
 export const LIMITS = Object.freeze({
@@ -55,7 +58,9 @@ export const LIMITS = Object.freeze({
 // New windows from tiles (links with target=_blank, window.open after a click). The loading server lets a tile
 // open them (its sandbox allows popups), so a tile can link out, and a click can also carry data out in the
 // new window's address. Set to false to give every tile frame a sandbox without popups: tiles still run, but
-// their links out and new windows are blocked (checked in the sandbox, Oct 19). Owner's decision pending.
+// their links out and new windows are blocked (checked in the sandbox, Oct 19).
+// Decided (owner, Oct 22, Q133 A): allowed, as on every other tile host, and said plainly on the About page and
+// in the README. Revisit when tiles have a shared way to ask their host to open a link (likely wishes).
 export const TILE_POPUPS = true;
 
 // Tables (stage 3): groups of tiles that work together, each with a small driver in src/tables/.

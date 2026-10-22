@@ -104,6 +104,8 @@ export const shortForm = (actor, rkey) => `@${actor}/${rkey}`;
 //   raku:shelf             your shelf
 //   raku:tiles/<actor>     an account's tiles (a handle or a DID)
 export const SHELF_URI = 'raku:shelf';
+// The About page (going public, Q134).
+export const ABOUT_URI = 'raku:about';
 //   raku:table/<id>        a table (stage 3: sevenup, daisy); for Daisy, its start screen (stage 5)
 //   raku:table/daisy/bot   Daisy against the bot (stage 5)
 //   raku:table/daisy/<table id>   one Daisy table across two computers (stage 5): the link a player sends
@@ -179,6 +181,7 @@ function looksLikeWords(s) {
 export function parseTarget(input, { inner = false } = {}) {
   const s = String(input || '').trim();
   if (s === SHELF_URI) return { ok: true, kind: 'shelf', uri: SHELF_URI };
+  if (s === ABOUT_URI) return { ok: true, kind: 'about', uri: ABOUT_URI };
   if (s === DISCOVER_URI) return { ok: true, kind: 'discover', source: null, uri: DISCOVER_URI };
   const disc = s.match(/^raku:discover\/([a-z]{1,20})$/);
   if (disc) {

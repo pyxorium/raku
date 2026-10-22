@@ -739,3 +739,27 @@ a { color: var(--glaze-light); }
 .link-msg-app { min-height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--well); color: var(--text); font: inherit; }
 .link-msg-app:focus { outline: none; border-color: var(--glaze); box-shadow: 0 0 0 2px rgba(63,184,168,.25); }
 @media (max-width: 640px) { .news-row { grid-template-columns: 1fr; gap: 8px; } }
+
+/* The About page (going public, Q134): one readable column, like a short article */
+.about { max-width: 760px; margin: 0 auto; padding: 32px 24px 60px; line-height: 1.55; }
+.about h1 { margin: 0 0 6px; font-size: 28px; color: var(--glaze-light); }
+.about .lede { color: var(--muted); margin: 0 0 8px; font-size: 16px; }
+.ab-part h2 { margin: 28px 0 8px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.ab-part p { margin: 0 0 10px; }
+.ab-part ul { margin: 0 0 10px; padding-left: 20px; }
+.ab-part li { margin: 0 0 6px; }
+.ab-part a, .ab-foot a { color: var(--glaze-light); }
+.ab-who { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 8px 16px; margin: 0; font-size: 14px; }
+.ab-who dt { font-weight: 600; }
+.ab-who dd { margin: 0; color: var(--muted); }
+.ab-exception { padding: 14px 16px; border-radius: 12px; background: #221d19; border: 1px solid #6b5631; margin: 10px 0 4px; }
+.ab-foot { margin-top: 30px; color: #8d8172; font-size: 13px; }
+.ab-foot .linkish { font-size: inherit; }
+.acct-about { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 12px; padding: 10px 0 0; border: 0; border-top: 1px solid #3a322b;
+  background: none; color: var(--glaze-light); font: inherit; font-size: 14px; cursor: pointer; text-align: left; }
+.acct-about:hover { text-decoration: underline; }
+@media (max-width: 640px) {
+  .about { padding: 20px 16px 40px; }
+  .ab-who { grid-template-columns: 1fr; gap: 2px; }
+  .ab-who dd { margin-bottom: 8px; }
+}

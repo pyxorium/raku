@@ -22,6 +22,8 @@ const PATHS = {
   people: ['M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z', 'M2.8 20a6.2 6.2 0 0 1 12.4 0', 'M15.5 4.3a3.5 3.5 0 0 1 0 6.4', 'M18 14.3a6.2 6.2 0 0 1 3.2 5.7'],
   // stage 6c: Recent tiles, Make a tile
   clock: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M12 7v5l3.5 2'],
+  // going public: the About page's link in the account menu
+  info: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M12 11v5.5', 'M12 7.6v.1'],
   brush: ['M10.2 12.4l8.3-8.3a1.8 1.8 0 0 1 2.5 2.5l-8.3 8.3', 'M8.6 13.4a3.1 3.1 0 0 1 3.1 3.1c0 2.6-2.6 4.1-6.7 4.1 1-1 1.3-2.2 1.3-3.5a3.1 3.1 0 0 1 2.3-3.7z'],
 };
 const FILLED = new Set(['star-filled']);

@@ -4,7 +4,8 @@
 # this computer only) with a post linking a tile, labels and the link message, and a post's address in the box;
 # Recent tiles (stage 6c: appmosphe.re's list as it is, the hide list and account labels, pictures only from
 # appmosphe.re's /img/ copies, More, "New" since the last visit); Make a tile (the makers in two groups,
-# Open in a new tab, set apart at the bottom of the sources).
+# Open in a new tab, set apart at the bottom of the sources); the About page (going public, Q134: its three links,
+# what it says, the phone).
 # Everything outside is a Playwright route (account directory, account servers, Bluesky's public API, its
 # picture server, appmosphe.re). Tiles aren't run here (check_page.py does that).
 # Usage: python3 test/browser/check_discover.py <work folder>   (servers.mjs and the replica already running,
@@ -375,6 +376,40 @@ with sync_playwright() as pw:
     page.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Results for “pebble”'")
     check('search: a tile already loaded in Recent tiles counts as "Already in Raku"', wait_for(lambda: 'Pebble Garden' in texts(page, '.dv-part:not([hidden]) .card-title'), page=page))
 
+    # ---------- the About page (going public, Q134) ----------
+    page.goto(RAKU + '?loader=' + LOADER + '#t=&a=0'); page.wait_for_selector('.first-about .linkish')
+    check("the first screen's last line links to About Raku", 'About Raku: what it keeps, who it talks to' in page.inner_text('.first-about'))
+    page.click('.first-about .linkish')
+    page.wait_for_selector('.about h1')
+    check('it opens raku:about in the tab, titled About Raku, the address box empty', texts(page, '.tab.on .tab-title') == ['About Raku'] and 'raku%3Aabout' in page.evaluate('location.hash') and page.input_value('.addr') == '')
+    heads = texts(page, '.ab-part h2')
+    check('...its sections', heads == ["You don't need an account", 'What stays in this browser', 'Who Raku talks to, and why', 'How tiles are kept in their box', 'Hidden tiles and reporting'], str(heads))
+    who = texts(page, '.ab-who dt')
+    check('...who Raku talks to', who == ["Each tile's own account", "Bluesky's public servers", 'plc.directory', 'appmosphe.re', 'lexicographer.space', 'typeahead.waow.tech', 'The tile loading server', "Daisy's relay"], str(who))
+    exc = page.inner_text('.ab-exception')
+    check("...the exception, in the owner's words", exc == 'One exception: a tile can open a link in a new tab when you click it, and that link could carry information about what you did in the tile. It\u2019s the same as clicking a link on any web page, so use the same care.', exc)
+    links = page.eval_on_selector_all('.about a', 'as => as.map(a => [a.textContent, a.href, a.target, a.rel])')
+    check('...outside links open in a new tab with no opener: takedowns, the code', links == [['Reporting and takedowns \u2197', 'https://lexicographer.space/takedowns', '_blank', 'noopener noreferrer'], ['github.com/pyxorium/raku', 'https://github.com/pyxorium/raku', '_blank', 'noopener noreferrer']], str(links))
+    check('...nothing on the page asks anything of anyone', not [c for c in calls[-5:] if 'github.com' in c or 'takedowns' in c])
+    page.screenshot(path=str(OUT / 'a1-about-wide.png'), full_page=True)
+    page.click('.ab-foot .linkish')
+    page.wait_for_function("() => document.querySelector('.tab.on .tab-title')?.textContent === \"@thunderbird.cafe's tiles\"")
+    check('"made by @thunderbird.cafe" opens that account\'s tiles in Raku', True)
+    page.click('.bar .nav-btn[title="Back"]'); page.wait_for_selector('.about h1')
+    # the account menu
+    page.click('.account-btn'); page.wait_for_selector('.account-menu:not([hidden]) .acct-about')
+    check('the account menu ends with "About Raku: privacy and safety"', page.eval_on_selector('.account-menu', 'm => m.lastElementChild.classList.contains("acct-about")') and 'About Raku: privacy and safety' in page.inner_text('.acct-about'))
+    page.screenshot(path=str(OUT / 'a2-menu.png'))
+    tabs_before = len(texts(page, '.tab-title'))
+    page.click('.acct-about')
+    check('...from an About tab: it stays, no second one, the menu closes', len(texts(page, '.tab-title')) == tabs_before and page.is_hidden('.account-menu'))
+    # Discover's right column
+    page.goto(RAKU + '?loader=' + LOADER + '#t=raku%3Adiscover%2Ffollowing&a=0'); page.wait_for_selector('.dv-about .linkish')
+    check("Discover's right column links to About Raku", page.inner_text('.dv-about .linkish') == 'About Raku \u2192')
+    page.click('.dv-about .linkish'); page.wait_for_selector('.about h1')
+    check('...and opens it in the tab', texts(page, '.tab.on .tab-title') == ['About Raku'])
+    page.click('.bar .nav-btn[title="Back"]'); page.wait_for_selector('.dv-src[data-source="make"]')
+
     # ---------- Make a tile (stage 6c) ----------
     srcs_all = lambda pg: pg.eval_on_selector_all('.dv-sources > *', 'es => es.map(e => e.dataset.source || e.className)')
     check('Make a tile sits apart at the bottom of the sources, with the brush', srcs_all(page)[-2:] == ['dv-src-gap', 'make'] and page.query_selector('.dv-src[data-source="make"] .icon-brush') is not None, str(srcs_all(page)))
@@ -561,6 +596,14 @@ with sync_playwright() as pw:
           and mp.eval_on_selector('.mk-line', 'e => e.getBoundingClientRect().width') > 250)
     check('phone: the chosen chip (Make a tile, the last) scrolled into view', mp.eval_on_selector('.dv-src[data-source="make"]', 'b => { const r = b.getBoundingClientRect(); return r.left >= 0 && r.right <= 390; }'))
     mp.screenshot(path=str(OUT / 'd9c-phone-make.png'))
+    mp.goto(RAKU + '#t=raku%3Aabout&a=0'); mp.wait_for_selector('.about h1')
+    check('phone: the About page in one column, no sideways scroll',
+          mp.evaluate('() => document.querySelector(".pane.front").scrollWidth <= document.querySelector(".pane.front").clientWidth + 1 && document.documentElement.scrollWidth <= 391')
+          and mp.eval_on_selector('.ab-who', 'e => getComputedStyle(e).gridTemplateColumns.split(" ").length') == 1)
+    mp.screenshot(path=str(OUT / 'a3-phone-about.png'), full_page=True)
+    mp.click('.account-btn'); mp.wait_for_selector('.account-menu:not([hidden]) .acct-about')
+    check('phone: the account menu has the About row too', mp.is_visible('.acct-about'))
+    mp.keyboard.press('Escape')
     mp.goto(RAKU + '?feed=' + quote(FEED, safe='') + '#t=raku%3Adiscover%2Fnews&a=0'); mp.wait_for_selector('.post .post-open')
     mp.query_selector('.post .post-open').click(); mp.wait_for_selector('.link-msg')
     box = mp.eval_on_selector('.link-msg-box', 'b => { const r = b.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right), Math.round(r.bottom)]; }')

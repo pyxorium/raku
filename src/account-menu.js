@@ -2,13 +2,13 @@
 // computer and between the Raku label and the address on a phone. It opens a menu (a sheet from the
 // bottom on a phone): the accounts signed in on this browser with a tick on the current one (choosing one
 // switches, no window: Q38), Add another account, the "Saves without asking" choices with Turn off (Q37),
-// Raku's sign-in promise (Q43), and Sign out.
+// Raku's sign-in promise (Q43), and Sign out; last, a link to the About page (going public, Q134).
 import { SIGNIN_PROMISE, TABLES } from './config.js';
 import { h } from './cards.js';
 import { icon } from './icons.js';
 import { signInForm, avatarEl } from './signin-ui.js';
 
-export function createAccountMenu({ auth, moderation, keepForReturn, say }) {
+export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbout = null }) {
   const button = h('button', { type: 'button', class: 'account-btn', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', onclick: () => toggle() });
   const panel = h('div', { class: 'account-menu', hidden: true, role: 'dialog', 'aria-label': 'Your accounts' });
   const avatars = new Map();             // did → avatar address (Bluesky's picture server), once known
@@ -47,6 +47,7 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say }) {
     });
   }
 
+  const aboutRow = () => (onAbout ? h('button', { type: 'button', class: 'acct-about', onclick: () => { toggle(false); onAbout(); } }, icon('info', 16), 'About Raku: privacy and safety') : null);
   function drawPanel() {
     const list = auth.list();
     const head = h('div', { class: 'acct-head' }, h('b', {}, list.length ? 'Signed in on this browser' : 'Sign in to Raku'),
@@ -55,8 +56,8 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say }) {
     if (!list.length) {
       const f = form({ label: 'Sign in' });
       parts.push(h('p', { class: 'small' }, 'Browsing never needs a sign-in. Signing in is only for saving match results from the tables.'), f.el,
-        h('p', { class: 'rk-promise' }, SIGNIN_PROMISE));
-      panel.replaceChildren(...parts);
+        h('p', { class: 'rk-promise' }, SIGNIN_PROMISE), aboutRow());
+      panel.replaceChildren(...parts.filter(Boolean));
       return f;
     }
     parts.push(h('ul', { class: 'acct-list' }, ...list.map((a) => {
@@ -79,7 +80,8 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say }) {
     parts.push(h('p', { class: 'rk-promise' }, SIGNIN_PROMISE));
     const cur = auth.current();
     if (cur) parts.push(h('button', { type: 'button', class: 'acct-out', onclick: async () => { const hd = cur.handle; await auth.signOut(cur.did); draw(); say(`Signed out @${hd}.`); } }, `Sign out @${cur.handle}`));
-    panel.replaceChildren(...parts);
+    parts.push(aboutRow());
+    panel.replaceChildren(...parts.filter(Boolean));
     return f;
   }
 

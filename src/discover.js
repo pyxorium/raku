@@ -13,7 +13,7 @@
 // raku:discover/make, raku:search/<words>.
 
 import { PICKS, SEARCH, RECENT, MAKE, siteLabel, feedUri, postApp, appmosphereCopy } from './config.js';
-import { atUri, discoverUri, searchUri, accountPageUri, parseAddress, parsePost, SHELF_URI, DISCOVER_URI } from './address.js';
+import { atUri, discoverUri, searchUri, accountPageUri, parseAddress, parsePost, SHELF_URI, DISCOVER_URI, ABOUT_URI } from './address.js';
 import { describeTile } from './tiles.js';
 import { NetError } from './net.js';
 import { h, bannerCid } from './cards.js';
@@ -166,7 +166,8 @@ export function drawDiscover(ctx, { source = null, query = '' } = {}) {
   for (const s of others) right.append(preview(ctx, s, uriFor(s)));
   right.append(h('div', { class: 'dv-about' },
     h('p', {}, `Search looks at your shelf first, here in this browser, then asks ${SEARCH.name}.`),
-    h('p', {}, 'Nothing on this page runs: a tile starts only when you open its card.')));
+    h('p', {}, 'Nothing on this page runs: a tile starts only when you open its card.'),
+    h('p', {}, h('button', { type: 'button', class: 'linkish', onclick: () => tabs.go(tab.id, ABOUT_URI) }, 'About Raku \u2192'))));
 }
 
 // ---------- Following ----------

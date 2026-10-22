@@ -15,7 +15,7 @@
 
 import { Tile } from '@dasl/tile-loader';
 import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS, TABLES, tableForTile, appmosphereCopy } from './config.js';
-import { parseAddress, parseTarget, atUri, SHELF_URI, tableUri, DISCOVER_URI, discoverUri } from './address.js';
+import { parseAddress, parseTarget, atUri, SHELF_URI, ABOUT_URI, tableUri, DISCOVER_URI, discoverUri } from './address.js';
 import { createTabs, current } from './tabs.js';
 import { describeTile, sizeVerdict, createPathLoader, blobCidOf } from './tiles.js';
 import { formatBytes, NetError } from './net.js';
@@ -29,6 +29,7 @@ import { createPinnedLoader } from './tables/pinned.js';
 import { createAccountMenu } from './account-menu.js';
 import { createLinkMessage } from './link-message.js';
 import { createDiscover, drawDiscover } from './discover.js';
+import { drawAbout } from './about-page.js';
 import { groupThreads } from './posts.js';
 
 export function mountRaku(root, { mothership, resolver, moderation, files, shelf, auth, storage = null, returned = null, keepForReturn = () => {}, loc = globalThis.location, hist = globalThis.history, tableDeps = {} }) {
@@ -74,7 +75,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   const noteLine = h('div', { class: 'note', role: 'status', 'aria-live': 'polite', hidden: true });
   // "Sign in in this tab instead" (Q41): what to pick up afterwards, with the open tabs.
   const keep = (info) => keepForReturn({ ...info, hash: tabs.toHash() });
-  const menu = createAccountMenu({ auth, moderation, keepForReturn: keep, say: (t) => say(t) });
+  const menu = createAccountMenu({ auth, moderation, keepForReturn: keep, say: (t) => say(t), onAbout: () => goAbout() });
   let pendingReturn = returned && returned.pending ? returned.pending : null;
   const stage = h('main', { class: 'stage' });
   const sheetList = h('ul', { class: 'sheet-list' });
@@ -128,6 +129,15 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
 
   // The Discover button: like the Shelf button. A tab already on Discover comes to the front; else this tab if it
   // shows a first screen or one of Raku's pages; else a new tab (a running tile stays open).
+  // The About page (Q134): an open About tab comes forward; else this tab if it shows one of Raku's own pages (so a
+  // running tile stays open), else a new tab.
+  function goAbout() {
+    const open = tabs.list.find((t) => current(t) === ABOUT_URI);
+    if (open) { tabs.activate(open.id); return; }
+    const here = current(tabs.active);
+    if (!here || here.startsWith('raku:')) tabs.go(tabs.active.id, ABOUT_URI);
+    else openNew(ABOUT_URI);
+  }
   const onDiscover = (uri) => !!uri && (uri === DISCOVER_URI || uri.startsWith(`${DISCOVER_URI}/`) || uri.startsWith('raku:search/'));
   function goDiscover() {
     const open = tabs.list.find((t) => onDiscover(current(t)));
@@ -202,6 +212,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (!uri) { p.title = 'New tab'; p.shownAddress = ''; p.state = 'new'; drawFirstScreen(p, tab); return; }
     const target = parseTarget(uri);
     if (target.ok && target.kind === 'shelf') { drawYourShelf(pageContext(p, tab)); drawChrome(); return; }
+    if (target.ok && target.kind === 'about') { drawAbout(pageContext(p, tab)); return; }
     if (target.ok && target.kind === 'account') { drawAccountTiles(pageContext(p, tab), target.actor); return; }
     if (target.ok && target.kind === 'table') { openTable(p, tab, target.id, target.sub); return; }
     if (target.ok && target.kind === 'discover') { drawDiscover(pageContext(p, tab), { source: target.source }); return; }
@@ -421,7 +432,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     box.append(h('h2', {}, 'Tables'), h('p', { class: 'small-lede' }, 'Groups of tiles that play together. Play the bot with no sign-in; sign in to save your matches, or to play Daisy with a friend on another computer.'), tables);
     for (const t of Object.values(TABLES)) tables.append(tableCard(t, tab));
     drawShelfTeaser(pageContext(p, tab), box);
-    box.append(h('p', { class: 'small' }, 'Tiles run in their own sealed frames, loaded from their authors\' own accounts. Raku has no sign-in for browsing.'));
+    box.append(h('p', { class: 'small first-about' }, 'Tiles run in their own sealed frames, loaded from their authors\' own accounts. Raku has no sign-in for browsing. ',
+      h('button', { type: 'button', class: 'linkish', onclick: () => tabs.go(tab.id, ABOUT_URI) }, 'About Raku: what it keeps, who it talks to \u2192')));
   }
 
   // The first screen's Tile news row (step 6b, Q85): the latest three posts from the Web Tiles feed, each opening
