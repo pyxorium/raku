@@ -1,11 +1,11 @@
-# Raku (lab)
+# Raku
 
 A browser for the web tile layer: one static page that works like a small browser whose pages are web
 tiles. Tabs of running tiles, an address box, back and forward. Lives at **raku.lexicographer.space**
 (GitHub Pages), beside the open tile viewer at lexicographer.space.
 
-Hidden lab for now: `noindex`, `robots.txt`, no links to it. **Hidden is not secret: once pushed, anyone
-with the address can open it.**
+Public: search engines are welcome (`public/robots.txt`), and nothing says "(lab)" (`SITE.lab` in
+`src/config.js`). It was a hidden lab from Oct 19 2026 until the go-public commit (`claude/raku-launch-plan.md`).
 
 Plans and decisions: `claude/raku-plan.md` in the Web Tile Foundry project.
 

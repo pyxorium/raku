@@ -7,7 +7,8 @@
 
 export const SITE = Object.freeze({
   name: 'Raku',
-  lab: true,                                   // "Raku (lab)", noindex, robots.txt: while it's a hidden lab
+  lab: false,                                  // true: "Raku (lab)", noindex, robots.txt keeps search engines out (a hidden
+                                               // lab, Oct 19 to the launch); public since the go-public commit (Q136)
   origin: 'https://raku.lexicographer.space',
   host: 'raku.lexicographer.space',
 });

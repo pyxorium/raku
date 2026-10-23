@@ -11,10 +11,18 @@ test("Raku's address is named in one place: public/CNAME agrees with config.js",
   assert.equal(new URL(SITE.origin).host, SITE.host);
 });
 
-test('while a lab: noindex and robots.txt', () => {
-  if (!SITE.lab) return;
-  assert.match(file('index.html'), /<meta name="robots" content="noindex, nofollow">/);
-  assert.match(file('public/robots.txt'), /Disallow: \//);
+test('a lab: noindex and robots.txt keep search engines out; public: neither, and no "(lab)" anywhere', () => {
+  if (SITE.lab) {
+    assert.match(file('index.html'), /<meta name="robots" content="noindex, nofollow">/);
+    assert.match(file('public/robots.txt'), /Disallow: \//);
+    return;
+  }
+  assert.doesNotMatch(file('index.html'), /name="robots"/);
+  assert.doesNotMatch(file('index.html'), /\(lab\)/);
+  assert.doesNotMatch(file('public/robots.txt'), /Disallow: \/\s/);
+  assert.match(file('public/robots.txt'), /Allow: \//);
+  assert.equal(oauthMetadata().client_name, SITE.name, 'the name on the sign-in screen');
+  assert.equal(CARD.title, SITE.name, "the link card's title");
 });
 
 test('the page policy: frames only from the loading server, no outside scripts', () => {
