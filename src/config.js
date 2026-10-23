@@ -40,9 +40,11 @@ export const BLUESKY_API = 'https://public.api.bsky.app';
 export const BLUESKY_MODERATION = 'did:plc:ar7c4by46qjdydhdevvrndac';   // moderation.bsky.app
 export const MODERATION_KEEP_MS = 10 * 60 * 1000;
 export const TAKEDOWNS_PAGE = 'https://lexicographer.space/takedowns';
-// The About page (raku:about): who makes Raku (a handle, opened as that account's tiles) and its public code.
+// The About page (raku:about): who makes Raku (a handle, opened as that account's tiles), its public code, and the
+// blog post about it (Oct 23 2026).
 export const MADE_BY = 'thunderbird.cafe';
 export const SOURCE_CODE = 'https://github.com/pyxorium/raku';
+export const BLOG_POST = 'https://thunderbird.cafe/blog/raku/';
 
 // Sizes and times. A tile's size is what its record says its files add up to.
 export const LIMITS = Object.freeze({

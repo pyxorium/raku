@@ -6,7 +6,7 @@
 // Keep it true: when Raku starts talking to another server, or keeps something new in the browser, this page
 // changes in the same commit.
 
-import { SITE, TAKEDOWNS_PAGE, SOURCE_CODE, MADE_BY } from './config.js';
+import { SITE, TAKEDOWNS_PAGE, SOURCE_CODE, MADE_BY, BLOG_POST } from './config.js';
 import { accountPageUri } from './address.js';
 import { h } from './cards.js';
 
@@ -23,6 +23,9 @@ export const TALKS_TO = Object.freeze([
   ['The tile loading server', 'Gives each tile its own address to run on (load.tiles.lexicographer.space).'],
   ["Daisy's relay", 'Only while you play Daisy with someone on another computer.'],
 ]);
+
+/** What a tile says to Raku, and where it shows (Oct 23: the button appears only once a tile sends something). */
+export const MESSAGES_LINE = 'A tile can only talk to Raku. If it sends anything, a Messages button appears on its tab and shows what it sent. At a table, the Messages button in the table’s bar shows everything passing between its tiles.';
 
 export const EXCEPTION = 'a tile can open a link in a new tab when you click it, and that link could carry information about what you did in the tile. It’s the same as clicking a link on any web page, so use the same care.';
 
@@ -53,10 +56,10 @@ export function drawAbout(ctx) {
       h('ul', {},
         h('li', {}, 'Every tile runs on its own address, apart from Raku and from other tiles. It can’t read your shelf, your sign-in, or another tile.'),
         h('li', {}, 'A tile can’t reach the internet on its own: no fetching, no pictures from elsewhere, no tracking pixels. What it shows comes from its author’s account.'),
-        h('li', {}, 'A tile can only talk to Raku. The Messages button on each tab shows what it sends.'),
+        h('li', {}, MESSAGES_LINE),
         h('li', {}, 'Large tiles ask before they load.')),
       h('div', { class: 'ab-exception' }, h('b', {}, 'One exception:'), ` ${EXCEPTION}`)),
     sect('Hidden tiles and reporting',
       h('p', {}, 'Raku hides tiles and accounts on lexicographer.space’s hide list, and accounts that Bluesky’s moderation hides. To report a tile, see ', outLink(TAKEDOWNS_PAGE, 'Reporting and takedowns ↗'), '.')),
-    h('p', { class: 'ab-foot' }, `${SITE.name} is made by `, madeBy, '. Its code is public at ', outLink(SOURCE_CODE, SOURCE_CODE.replace(/^https:\/\//, '')), '.')));
+    h('p', { class: 'ab-foot' }, `${SITE.name} is made by `, madeBy, '. Its code is public at ', outLink(SOURCE_CODE, SOURCE_CODE.replace(/^https:\/\//, '')), '. ', outLink(BLOG_POST, 'How Raku works, on the blog\u00a0→'))));
 }

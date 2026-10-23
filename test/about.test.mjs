@@ -2,9 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseTarget } from '../src/address.js';
-import { TALKS_TO, EXCEPTION } from '../src/about-page.js';
+import { TALKS_TO, EXCEPTION, MESSAGES_LINE } from '../src/about-page.js';
 import { TYPEAHEAD_URL } from '../src/typeahead.js';
-import { PLC_DIRECTORY, HIDE_LIST_URL, SEARCH, RECENT, TILE_LOAD_DOMAIN, TABLES, MADE_BY, SOURCE_CODE, TILE_POPUPS } from '../src/config.js';
+import { PLC_DIRECTORY, HIDE_LIST_URL, SEARCH, RECENT, TILE_LOAD_DOMAIN, TABLES, MADE_BY, SOURCE_CODE, BLOG_POST, TILE_POPUPS } from '../src/config.js';
 
 test('the About page has its own address', () => {
   assert.deepEqual(parseTarget('raku:about'), { ok: true, kind: 'about', uri: 'raku:about' });
@@ -26,4 +26,10 @@ test("the exception (owner's wording, Oct 22) matches the decision on tiles' new
   assert.equal(TILE_POPUPS, true, 'if new windows are ever blocked, the About page must change too');
   assert.equal(MADE_BY, 'thunderbird.cafe');
   assert.equal(SOURCE_CODE, 'https://github.com/pyxorium/raku');
+});
+
+test('the Messages line says when the button shows, and the page links to the blog post (Oct 23)', () => {
+  assert.match(MESSAGES_LINE, /If it sends anything, a Messages button appears on its tab/);
+  assert.match(MESSAGES_LINE, /At a table, the Messages button in the table’s bar/);
+  assert.equal(BLOG_POST, 'https://thunderbird.cafe/blog/raku/');
 });

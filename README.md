@@ -292,6 +292,9 @@ Plan and decisions: `claude/raku-launch-plan.md` (Q133, Q134).
 - **New windows from tiles:** a tile can open a link in a new tab when you click it, and that link could carry
   information about what you did in the tile; Raku allows this, as every other tile host does (`TILE_POPUPS` in
   `src/config.js`, decided Oct 22), and says so on the About page.
+- **Oct 23 2026:** the page's last line links to the blog post about Raku (`BLOG_POST` in `src/config.js`,
+  https://thunderbird.cafe/blog/raku/), and the Messages line now says when the button shows: on a tile's tab only
+  once the tile sends something; at a table, always, in the table's bar (`MESSAGES_LINE`).
 
 ## szzt on Make a tile (Oct 22 2026)
 
@@ -373,9 +376,9 @@ the saved records passing the games' own checks; the phone). They need a bundle 
 top of each file. For the sign-in checks the bundle swaps in a stand-in for the sign-in library:
 `esbuild src/main.js --bundle --format=esm --alias:@atproto/oauth-client-browser=./test/browser/oauth-standin.js`.
 
-`check_discover.py` (149 checks, stage 6, 6c and the About page) runs the same way as `check_page.py`: Discover's columns at four widths,
+`check_discover.py` (150 checks, stage 6, 6c and the About page) runs the same way as `check_page.py`: Discover's columns at four widths,
 Recent tiles (appmosphe.re's order, hidden ones, checked handles, blurred and icon pictures, More, "New"), Make a tile
-(the groups, the cards, Open in a new tab, the phone), the About page (its three links, what it says, the phone),
+(the groups, the cards, Open in a new tab, the phone), the About page (its three links, its outside links, what it says, the phone),
 Following (order, hidden ones, "New"), search from the box and from Discover (nothing sent while typing, one request
 with only the words), a word with a dot as a handle first, Tile news from a stand-in feed with a post linking a tile,
 labels, replies with their thread, the link message (Cancel, Escape, Open with no opener), a post's address in the box, the phone.
