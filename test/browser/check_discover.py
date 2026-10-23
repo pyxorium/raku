@@ -173,7 +173,7 @@ def route(r):
         if u.path.endswith('getBlob'):
             b = blobs.get(q.get('cid'))
             return r.fulfill(status=200 if b else 404, headers={**cors, 'content-type': 'application/octet-stream'}, body=b or b'')
-    if u.hostname in ('bsky.app', 'example.org', 'mu.social', 'atmosynth.at', 'treeline.world', 'foundry.thunderbird.cafe', 'dasl.ing') or (u.hostname == 'appmosphe.re' and u.path == '/publish'):
+    if u.hostname in ('bsky.app', 'example.org', 'mu.social', 'atmosynth.at', 'treeline.world', 'foundry.thunderbird.cafe', 'dasl.ing', 'szzt.app') or (u.hostname == 'appmosphe.re' and u.path == '/publish'):
         return r.fulfill(status=200, headers={'content-type': 'text/html'}, body='<!doctype html><title>outside</title>')
     r.fulfill(status=404, headers=cors, body='')
 
@@ -201,7 +201,7 @@ with sync_playwright() as pw:
     ctx = b.new_context(viewport={'width': 1400, 'height': 900})
     for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**',
                  'https://appmosphe.re/**', 'https://typeahead.waow.tech/**', 'https://bsky.app/**', 'https://example.org/**', 'https://mu.social/**', 'https://evil.example/**',
-                 'https://atmosynth.at/**', 'https://treeline.world/**', 'https://foundry.thunderbird.cafe/**', 'https://dasl.ing/**']:
+                 'https://atmosynth.at/**', 'https://treeline.world/**', 'https://foundry.thunderbird.cafe/**', 'https://dasl.ing/**', 'https://szzt.app/**']:
         ctx.route(host, route)
     ctx.add_init_script(f"if (!sessionStorage.getItem('seeded')) {{ localStorage.setItem('raku-shelf', {json.dumps(SHELF)}); sessionStorage.setItem('seeded', '1'); }}")
     popups = []
@@ -420,14 +420,14 @@ with sync_playwright() as pw:
     check('...the sentence on what a tile is, and "New to tiles?" (dasl.ing, a new tab)', page.inner_text('.mk-intro').startswith('A web tile is a small page or app stored in your own atproto account. Anyone can open it in a tile browser like Raku.')
           and page.eval_on_selector('.mk-learn', 'a => [a.textContent, a.href, a.target, a.rel].join("|")') == 'New to tiles? Read about them at dasl.ing|https://dasl.ing/|_blank|noopener noreferrer')
     groups = page.evaluate("() => [...document.querySelectorAll('.mk-group')].map(g => [g.querySelector('h2').textContent, [...g.querySelectorAll('.mk-name')].map(e => e.textContent)])")
-    check('two groups: No code needed (alphabetical), then From your own files', groups == [['No code needed', ['ATMOSYNTH', 'Treeline', 'Web Tile Foundry']], ['From your own files', ['appmosphe.re publish']]], str(groups))
-    check('each card: its site', texts(page, '.mk-site') == ['atmosynth.at', 'treeline.world', 'foundry.thunderbird.cafe', 'appmosphe.re/publish'], str(texts(page, '.mk-site')))
-    check('...a drawn mark in a glaze colour (no logos)', page.eval_on_selector_all('.mk-mark', 'ms => ms.map(m => m.textContent + ":" + m.className.split(" ")[1])') == ['A:mk-turquoise', 'T:mk-copper', 'F:mk-cream', 'a:mk-smoke']
+    check('two groups: No code needed (alphabetical), then From your own files', groups == [['No code needed', ['ATMOSYNTH', 'Treeline', 'Web Tile Foundry']], ['From your own files', ['appmosphe.re publish', 'szzt']]], str(groups))
+    check('each card: its site', texts(page, '.mk-site') == ['atmosynth.at', 'treeline.world', 'foundry.thunderbird.cafe', 'appmosphe.re/publish', 'szzt.app/publish'], str(texts(page, '.mk-site')))
+    check('...a drawn mark in a glaze colour (no logos)', page.eval_on_selector_all('.mk-mark', 'ms => ms.map(m => m.textContent + ":" + m.className.split(" ")[1])') == ['A:mk-turquoise', 'T:mk-copper', 'F:mk-cream', 'a:mk-smoke', 's:mk-turquoise']
           and page.query_selector('.mk-card img') is None)
     check('...one line on what it makes and how', all(len(t) > 40 for t in texts(page, '.mk-line')) and 'Share as webtile' in texts(page, '.mk-line')[1])
     opens = page.eval_on_selector_all('.mk-open', 'as => as.map(a => [a.textContent.trim(), a.href, a.target, a.rel])')
-    check('...Open, to the maker\'s site in a new tab, with no opener', opens == [['Open', u, '_blank', 'noopener noreferrer'] for u in ['https://atmosynth.at/', 'https://treeline.world/', 'https://foundry.thunderbird.cafe/', 'https://appmosphe.re/publish']], str(opens))
-    check('nothing is asked of the makers\' sites until you open one', not [c for c in calls[before_make:] if any(h in c for h in ('atmosynth.at', 'treeline.world', 'foundry.thunderbird.cafe', 'appmosphe.re/publish', 'dasl.ing'))])
+    check('...Open, to the maker\'s site in a new tab, with no opener', opens == [['Open', u, '_blank', 'noopener noreferrer'] for u in ['https://atmosynth.at/', 'https://treeline.world/', 'https://foundry.thunderbird.cafe/', 'https://appmosphe.re/publish', 'https://szzt.app/publish/']], str(opens))
+    check('nothing is asked of the makers\' sites until you open one', not [c for c in calls[before_make:] if any(h in c for h in ('atmosynth.at', 'treeline.world', 'foundry.thunderbird.cafe', 'appmosphe.re/publish', 'szzt.app', 'dasl.ing'))])
     pv = page.eval_on_selector_all('.dv-preview', 'ps => ps.map(p => p.dataset.source)')
     check('the right column previews the reading sources', pv[:3] == ['news', 'recent', 'following'] and 'make' not in pv, str(pv))
     page.screenshot(path=str(OUT / 'd4d-make-wide.png'))

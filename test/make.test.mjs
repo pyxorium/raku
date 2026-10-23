@@ -12,21 +12,22 @@ test('Make a tile address and icon', () => {
 
 test('the makers: two groups (no code first), alphabetical inside each, https sites, a mark and a line each', () => {
   assert.deepEqual(MAKE.groups.map((g) => g.title), ['No code needed', 'From your own files']);
-  assert.deepEqual(MAKE.groups.map((g) => g.makers.map((m) => m.name)), [['ATMOSYNTH', 'Treeline', 'Web Tile Foundry'], ['appmosphe.re publish']]);
+  assert.deepEqual(MAKE.groups.map((g) => g.makers.map((m) => m.name)), [['ATMOSYNTH', 'Treeline', 'Web Tile Foundry'], ['appmosphe.re publish', 'szzt']]);
   for (const g of MAKE.groups) {
     const names = g.makers.map((m) => m.name.toLowerCase());
     assert.deepEqual(names, [...names].sort(), `${g.title}: alphabetical`);
   }
   const all = MAKE.groups.flatMap((g) => g.makers);
-  assert.deepEqual(all.map((m) => m.url), ['https://atmosynth.at/', 'https://treeline.world/', 'https://foundry.thunderbird.cafe/', 'https://appmosphe.re/publish']);
+  assert.deepEqual(all.map((m) => m.url), ['https://atmosynth.at/', 'https://treeline.world/', 'https://foundry.thunderbird.cafe/', 'https://appmosphe.re/publish', 'https://szzt.app/publish/']);
   for (const m of all) {
     assert.equal(new URL(m.url).protocol, 'https:');
     assert.equal(m.mark.length, 1);
     assert.ok(['cream', 'turquoise', 'copper', 'smoke'].includes(m.glaze));
     assert.ok(m.line.length > 40 && m.line.length < 200);
   }
-  assert.equal(new Set(all.map((m) => m.glaze)).size, all.length, 'a different glaze for each');
-  assert.deepEqual(all.map((m) => siteLabel(m.url)), ['atmosynth.at', 'treeline.world', 'foundry.thunderbird.cafe', 'appmosphe.re/publish']);
+  // glazes are reused as makers are added (owner, Oct 22): neighbours in a group differ
+  for (const g of MAKE.groups) g.makers.forEach((m, i) => { if (i) assert.notEqual(m.glaze, g.makers[i - 1].glaze, `${m.name}: not the same glaze as the maker above it`); });
+  assert.deepEqual(all.map((m) => siteLabel(m.url)), ['atmosynth.at', 'treeline.world', 'foundry.thunderbird.cafe', 'appmosphe.re/publish', 'szzt.app/publish']);
   assert.equal(MAKE.intro, 'A web tile is a small page or app stored in your own atproto account. Anyone can open it in a tile browser like Raku.');
   assert.equal(MAKE.learn.url, 'https://dasl.ing/');
 });

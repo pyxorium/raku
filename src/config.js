@@ -283,7 +283,9 @@ export const RECENT = Object.freeze({
 // Make a tile (stage 6c, Q101/Q102, Q112 to Q118): makers of tiles, in two groups (Q113 C: "No code needed",
 // then "From your own files"; alphabetical inside each). Each card: a drawn mark (a letter in a glaze colour,
 // no logos: Q118 A), the name, the site, one line, and Open (a new tab: Raku's own list, so no link message).
-// szzt waits (on hold, Oct 21) and would join "From your own files".
+// Glazes are reused as makers are added (owner, Oct 22): only neighbours in a group must differ.
+// szzt (burrito.space, Oct 22: "yeah link it!"): a testbed implementation of the specs; tried by the owner (a page
+// published with szzt ran in Raku exactly as expected).
 export const MAKE = Object.freeze({
   intro: 'A web tile is a small page or app stored in your own atproto account. Anyone can open it in a tile browser like Raku.',
   learn: Object.freeze({ text: 'New to tiles? Read about them at dasl.ing', url: 'https://dasl.ing/' }),
@@ -299,6 +301,8 @@ export const MAKE = Object.freeze({
     Object.freeze({ title: 'From your own files', makers: Object.freeze([
       Object.freeze({ id: 'appmosphere', name: 'appmosphe.re publish', url: 'https://appmosphe.re/publish', mark: 'a', glaze: 'smoke',
         line: 'Upload a folder with an index.html (and an optional manifest.json), or a .tile file. Preview it, publish it to your account, and update your tiles later.' }),
+      Object.freeze({ id: 'szzt', name: 'szzt', url: 'https://szzt.app/publish/', mark: 's', glaze: 'turquoise',
+        line: 'Drag and drop a page, a folder or a .zip, see it run in the preview panel, then publish. A testbed for the web tile specs.' }),
     ]) }),
   ]),
 });

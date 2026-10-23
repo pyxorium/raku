@@ -293,6 +293,13 @@ Plan and decisions: `claude/raku-launch-plan.md` (Q133, Q134).
   information about what you did in the tile; Raku allows this, as every other tile host does (`TILE_POPUPS` in
   `src/config.js`, decided Oct 22), and says so on the About page.
 
+## szzt on Make a tile (Oct 22 2026)
+
+- **szzt** (burrito.space's drag-and-drop publisher, a testbed for the web tile specs; burrito.space agreed Oct 22)
+  joins "From your own files" after appmosphe.re publish: "Drag and drop a page, a folder or a .zip, see it run in
+  the preview panel, then publish. A testbed for the web tile specs." A lowercase "s" on turquoise; glazes are now
+  reused as makers are added, as long as neighbours in a group differ.
+
 ## Icons for other sites (Oct 22 2026)
 
 - Besides `public/icon.svg` (browsers' tabs), Raku now has `public/favicon.ico` (16, 32 and 48 px),
