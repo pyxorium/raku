@@ -278,10 +278,15 @@ export const NEWS_PINS = Object.freeze([
   'at://did:plc:izttpdp3l6vss5crelt5kcux/app.bsky.feed.post/3mej27i74zk2t',   // Robin, 2026-02-10: webtil.es launch
   'at://did:plc:izttpdp3l6vss5crelt5kcux/app.bsky.feed.post/3mexs4hbh6s2z',   // Robin, 2026-02-16: DASLing Group meeting
   'at://did:plc:izttpdp3l6vss5crelt5kcux/app.bsky.feed.post/3mf54rcwomc22',   // Robin, 2026-02-18: tiles and lexicon embeds
+  'at://did:plc:2cxgdrgtsmrbqnjkwyplmp43/app.bsky.feed.post/3mf56pkszzc2d',   // bmann.ca, 2026-02-18: on Robin's wishes idea
   'at://did:plc:izttpdp3l6vss5crelt5kcux/app.bsky.feed.post/3mgcvswucbk2o',   // Robin, 2026-03-05: atile writes .tile files
+  'at://did:plc:2cxgdrgtsmrbqnjkwyplmp43/app.bsky.feed.post/3mh4pmxkwu22e',   // bmann.ca, 2026-03-15: tiles, lexicon embeds, schema.org
+  'at://did:plc:f25qr3njhaoeolu46vylylju/app.bsky.feed.post/3mi36vbkgms2c',   // webbeef, 2026-03-27: native tiles in Beaver with at:// URLs
   'at://did:plc:izttpdp3l6vss5crelt5kcux/app.bsky.feed.post/3mia346rdic2b',   // Robin, 2026-03-29: AtmosphereConf session
+  'at://did:plc:f25qr3njhaoeolu46vylylju/app.bsky.feed.post/3midfko3gp22w',   // webbeef, 2026-03-31: Teach the Web new Tricks #3: Web Tiles (a video)
   'at://did:plc:izttpdp3l6vss5crelt5kcux/app.bsky.feed.post/3mjf6xuzgtk2t',   // Robin, 2026-04-13: the talk's recording
   'at://did:plc:dy6ekftqerqu5bcz76kgy6ux/app.bsky.feed.post/3mjpqxf4o2s2k',   // hyl.st, 2026-04-17: native embeds, webtiles among them
+  'at://did:plc:f25qr3njhaoeolu46vylylju/app.bsky.feed.post/3mjumkr73ek2o',   // webbeef, 2026-04-19: WebTasks and wishes
   'at://did:plc:7ho7ntz7g2yglmpw5vsto7ht/app.bsky.feed.post/3mmznydfans2y',   // dysbulic, 2026-05-29: learning about WebTiles
   'at://did:plc:3x5npw4cb2twifyqcox7jmqj/app.bsky.feed.post/3mn4eubkwic2j',   // ekana.org, 2026-05-31: a website as a bento box of webtiles
   'at://did:plc:ephkzpinhaqcabtkugtbzrwu/app.bsky.feed.post/3mo4is2taw22d',   // byjp.me, 2026-06-12: tiles as views for AT collections
@@ -289,6 +294,7 @@ export const NEWS_PINS = Object.freeze([
   'at://did:plc:lrphxvv25aibthe7xoc2eeyy/app.bsky.feed.post/3mvb4lmwshk27',   // kandake.africa, 2026-09-11: more usage of dasl.ing (a quote)
   'at://did:plc:6vxjigxrqizmbo56gojxico3/app.bsky.feed.post/3mw7avbjkd22n',   // thunderbird.cafe, 2026-09-23: rotatable 3D object tile
   'at://did:plc:ro563p5faldqu44apudq44k4/app.bsky.feed.post/3mw7cja67ie2z',   // colorado.atprotocol.space, 2026-09-23: the Atproto Colorado cube
+  'at://did:plc:piwl4w3haqco46y37flufjcv/app.bsky.feed.post/3mwb3aghqfz2c',   // supramundane.agency, 2026-09-24: the WebTiles Showcase talk
 ]);
 // Public reads of posts and feeds (no sign-in): one server, named here, so it can change (another AppView,
 // Q90 notes) without touching the code that draws posts.
