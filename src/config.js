@@ -264,6 +264,24 @@ export function cardTags() {
 // Graze, Q84; step 6b), Following and search (step 6a).
 // The "Web Tiles" feed (step 6b, Oct 21): published from thunderbird.cafe, made with Graze (did:web:api.graze.social).
 export const FEED = 'at://did:plc:6vxjigxrqizmbo56gojxico3/app.bsky.feed.generator/Web-Tiles';
+// Hand-picked posts for Tile news (Oct 24): older posts Graze won't take any more (its manual add stops at about
+// four weeks). Raku reads them with the feed and mixes them in by date (P1 A), so most sit after the feed's own
+// posts, reached with More. Only the real feed gets them (not a ?feed= stand-in). Addresses by DID, so a handle
+// change doesn't break them; a deleted post simply drops out. Oldest first; the running list with notes is
+// claude/raku-tile-news-pins-plan.md. To add one: its at:// address (bsky.app's /profile/<handle>/post/<key> with
+// the handle swapped for the account's DID).
+export const NEWS_PINS = Object.freeze([
+  'at://did:plc:izttpdp3l6vss5crelt5kcux/app.bsky.feed.post/3juhmexrpxd2m',   // Robin, 2023-04-28: very early Web Tiles working
+  'at://did:plc:izttpdp3l6vss5crelt5kcux/app.bsky.feed.post/3kdcsolocpe2b',   // Robin, 2023-11-03: the Web Tiles essay
+  'at://did:plc:izttpdp3l6vss5crelt5kcux/app.bsky.feed.post/3l4eegzitgq2j',   // Robin, 2024-09-17: first tile in his atproto app
+  'at://did:plc:izttpdp3l6vss5crelt5kcux/app.bsky.feed.post/3mdldo4iey225',   // Robin, 2026-01-29: next-gen web in an old browser
+  'at://did:plc:izttpdp3l6vss5crelt5kcux/app.bsky.feed.post/3mej27i74zk2t',   // Robin, 2026-02-10: webtil.es launch
+  'at://did:plc:izttpdp3l6vss5crelt5kcux/app.bsky.feed.post/3mexs4hbh6s2z',   // Robin, 2026-02-16: DASLing Group meeting
+  'at://did:plc:izttpdp3l6vss5crelt5kcux/app.bsky.feed.post/3mf54rcwomc22',   // Robin, 2026-02-18: tiles and lexicon embeds
+  'at://did:plc:izttpdp3l6vss5crelt5kcux/app.bsky.feed.post/3mgcvswucbk2o',   // Robin, 2026-03-05: atile writes .tile files
+  'at://did:plc:izttpdp3l6vss5crelt5kcux/app.bsky.feed.post/3mia346rdic2b',   // Robin, 2026-03-29: AtmosphereConf session
+  'at://did:plc:izttpdp3l6vss5crelt5kcux/app.bsky.feed.post/3mjf6xuzgtk2t',   // Robin, 2026-04-13: the talk's recording
+]);
 // Public reads of posts and feeds (no sign-in): one server, named here, so it can change (another AppView,
 // Q90 notes) without touching the code that draws posts.
 export const APPVIEW = BLUESKY_API;

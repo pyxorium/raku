@@ -30,7 +30,8 @@ SALT = 'lexicographer.space hide list v1'
 FEED = f'at://{A}/app.bsky.feed.generator/Web-Tiles'          # the real feed's address (config.js FEED, step 6b)
 AD = 'did:plc:adultaaaaaaaaaaaaaaaaaaa'; AD_H = 'adult.fakepds.net'      # labelled adult: pictures blurred
 NH = 'did:plc:nohandleaaaaaaaaaaaaaaaa'                                      # a handle Bluesky couldn't check
-HANDLES = {A: A_H, P: P_H, B: B_H, MK: MK_H}
+RB = 'did:plc:izttpdp3l6vss5crelt5kcux'; RB_H = 'robin.berjon.com'      # hand-picked posts (config.js NEWS_PINS)
+HANDLES = {A: A_H, P: P_H, B: B_H, MK: MK_H, RB: RB_H}
 
 blobs = {}
 def cid_for(data):
@@ -91,6 +92,16 @@ DP2 = post(A, 'dp2', 'Deep in a thread', '2026-10-14T10:00:00Z', reply=(U(P, 'dr
 DP3 = post(MK, 'dp3', 'Answering the deep one', '2026-10-14T11:00:00Z', reply=(U(P, 'dr1'), U(A, 'dp2')))
 TH4 = post(P, 'th4', 'Another answer to the first post', '2026-10-15T09:30:00Z', reply=(U(P, 'th1'), U(P, 'th1')))   # Q123: same thread as TH3
 LONE = post(MK, 'lone1', 'A reply sent without its thread', '2026-10-13T11:00:00Z', reply=(U(P, 'zz1'), U(P, 'zz1')))
+# Hand-picked posts (NEWS_PINS, Oct 24): the stand-in answers getPosts for three of the real addresses (the others
+# drop out, as a deleted post would); one is newer than the feed's oldest post, so it's mixed in, not at the end.
+PINS = [
+    post(RB, '3juhmexrpxd2m', 'Very early "Web Tiles" working!', '2023-04-28T21:59:21.128Z',
+         embed_view={'$type': 'app.bsky.embed.images#view', 'images': [{'thumb': 'https://cdn.bsky.app/img/feed_thumbnail/plain/x/rb@jpeg', 'fullsize': 'https://cdn.bsky.app/img/feed_fullsize/plain/x/rb@jpeg', 'alt': 'an early tile'}]}),
+    post(RB, '3mej27i74zk2t', 'Hot off the internets: Web Tiles!', '2026-02-10T13:15:05.652Z',
+         embed_view={'$type': 'app.bsky.embed.external#view', 'external': {'uri': 'https://webtil.es/', 'title': 'Web Tiles', 'description': 'Publish tiles to AT'}}),
+    post(RB, '3mjf6xuzgtk2t', 'Hidden by moderation, hand-picked or not', '2026-04-13T15:35:33.850Z', labels=[{'src': LABELER, 'val': '!hide'}]),
+    post(RB, '3mia346rdic2b', 'Dated between two feed posts', '2026-10-14T12:00:00Z'),   # mixed in by date: before dp3 (Oct 14 11:00)
+]
 THREAD_ITEMS = [
     {'post': TH3, 'reply': {'root': TH1, 'parent': TH2}},
     {'post': TH2, 'reply': {'root': TH1, 'parent': TH1}},             # already drawn as context above: not again
@@ -124,6 +135,7 @@ PROFILE_HANDLES = {**HANDLES, AD: AD_H, NH: 'handle.invalid'}
 SEARCH_ANSWER = {'results': [{'uri': f'at://{P}/ing.dasl.masl/3mx6h2wjtgq2h', 'name': 'Roller Coaster'}, {'uri': f'at://{A}/ing.dasl.masl/hidden1'}, {'uri': f'at://{A}/ing.dasl.masl/missing1'}]}
 
 calls = []
+pin_asks = []
 def route(r):
     url = r.request.url; calls.append(url)
     u = urlparse(url); q = {k: v[0] for k, v in parse_qs(u.query).items()}
@@ -146,6 +158,10 @@ def route(r):
         if u.path.endswith('getFeed'):
             if q.get('feed') != FEED: return js({'error': 'UnknownFeed'}, 400)
             return js({'feed': [{'post': p} for p in POSTS] + THREAD_ITEMS})
+        if u.path.endswith('getPosts'):
+            want = parse_qs(u.query).get('uris', [])
+            pin_asks.append(len(want))
+            return js({'posts': [p for p in PINS if p['uri'] in want]})
     if u.hostname == 'appmosphe.re':
         if u.path == '/api/tiles':
             n = int(q.get('page', '1'))
@@ -216,6 +232,7 @@ with sync_playwright() as pw:
     page.wait_for_selector('.first-news:not([hidden]) .news-item')
     row = page.eval_on_selector_all('.first-news .news-item', 'bs => bs.map(b => [b.querySelector(".news-who").textContent, !!b.querySelector(".news-reply")])')
     check('first screen: a Tile news row with the latest three posts', len(row) == 3, str(row))
+    check('...no old hand-picked post among them (mixed in by date)', not any('Robin' in r[0] for r in row), str(row))
     order = page.evaluate("() => [...document.querySelectorAll('.first > *')].map(e => e.className || e.tagName)")
     check('...after the picks, before Tables', order.index('first-news') > order.index('cards picks') and order.index('first-news') < order.index('cards tables'), str(order))
     page.eval_on_selector('.first-news', 'e => e.scrollIntoView()'); page.wait_for_timeout(300)
@@ -505,6 +522,21 @@ with sync_playwright() as pw:
     th.scroll_into_view_if_needed(); page.wait_for_timeout(200)
     th.screenshot(path=str(OUT / 'd6b-thread.png'))
     check('the right column previews Following', page.is_visible('.dv-preview[data-source="following"]'))
+    # Hand-picked posts (NEWS_PINS, Oct 24): mixed in by date, checked like the feed's own
+    ids = page.eval_on_selector_all('.posts > *', 'ps => ps.map(p => p.dataset.uri.split("/").pop())')
+    check('hand-picked posts read in one request, the ten addresses together', pin_asks[:1] == [10], str(pin_asks))
+    check('hand-picked posts mixed in by date: one dated Oct 14 12:00 sits between the feed\'s Oct 15 and Oct 14 11:00 posts', '3mia346rdic2b' in ids and ids.index('th3') < ids.index('3mia346rdic2b') < ids.index('dp3'), str(ids))
+    check('...the older ones after every feed post, newest first', ids[-2:] == ['3mej27i74zk2t', '3juhmexrpxd2m'], str(ids))
+    check('...one hidden by moderation left out, missing ones dropped quietly', '3mjf6xuzgtk2t' not in ids and len([i for i in ids if i.startswith('3m') or i.startswith('3j')]) == 3, str(ids))
+    old = page.query_selector('.post[data-uri$="3juhmexrpxd2m"]')
+    check('...drawn like any post: the author, the year on an old date, its picture from Bluesky\'s picture server',
+          'robin.berjon.com' in old.inner_text() and old.query_selector('.post-time').inner_text() == 'Apr 28 2023'
+          and old.eval_on_selector_all('.post-pics img', 'is => is.map(i => i.src)') == ['https://cdn.bsky.app/img/feed_thumbnail/plain/x/rb@jpeg'], old.inner_text()[:200])
+    launch = page.query_selector('.post[data-uri$="3mej27i74zk2t"]')
+    check('...a link card as on feed posts, and "Open post in Bluesky"', launch.query_selector('.post-ext') is not None and launch.eval_on_selector('.post-open', 'b => b.textContent.trim()') == 'Open post in Bluesky', launch.inner_text()[:200])
+    check('...no More (the feed has no more pages)', not page.is_visible('.discover .more'))
+    old.scroll_into_view_if_needed(); page.wait_for_timeout(200)
+    page.screenshot(path=str(OUT / 'd6c-pins.png'))
     page.screenshot(path=str(OUT / 'd6-news-wide.png'), full_page=False)
 
     # the link message

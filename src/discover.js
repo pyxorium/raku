@@ -12,7 +12,7 @@
 // Addresses (address.js): raku:discover, raku:discover/news, raku:discover/recent, raku:discover/following,
 // raku:discover/make, raku:search/<words>.
 
-import { PICKS, SEARCH, RECENT, MAKE, siteLabel, feedUri, postApp, appmosphereCopy } from './config.js';
+import { PICKS, SEARCH, RECENT, MAKE, FEED, NEWS_PINS, siteLabel, feedUri, postApp, appmosphereCopy } from './config.js';
 import { atUri, discoverUri, searchUri, accountPageUri, parseAddress, parsePost, SHELF_URI, DISCOVER_URI, ABOUT_URI } from './address.js';
 import { describeTile } from './tiles.js';
 import { NetError } from './net.js';
@@ -28,21 +28,39 @@ import { searchAppmosphere, localMatches } from './search.js';
 
 const SEARCH_KEEP_MS = 5 * 60 * 1000;
 
+/** A post's time in ms for ordering Tile news (its own createdAt, else when Bluesky saw it); unknown sorts last. */
+function postTime(...isos) {
+  for (const iso of isos) { const t = Date.parse(iso); if (Number.isFinite(t)) return t; }
+  return -Infinity;
+}
+const strip = ({ t, ...item }) => item;
+
 /** What Discover keeps while Raku is open (shared by every Discover tab). */
-export function createDiscover({ resolver, moderation, shelf, storage = null, loc = globalThis.location, fetchImpl = globalThis.fetch } = {}) {
+export function createDiscover({ resolver, moderation, shelf, storage = null, loc = globalThis.location, fetchImpl = globalThis.fetch, pins = null } = {}) {
   const marks = createMarks({ storage });
   const following = createFollowing({ resolver, moderation, shelf, storage, marks });
   const recent = createRecent({ moderation, marks, fetchImpl });
   const reads = createPublicReads({ fetchImpl });
   const feed = feedUri(loc);
+  const pinList = pins || (feed === FEED ? NEWS_PINS : []);   // hand-picked posts go with the real feed only
   const searches = new Map();   // query -> { at, remote, error }
   let lastQuery = null;
 
   /** Tile news (step 6b turns it on): the feed's posts, as post data, without hidden posts or hidden accounts.
    *  A reply comes with its thread context (Q97): the thread's first post and the post it answers, each checked
-   *  the same way (a hidden one is shown as "Post not available"). → { items: [{ post, context }], posts, cursor } */
+   *  the same way (a hidden one is shown as "Post not available").
+   *  Hand-picked posts (NEWS_PINS, P1 A) are mixed in by date: a page gets the ones dated between its oldest post
+   *  and the previous page's oldest, each placed before the first feed post older than it; the feed's last page
+   *  gets all the older ones. The cursor is Raku's own ({ feed, before }): pass back what this returned.
+   *  → { items: [{ post, context, pinned? }], posts, cursor } */
   async function news({ cursor = null, fresh = false } = {}) {
-    const page = await reads.getFeed(feed, { cursor, fresh });
+    const before = cursor && Number.isFinite(cursor.before) ? cursor.before : Infinity;
+    const [page, pinViews] = await Promise.all([reads.getFeed(feed, { cursor: cursor ? cursor.feed : null, fresh }), pinned()]);
+    // The feed's end: no cursor, or an empty page (some feeds hand out a cursor to nothing).
+    const last = !page.cursor || !page.items.length;
+    let oldest = before;
+    for (const it of page.items) { const t = postTime(it.post?.record?.createdAt, it.post?.indexedAt); if (Number.isFinite(t) && t < oldest) oldest = t; }
+    const floor = last ? -Infinity : oldest;
     const items = [];
     const hiddenAccount = (p) => p && !p.unavailable && moderation.isAccountHidden(p.did);
     for (const it of page.items) {
@@ -55,7 +73,43 @@ export function createDiscover({ resolver, moderation, shelf, storage = null, lo
       }
       items.push({ post, context });
     }
-    return { items, posts: items.map((x) => x.post), cursor: page.cursor };
+    // The hand-picked posts for this page, newest first, each checked like a feed post.
+    const inFeed = new Set(page.items.map((it) => it.post.uri));
+    const extra = [];
+    for (const v of pinViews) {
+      if (inFeed.has(v.uri)) continue;
+      const post = readPost(v);
+      if (!post || post.moderation.hide) continue;
+      const t = postTime(post.createdAt);
+      if (!(t >= floor && t < before)) continue;
+      if (await moderation.isAccountHidden(post.did)) continue;
+      extra.push({ post, context: null, pinned: true, t });
+    }
+    extra.sort((a, b) => b.t - a.t);
+    const merged = [];
+    for (const it of items) {
+      const t = postTime(it.post.createdAt);
+      while (extra.length && extra[0].t > t) merged.push(strip(extra.shift()));
+      merged.push(it);
+    }
+    for (const x of extra) merged.push(strip(x));
+    return { items: merged, posts: merged.map((x) => x.post), cursor: last ? null : { feed: page.cursor, before: oldest } };
+  }
+
+  // The hand-picked posts' views, read once (25 to a request); a failed read is tried again next time and the
+  // feed is shown without them meanwhile.
+  let pinJob = null;
+  function pinned() {
+    if (!pinList.length) return Promise.resolve([]);
+    if (!pinJob) {
+      pinJob = (async () => {
+        const out = [];
+        for (let i = 0; i < pinList.length; i += 25) out.push(...await reads.getPosts(pinList.slice(i, i + 25)));
+        return out.filter((v) => v && typeof v.uri === 'string');
+      })();
+      pinJob.catch(() => { pinJob = null; });
+    }
+    return pinJob.catch(() => []);
   }
 
   /** appmosphe.re's answer for some words (kept a few minutes). → { remote: [{ actor, rkey, uri }], error } */
