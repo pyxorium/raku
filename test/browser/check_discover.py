@@ -94,6 +94,7 @@ TH4 = post(P, 'th4', 'Another answer to the first post', '2026-10-15T09:30:00Z',
 LONE = post(MK, 'lone1', 'A reply sent without its thread', '2026-10-13T11:00:00Z', reply=(U(P, 'zz1'), U(P, 'zz1')))
 # Hand-picked posts (NEWS_PINS, Oct 24): the stand-in answers getPosts for three of the real addresses (the others
 # drop out, as a deleted post would); one is newer than the feed's oldest post, so it's mixed in, not at the end.
+PIN_URIS = [l.split("'")[1] for l in (Path(__file__).parents[2] / 'src' / 'config.js').read_text().split('export const NEWS_PINS')[1].split(']);')[0].splitlines() if l.strip().startswith("'at://")]
 PINS = [
     post(RB, '3juhmexrpxd2m', 'Very early "Web Tiles" working!', '2023-04-28T21:59:21.128Z',
          embed_view={'$type': 'app.bsky.embed.images#view', 'images': [{'thumb': 'https://cdn.bsky.app/img/feed_thumbnail/plain/x/rb@jpeg', 'fullsize': 'https://cdn.bsky.app/img/feed_fullsize/plain/x/rb@jpeg', 'alt': 'an early tile'}]}),
@@ -524,7 +525,7 @@ with sync_playwright() as pw:
     check('the right column previews Following', page.is_visible('.dv-preview[data-source="following"]'))
     # Hand-picked posts (NEWS_PINS, Oct 24): mixed in by date, checked like the feed's own
     ids = page.eval_on_selector_all('.posts > *', 'ps => ps.map(p => p.dataset.uri.split("/").pop())')
-    check('hand-picked posts read in one request, the ten addresses together', pin_asks[:1] == [10], str(pin_asks))
+    check('hand-picked posts read in one request, all the addresses together', pin_asks[:1] == [len(PIN_URIS)], str(pin_asks))
     check('hand-picked posts mixed in by date: one dated Oct 14 12:00 sits between the feed\'s Oct 15 and Oct 14 11:00 posts', '3mia346rdic2b' in ids and ids.index('th3') < ids.index('3mia346rdic2b') < ids.index('dp3'), str(ids))
     check('...the older ones after every feed post, newest first', ids[-2:] == ['3mej27i74zk2t', '3juhmexrpxd2m'], str(ids))
     check('...one hidden by moderation left out, missing ones dropped quietly', '3mjf6xuzgtk2t' not in ids and len([i for i in ids if i.startswith('3m') or i.startswith('3j')]) == 3, str(ids))
