@@ -588,6 +588,10 @@ a { color: var(--glaze-light); }
 .card-pic.blurred img, .dv-mini-pic.blurred img { filter: blur(22px) saturate(.6); transform: scale(1.15); }
 .dv-mini-pic.is-icon img { object-fit: contain; padding: 3px; }
 .dv-end { margin-top: 14px; }
+/* Tile news loads its next batch on scroll (Oct 25): the sentinel is what the page watches. */
+.news-sentinel { height: 1px; }
+.news-loading, .news-failed { text-align: center; }
+.news-end { text-align: center; }
 /* Tile news (Q123): later replies in a thread already shown are counted on its card */
 .post-more-replies { display: block; margin: 8px 0 0 auto; padding: 4px 10px; border-radius: 8px; border: 1px solid #3a322b;
   background: none; color: var(--glaze-light); font: inherit; font-size: 13px; cursor: pointer; }

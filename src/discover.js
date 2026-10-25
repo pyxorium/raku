@@ -380,21 +380,39 @@ function drawRecent(ctx, into) {
 }
 
 // ---------- Tile news (shown once FEED is set, step 6b; ?feed= on this computer) ----------
-function drawNews(ctx, into) {
+// The next batch loads by itself when you scroll near the bottom (owner, Oct 25: no More button), so the
+// hand-picked posts at the end are reached by scrolling. A browser without IntersectionObserver gets the More
+// button instead. A batch that fails says so at the bottom, with Try again.
+function drawNews(ctx, into, { observe = globalThis.IntersectionObserver } = {}) {
   const { discover, alive } = ctx;
   into.append(h('div', { class: 'dv-head' }, h('h1', {}, 'Tile news'), h('p', { class: 'sub' }, SOURCES.news.blurb)));
   const list = h('div', { class: 'posts' });
   const status = h('p', { class: 'dv-status' }, 'Loading posts…');
+  const sentinel = h('div', { class: 'news-sentinel', 'aria-hidden': 'true' });
+  const loading = h('p', { class: 'dv-status news-loading', hidden: true }, 'Loading more posts…');
+  const failed = h('p', { class: 'dv-status news-failed', hidden: true });
   const more = h('button', { type: 'button', class: 'more', hidden: true }, 'More');
-  into.append(status, list, more);
+  const end = h('p', { class: 'dv-end news-end', hidden: true }, "That's everything in Tile news.");
+  into.append(status, list, sentinel, loading, failed, more, end);
   let cursor = null;
+  let busy = false;
+  let watcher = null;
   const seen = { threads: new Map(), posts: new Set() };
   const postCtx = postContext(ctx, 'Tile news');
+  const stop = () => { if (watcher) { watcher.disconnect(); watcher = null; } };
+  // Watch the bottom again: the observer reports at once whether it's still in view (a short batch, a tall
+  // window), so the next batch follows until the page fills or the feed ends.
+  const rewatch = () => { if (watcher) { watcher.unobserve(sentinel); watcher.observe(sentinel); } };
   const page = async () => {
+    if (busy) return;
+    busy = true;
     more.disabled = true;
+    failed.hidden = true;
+    if (list.childElementCount) loading.hidden = false;
+    let ok = false;
     try {
       const r = await discover.news({ cursor });
-      if (!alive()) return;
+      if (!alive()) { stop(); return; }
       // One card per thread (Q123): a post already drawn isn't drawn again; later replies in a thread already
       // shown are counted on its card ("+1 more reply in this thread").
       const { added, counted } = groupThreads(r.items, seen);
@@ -408,14 +426,33 @@ function drawNews(ctx, into) {
       cursor = r.cursor;
       status.textContent = list.childElementCount ? '' : 'No posts yet.';
       status.hidden = !status.textContent;
+      ok = true;
     } catch (err) {
-      if (!alive()) return;
-      status.hidden = false;
-      status.textContent = err instanceof NetError ? err.message : "Couldn't load Tile news just now.";
+      if (!alive()) { stop(); return; }
+      const words = err instanceof NetError ? err.message : "Couldn't load Tile news just now.";
+      if (list.childElementCount) {
+        failed.replaceChildren(`${words} `, h('button', { type: 'button', class: 'linkish', onclick: () => page() }, 'Try again'));
+        failed.hidden = false;
+      } else {
+        status.hidden = false;
+        status.textContent = words;
+      }
+    } finally {
+      busy = false;
+      loading.hidden = true;
+      more.disabled = false;
     }
-    more.hidden = !cursor;
-    more.disabled = false;
+    if (!ok) { if (!list.childElementCount) more.hidden = !cursor; return; }   // a failed later batch waits for Try again
+    end.hidden = !!cursor || !list.childElementCount;
+    if (!cursor) { stop(); more.hidden = true; return; }
+    if (watcher) rewatch(); else more.hidden = false;
   };
+  if (typeof observe === 'function') {
+    watcher = new observe((entries) => {
+      if (!alive()) { stop(); return; }
+      if (entries.some((e) => e.isIntersecting) && cursor && !busy && failed.hidden) page();
+    }, { rootMargin: '0px 0px 800px 0px' });
+  }
   more.addEventListener('click', page);
   page();
 }

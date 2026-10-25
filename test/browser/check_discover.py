@@ -135,6 +135,13 @@ PROFILE_HANDLES = {**HANDLES, AD: AD_H, NH: 'handle.invalid'}
 
 SEARCH_ANSWER = {'results': [{'uri': f'at://{P}/ing.dasl.masl/3mx6h2wjtgq2h', 'name': 'Roller Coaster'}, {'uri': f'at://{A}/ing.dasl.masl/hidden1'}, {'uri': f'at://{A}/ing.dasl.masl/missing1'}]}
 
+# Tile news on scroll (Oct 25): a second stand-in feed, long enough to page (5 posts a page, 25 in all); the batch
+# after 20 fails once, to see Try again.
+FEED2 = f'at://{A}/app.bsky.feed.generator/scroll-test'
+SCROLL_POSTS = [post(A, f'sc{i:02d}', f'Scroll post {i}', f'2026-10-{24 - i // 2:02d}T{(12 - i % 2 * 6):02d}:00:00Z') for i in range(25)]
+feed2_asks = []
+feed2_fail = {'20': 1}
+
 calls = []
 pin_asks = []
 def route(r):
@@ -157,6 +164,11 @@ def route(r):
             labels = [{'src': LABELER, 'uri': f'at://{B}', 'val': '!hide'}] if q.get('actor') == B else []
             return js({'did': q.get('actor'), 'labels': labels, 'avatar': 'https://cdn.bsky.app/img/avatar/plain/x/av@jpeg'})
         if u.path.endswith('getFeed'):
+            if q.get('feed') == FEED2:
+                c = q.get('cursor'); feed2_asks.append(c)
+                if c and feed2_fail.get(c): feed2_fail[c] -= 1; return js({'error': 'InternalServerError'}, 502)
+                n = int(c or 0); nxt = n + 5
+                return js({'feed': [{'post': p} for p in SCROLL_POSTS[n:nxt]], **({'cursor': str(nxt)} if nxt < len(SCROLL_POSTS) else {})})
             if q.get('feed') != FEED: return js({'error': 'UnknownFeed'}, 400)
             return js({'feed': [{'post': p} for p in POSTS] + THREAD_ITEMS})
         if u.path.endswith('getPosts'):
@@ -525,7 +537,8 @@ with sync_playwright() as pw:
     check('the right column previews Following', page.is_visible('.dv-preview[data-source="following"]'))
     # Hand-picked posts (NEWS_PINS, Oct 24): mixed in by date, checked like the feed's own
     ids = page.eval_on_selector_all('.posts > *', 'ps => ps.map(p => p.dataset.uri.split("/").pop())')
-    check('hand-picked posts read in one request, all the addresses together', pin_asks[:1] == [len(PIN_URIS)], str(pin_asks))
+    chunks = [min(25, len(PIN_URIS) - i) for i in range(0, len(PIN_URIS), 25)]
+    check('hand-picked posts read together, 25 to a request', pin_asks[:len(chunks)] == chunks, str(pin_asks))
     check('hand-picked posts mixed in by date: one dated Oct 14 12:00 sits between the feed\'s Oct 15 and Oct 14 11:00 posts', '3mia346rdic2b' in ids and ids.index('th3') < ids.index('3mia346rdic2b') < ids.index('dp3'), str(ids))
     check('...the older ones after every feed post, newest first', ids[-2:] == ['3mej27i74zk2t', '3juhmexrpxd2m'], str(ids))
     check('...one hidden by moderation left out, missing ones dropped quietly', '3mjf6xuzgtk2t' not in ids and len([i for i in ids if i.startswith('3m') or i.startswith('3j')]) == 3, str(ids))
@@ -644,6 +657,56 @@ with sync_playwright() as pw:
     box = mp.eval_on_selector('.link-msg-box', 'b => { const r = b.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right), Math.round(r.bottom)]; }')
     check('phone: the link message as a sheet from the bottom, full width', box[0] == 0 and box[1] == 390 and box[2] == 800, str(box))
     mp.screenshot(path=str(OUT / 'd10-phone-link.png'))
+
+    # ---------- Tile news loads on scroll (Oct 25: no More button) ----------
+    sc = b.new_context(viewport={'width': 1400, 'height': 900})
+    for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**', 'https://appmosphe.re/**', 'https://typeahead.waow.tech/**']:
+        sc.route(host, route)
+    sp = sc.new_page()
+    news_url = RAKU + '?feed=' + quote(FEED2, safe='') + '#t=raku%3Adiscover%2Fnews&a=0'
+    sp.goto(news_url); sp.wait_for_selector('.posts .post')
+    count = lambda: sp.eval_on_selector_all('.posts > .post', 'ps => ps.length')
+    def settle():
+        last = -1
+        for _ in range(40):
+            sp.wait_for_timeout(150)
+            n = count()
+            if n == last and not sp.is_visible('.news-loading'): return n
+            last = n
+        return count()
+    n0 = settle()
+    check('Tile news: no More button', not sp.is_visible('.discover .more'))
+    check('...the first batches fill the window, not the whole feed at once', 5 <= n0 < 25 and len(feed2_asks) < 5, f'{n0} posts, asks {feed2_asks}')
+    def to_bottom():
+        sp.eval_on_selector('.news-sentinel', 'e => e.scrollIntoView({ block: "end" })'); return settle()
+    for _ in range(10):
+        if sp.is_visible('.news-failed') or count() >= 20: break
+        to_bottom()
+    to_bottom()
+    check('scrolling near the bottom loads the next batch', count() == 20, str(count()))
+    check('a batch that fails says so at the bottom, with Try again', wait_for(lambda: sp.is_visible('.news-failed'), page=sp) and 'Try again' in sp.inner_text('.news-failed'), sp.inner_text('.news-failed') if sp.query_selector('.news-failed') else '')
+    to_bottom()
+    check('...and doesn\'t keep asking while it waits', feed2_asks.count('20') == 1, str(feed2_asks))
+    sp.click('.news-failed button'); settle()
+    for _ in range(5): to_bottom()
+    ids = sp.eval_on_selector_all('.posts > .post', 'ps => ps.map(p => p.dataset.uri.split("/").pop())')
+    check('...Try again carries on to the end: every post once, in order', ids == [f'sc{i:02d}' for i in range(25)], str(ids))
+    check('at the end: "That\'s everything in Tile news.", nothing more asked', sp.is_visible('.news-end') and sp.inner_text('.news-end') == "That's everything in Tile news." and feed2_asks == [None, '5', '10', '15', '20', '20'], str(feed2_asks))
+    check('...still no More button', not sp.is_visible('.discover .more'))
+    sp.screenshot(path=str(OUT / 'd11-news-end.png'))
+    sc.close()
+    # A browser without IntersectionObserver keeps the More button.
+    feed2_asks.clear()
+    sc = b.new_context(viewport={'width': 1400, 'height': 900})
+    for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**', 'https://appmosphe.re/**', 'https://typeahead.waow.tech/**']:
+        sc.route(host, route)
+    sc.add_init_script('delete window.IntersectionObserver')
+    sp = sc.new_page()
+    sp.goto(news_url); sp.wait_for_selector('.posts .post'); sp.wait_for_timeout(800)
+    check('without IntersectionObserver: one batch, then More', count() == 5 and sp.is_visible('.discover .more'), f'{count()} posts')
+    sp.click('.discover .more'); sp.wait_for_timeout(800)
+    check('...More adds the next batch', count() == 10, str(count()))
+    sc.close()
     b.close()
 
 failed = [r for r in results if not r[1]]

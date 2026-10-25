@@ -265,10 +265,14 @@ Plan and decisions: `claude/raku-stage6c-plan.md` (Q106 to Q111).
   in `NEWS_PINS` in `src/config.js` (at:// addresses by DID, oldest first). Raku reads them once with the feed
   (`app.bsky.feed.getPosts`, 25 to a request) and mixes them in by date: each page of the feed gets the ones
   dated between its oldest post and the previous page's, and the feed's last page gets all the older ones, so
-  most sit after the feed's own posts, reached with More. They're checked like feed posts (Bluesky's labels,
+  most sit after the feed's own posts, reached by scrolling. They're checked like feed posts (Bluesky's labels,
   the hide list), shown once if the feed has them too, and a deleted one drops out. They go with the real feed
   only, not a `?feed=` stand-in. If they can't be read, the feed shows without them and they're tried again.
   To add one: its at:// address in `NEWS_PINS` (the running list with notes is kept in the project docs).
+- **No More button in Tile news (Oct 25):** the next batch loads by itself when you scroll near the bottom
+  (an IntersectionObserver on a line under the list; it checks again after each batch, so a tall window fills
+  up). "Loading more posts…" while it reads; a batch that fails says so at the bottom with Try again; at the
+  end, "That's everything in Tile news." A browser without IntersectionObserver still gets More.
 
 ## Stage 6c, step 2 (Oct 22 2026): Make a tile
 
@@ -387,12 +391,12 @@ the saved records passing the games' own checks; the phone). They need a bundle 
 top of each file. For the sign-in checks the bundle swaps in a stand-in for the sign-in library:
 `esbuild src/main.js --bundle --format=esm --alias:@atproto/oauth-client-browser=./test/browser/oauth-standin.js`.
 
-`check_discover.py` (158 checks, stage 6, 6c and the About page) runs the same way as `check_page.py`: Discover's columns at four widths,
+`check_discover.py` (168 checks, stage 6, 6c and the About page) runs the same way as `check_page.py`: Discover's columns at four widths,
 Recent tiles (appmosphe.re's order, hidden ones, checked handles, blurred and icon pictures, More, "New"), Make a tile
 (the groups, the cards, Open in a new tab, the phone), the About page (its three links, its outside links, what it says, the phone),
 Following (order, hidden ones, "New"), search from the box and from Discover (nothing sent while typing, one request
 with only the words), a word with a dot as a handle first, Tile news from a stand-in feed with a post linking a tile,
-hand-picked posts mixed in by date, labels, replies with their thread, the link message (Cancel, Escape, Open with no opener), a post's address in the box, the phone.
+hand-picked posts mixed in by date, loading the next batch on scroll (and More without IntersectionObserver), labels, replies with their thread, the link message (Cancel, Escape, Open with no opener), a post's address in the box, the phone.
 
 `check_daisy.py` (63 checks, stage 5) bundles and starts everything itself (Raku's page with the stand-in
 sign-in, the loader replica, daisy-tiles' stand-in relay, and the site's Daisy page bundled with a stand-in

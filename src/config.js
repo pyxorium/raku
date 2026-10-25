@@ -266,9 +266,9 @@ export function cardTags() {
 export const FEED = 'at://did:plc:6vxjigxrqizmbo56gojxico3/app.bsky.feed.generator/Web-Tiles';
 // Hand-picked posts for Tile news (Oct 24): older posts Graze won't take any more (its manual add stops at about
 // four weeks). Raku reads them with the feed and mixes them in by date (P1 A), so most sit after the feed's own
-// posts, reached with More. Only the real feed gets them (not a ?feed= stand-in). Addresses by DID, so a handle
-// change doesn't break them; a deleted post simply drops out. Oldest first; the running list with notes is
-// claude/raku-tile-news-pins-plan.md. To add one: its at:// address (bsky.app's /profile/<handle>/post/<key> with
+// posts, reached by scrolling (the next batch loads near the bottom). Only the real feed gets them (not a ?feed=
+// stand-in). Addresses by DID, so a handle change doesn't break them; a deleted post simply drops out. Oldest
+// first; the running list with notes is claude/raku-tile-news-pins-plan.md. To add one: its at:// address (bsky.app's /profile/<handle>/post/<key> with
 // the handle swapped for the account's DID).
 export const NEWS_PINS = Object.freeze([
   'at://did:plc:izttpdp3l6vss5crelt5kcux/app.bsky.feed.post/3juhmexrpxd2m',   // Robin, 2023-04-28: very early Web Tiles working
@@ -290,6 +290,9 @@ export const NEWS_PINS = Object.freeze([
   'at://did:plc:7ho7ntz7g2yglmpw5vsto7ht/app.bsky.feed.post/3mmznydfans2y',   // dysbulic, 2026-05-29: learning about WebTiles
   'at://did:plc:3x5npw4cb2twifyqcox7jmqj/app.bsky.feed.post/3mn4eubkwic2j',   // ekana.org, 2026-05-31: a website as a bento box of webtiles
   'at://did:plc:ephkzpinhaqcabtkugtbzrwu/app.bsky.feed.post/3mo4is2taw22d',   // byjp.me, 2026-06-12: tiles as views for AT collections
+  'at://did:plc:lrphxvv25aibthe7xoc2eeyy/app.bsky.feed.post/3mpoocrgvps24',   // kandake.africa, 2026-07-02: a page built from DASL tiles (a video)
+  'at://did:plc:lrphxvv25aibthe7xoc2eeyy/app.bsky.feed.post/3mpwiehjgoc2y',   // kandake.africa, 2026-07-05: the page's tiles now use DASL
+  'at://did:plc:2cxgdrgtsmrbqnjkwyplmp43/app.bsky.feed.post/3mqpcsiqzxc2f',   // bmann.ca, 2026-07-15: twinkl.social demo, widgets for building tiles
   'at://did:plc:izttpdp3l6vss5crelt5kcux/app.bsky.feed.post/3mqtyyypye22e',   // Robin, 2026-07-17: two new things, a tile protocol registry
   'at://did:plc:lrphxvv25aibthe7xoc2eeyy/app.bsky.feed.post/3mvb4lmwshk27',   // kandake.africa, 2026-09-11: more usage of dasl.ing (a quote)
   'at://did:plc:6vxjigxrqizmbo56gojxico3/app.bsky.feed.post/3mw7avbjkd22n',   // thunderbird.cafe, 2026-09-23: rotatable 3D object tile
