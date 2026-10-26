@@ -19,6 +19,10 @@ import { BLUESKY_API, daisyLoungeUrl, loungeTimes, SIGNIN_PROMISE } from '../con
 const OFF_TEXT = 'Off. Turn it on to see other mingling Daisy players who are here now, and let them see you. Joining the lounge requires one additional authorization.';
 const OFF_TEXT_READY = 'Off. Turn it on to see other mingling Daisy players who are here now, and let them see you.';
 const WAIT_TEXT = 'Sign in to mingle. Joining the lounge requires one additional authorization.';
+// Daisy's relay takes lounge passes from did:plc accounts only (Oct 26; daisy-relay's README says why), so a
+// did:web account is told plainly here instead of being asked to approve again and again.
+export const WEB_TEXT = 'Mingling in the lounge works with most accounts, but not this kind yet.';
+export const canMingleAs = (did) => typeof did === 'string' && did.startsWith('did:plc:');
 const ON_TEXT = "Mingling: other mingling players can see you while Daisy's start screen is the tab in front";
 
 /** Public profiles for a few accounts (handles, names, avatars), from Bluesky's public API. */
@@ -72,7 +76,7 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, onSigna
   // ---------- state ----------
   let account = null;          // { did, handle }: Raku's current account
   let mingling = false;        // the record exists (as far as this page knows)
-  let state = 'off';           // off | joining | here | away (listening, 5b-2) | stopped (2 hours away) | idle | needs-signin | replaced | unavailable
+  let state = 'off';           // off | joining | here | away (listening, 5b-2) | stopped (2 hours away) | idle | needs-signin | replaced | unavailable | unsupported (did:web)
   let visible = false;         // Daisy's start screen in front and Raku seen (Q51)
   let ws = null, tries = 0, retryTimer = null, lastHereSent = 0, leaving = false, setting = 0;
   let sentAway = false;        // what the relay was last told: away (true) or here
@@ -83,11 +87,15 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, onSigna
   const note = (text) => { noteEl.textContent = text || ''; };
   function show() {
     sw.setAttribute('aria-checked', String(mingling));
+    // A did:web account can't mingle: the switch is off and disabled (left alone otherwise: turnOff uses it).
+    if (state === 'unsupported') { sw.disabled = true; sw.dataset.unsupported = ''; }
+    else if ('unsupported' in sw.dataset) { sw.disabled = false; delete sw.dataset.unsupported; }
     panel.dataset.state = state;
     who.hidden = state !== 'here';
     retryBtn.hidden = !['needs-signin', 'idle', 'replaced'].includes(state);
     retryBtn.textContent = state === 'needs-signin' ? 'Approve “Daisy lounge”' : 'Rejoin the lounge';
-    if (state === 'off') note(!account ? WAIT_TEXT : auth.coversLounge(account.did, table.id) ? OFF_TEXT_READY : OFF_TEXT);
+    if (state === 'unsupported') note(WEB_TEXT);
+    else if (state === 'off') note(!account ? WAIT_TEXT : auth.coversLounge(account.did, table.id) ? OFF_TEXT_READY : OFF_TEXT);
     else if (state === 'joining') note(`Joining the lounge as @${account.handle}…`);
     else if (state === 'here') note(`${ON_TEXT} (as @${account.handle}).`);
     else if (state === 'away' || state === 'stopped') note(`Mingling as @${account.handle}. You're in the lounge whenever this tab is in front.`);
@@ -101,6 +109,7 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, onSigna
     if (account && (!a || a.did !== account.did)) { leave(); mingling = false; }
     account = a ? { did: a.did, handle: a.handle } : null;
     if (!account) { setState('off'); return; }
+    if (!canMingleAs(account.did)) { mingling = false; setState('unsupported'); return; }
     if (!auth.known(account.did)) { await auth.whenReady(); await auth.restore(account.did); }
     if (n !== setting) return;
     if (!mingling) setState('off');
@@ -122,6 +131,7 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, onSigna
   // ---------- the switch ----------
   function toggle() {
     if (!account) return askSignInFirst();
+    if (!canMingleAs(account.did)) return setState('unsupported');
     if (mingling) return turnOff();
     explain();
   }
@@ -163,6 +173,7 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, onSigna
     const a = auth.current();
     if (!a) return;
     account = { did: a.did, handle: a.handle };
+    if (!canMingleAs(a.did)) { mingling = false; setState('unsupported'); return; }
     if (!auth.coversLounge(a.did, table.id)) { setState('off', "“Daisy lounge” wasn't approved, so mingling stays off."); return; }
     await writeRecord();
   }
@@ -193,6 +204,7 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, onSigna
     } finally { if (btn) btn.disabled = false; }
   }
   async function writeRecord() {
+    if (!account || !canMingleAs(account.did)) { mingling = false; return setState('unsupported'); }   // never a record the relay would refuse
     try {
       await auth.putRecord(account.did, { collection: L.collection, rkey: 'self', record: { $type: L.collection, createdAt: new Date().toISOString() } });
     } catch (err) {
@@ -289,7 +301,8 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, onSigna
       case 'stopped': leaving = true; setState('stopped'); break;   // 2 hours away (or too many listening): quietly out
       case 'refused':
         leaving = true;
-        if (m.why === 'NoLoungeRecord') { mingling = false; setState('off', 'Your account has no lounge record any more, so mingling is off.'); }
+        if (m.why === 'AccountType') { mingling = false; setState('unsupported'); }
+        else if (m.why === 'NoLoungeRecord') { mingling = false; setState('off', 'Your account has no lounge record any more, so mingling is off.'); }
         else if (m.why === 'NotReady') setState('unavailable', "The lounge isn't open right now. Try again later.");
         else setState('needs-signin', "The relay didn't accept this page's lounge pass: approve “Daisy lounge” again.");
         break;
