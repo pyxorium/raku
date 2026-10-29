@@ -2,13 +2,14 @@
 // computer and between the Raku label and the address on a phone. It opens a menu (a sheet from the
 // bottom on a phone): the accounts signed in on this browser with a tick on the current one (choosing one
 // switches, no window: Q38), Add another account, the "Saves without asking" choices with Turn off (Q37),
-// Raku's sign-in promise (Q43), and Sign out; last, a link to the About page (going public, Q134).
+// Raku's sign-in promise (Q43), and Sign out; then "Install Raku" when the browser offers it (stage 9, S3);
+// last, a link to the About page (going public, Q134).
 import { SIGNIN_PROMISE, TABLES } from './config.js';
 import { h } from './cards.js';
 import { icon } from './icons.js';
 import { signInForm, avatarEl } from './signin-ui.js';
 
-export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbout = null }) {
+export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbout = null, install = null }) {
   const button = h('button', { type: 'button', class: 'account-btn', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', onclick: () => toggle() });
   const panel = h('div', { class: 'account-menu', hidden: true, role: 'dialog', 'aria-label': 'Your accounts' });
   const avatars = new Map();             // did → avatar address (Bluesky's picture server), once known
@@ -47,6 +48,12 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
     });
   }
 
+  // Stage 9 (S3): only while the browser offers installing (Chrome and Edge) and Raku isn't running installed.
+  const installRow = () => (install && install.available() ? h('button', { type: 'button', class: 'acct-install', onclick: async () => {
+    toggle(false);
+    const outcome = await install.prompt();
+    if (outcome === 'accepted') say('Raku is installed. You’ll find it with your other apps.');
+  } }, icon('install', 16), 'Install Raku: its own window and icon') : null);
   const aboutRow = () => (onAbout ? h('button', { type: 'button', class: 'acct-about', onclick: () => { toggle(false); onAbout(); } }, icon('info', 16), 'About Raku: privacy and safety') : null);
   function drawPanel() {
     const list = auth.list();
@@ -56,7 +63,7 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
     if (!list.length) {
       const f = form({ label: 'Sign in' });
       parts.push(h('p', { class: 'small' }, 'Browsing never needs a sign-in. Signing in is only for saving match results from the tables.'), f.el,
-        h('p', { class: 'rk-promise' }, SIGNIN_PROMISE), aboutRow());
+        h('p', { class: 'rk-promise' }, SIGNIN_PROMISE), installRow(), aboutRow());
       panel.replaceChildren(...parts.filter(Boolean));
       return f;
     }
@@ -80,7 +87,7 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
     parts.push(h('p', { class: 'rk-promise' }, SIGNIN_PROMISE));
     const cur = auth.current();
     if (cur) parts.push(h('button', { type: 'button', class: 'acct-out', onclick: async () => { const hd = cur.handle; await auth.signOut(cur.did); draw(); say(`Signed out @${hd}.`); } }, `Sign out @${cur.handle}`));
-    parts.push(aboutRow());
+    parts.push(installRow(), aboutRow());
     panel.replaceChildren(...parts.filter(Boolean));
     return f;
   }
@@ -98,6 +105,7 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
   document.addEventListener('pointerdown', (e) => { if (!panel.hidden && !panel.contains(e.target) && !button.contains(e.target)) toggle(false); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) { toggle(false); button.focus(); } });
   auth.onChange(() => draw());
+  if (install) install.onChange(() => draw());
   draw();
   return { button, panel, toggle, draw };
 }

@@ -1,0 +1,45 @@
+<!doctype html>
+<!-- Raku's "needs the internet" page (stage 9, S1): the only page Raku's service worker keeps (public/sw.js).
+     Self-contained: no files, nothing from outside. Its policy allows only its own style and script (by hash;
+     test/app.test.mjs checks the hashes), and looking at Raku's own version.json to know when it's back online. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-iUMXpeEF8ixUU6qhhHWyTHremWrKOwHFgPTXB4Ig+eo='; script-src 'sha256-JRFYETIiFvqV3ADW5CeZ38Vb2FejHiVtg1JK08ZiYQM='; connect-src 'self'; img-src data:; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#26211d">
+  <title>Raku</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cg%20transform%3D%22translate%2832%2032%29%20scale%281.6%29%20translate%28-32%20-34%29%22%3E%3Cpath%20d%3D%22M14%2044c0-13%208-24%2018-24s18%2011%2018%2024c0%204-8%206-18%206s-18-2-18-6z%22%20fill%3D%22none%22%20stroke%3D%22%2326211d%22%20stroke-width%3D%222.2%22%20stroke-linejoin%3D%22round%22/%3E%3Cellipse%20cx%3D%2232%22%20cy%3D%2221%22%20rx%3D%229%22%20ry%3D%223%22%20fill%3D%22none%22%20stroke%3D%22%2326211d%22%20stroke-width%3D%222.2%22/%3E%3Cpath%20d%3D%22M14%2044c0-13%208-24%2018-24s18%2011%2018%2024c0%204-8%206-18%206s-18-2-18-6z%22%20fill%3D%22%232fa596%22/%3E%3Cpath%20d%3D%22M22%2030l6%206-3%207M38%2027l-4%208%207%205%22%20stroke%3D%22%231f1a16%22%20stroke-width%3D%222%22%20fill%3D%22none%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3Cellipse%20cx%3D%2232%22%20cy%3D%2221%22%20rx%3D%229%22%20ry%3D%223%22%20fill%3D%22%237fd6c8%22/%3E%3C/g%3E%3C/svg%3E">
+  <style>
+  html, body { margin: 0; height: 100%; background: #171411; color: #efe6d8; }
+  body { font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; padding: 24px 16px; box-sizing: border-box; }
+  main { max-width: 420px; text-align: center; }
+  svg { width: 88px; height: 88px; }
+  h1 { font-size: 22px; margin: 14px 0 8px; color: #7fd6c8; }
+  p { margin: 0 0 18px; color: #b9ad9c; }
+  button { font: inherit; font-weight: 600; color: #06201c; background: #2fa596; border: 1px solid #2fa596; border-radius: 8px; padding: 8px 18px; min-height: 40px; cursor: pointer; }
+  button:focus-visible { outline: 2px solid #3fb8a8; outline-offset: 2px; }
+</style>
+</head>
+<body>
+  <main>
+    <svg viewBox="0 0 64 64" aria-hidden="true"><g transform="translate(32 32) scale(1.6) translate(-32 -34)"><path d="M14 44c0-13 8-24 18-24s18 11 18 24c0 4-8 6-18 6s-18-2-18-6z" fill="none" stroke="#26211d" stroke-width="2.2" stroke-linejoin="round"/><ellipse cx="32" cy="21" rx="9" ry="3" fill="none" stroke="#26211d" stroke-width="2.2"/><path d="M14 44c0-13 8-24 18-24s18 11 18 24c0 4-8 6-18 6s-18-2-18-6z" fill="#2fa596"/><path d="M22 30l6 6-3 7M38 27l-4 8 7 5" stroke="#1f1a16" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><ellipse cx="32" cy="21" rx="9" ry="3" fill="#7fd6c8"/></g></svg>
+    <h1>Raku needs the internet</h1>
+    <p>Tiles and Raku’s pages come from the network, so there’s nothing to show right now. Raku will carry on by itself when you’re back online.</p>
+    <button type="button" id="again">Try now</button>
+  </main>
+  <script>
+  // Back online: Raku carries on by itself. The address (with your tabs) stays as it was.
+  const again = () => location.reload();
+  document.getElementById('again').addEventListener('click', again);
+  addEventListener('online', again);
+  // "Online" isn't always said (a network with no internet behind it), so look quietly now and then too.
+  setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    fetch('/version.json', { cache: 'no-store' }).then((r) => { if (r.ok) again(); }).catch(() => {});
+  }, 15000);
+</script>
+</body>
+</html>

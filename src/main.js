@@ -9,6 +9,7 @@ import { createFileStore } from './tiles.js';
 import { createShelf, STORAGE_KEY } from './shelf-store.js';
 import { createAuth, isSignInReturn } from './auth.js';
 import { mountRaku } from './app.js';
+import { createInstallOffer, registerWorker, createUpdateCheck, watchForUpdates, watchTitleBar } from './app-shell.js';
 
 const root = document.getElementById('raku');
 const guarded = (f) => { try { return f(); } catch { return null; } };
@@ -16,8 +17,13 @@ const guarded = (f) => { try { return f(); } catch { return null; } };
 // The sign-in library loads on its own (only saving needs it): browsing starts without waiting for it.
 const signInLib = () => import('@atproto/oauth-client-browser');
 
+// Stage 9: listen for the browser's install offer from the first moment (it can come before Raku is drawn).
+const install = isFramed() ? null : createInstallOffer(globalThis);
+
 async function start() {
   if (isFramed()) { showOpenInOwnTab(root, SITE.origin + '/'); return; }
+  registerWorker();                    // only when Raku runs installed (src/app-shell.js)
+  watchTitleBar();                     // the tabs in the title bar, where the browser has folded it away (S7)
   const storage = guarded(() => globalThis.localStorage);
   const session = guarded(() => globalThis.sessionStorage);
   const resolver = createResolver();
@@ -53,7 +59,12 @@ async function start() {
   // Another Raku tab changed your shelf: read it again.
   globalThis.addEventListener('storage', (ev) => { if (ev.key === STORAGE_KEY) shelf.reload(); });
   const keepForReturn = (info) => guarded(() => session.setItem(SIGNIN.returnKey, JSON.stringify(info)));
-  globalThis.__raku = mountRaku(root, { mothership, resolver, moderation, files: createFileStore(), shelf, auth, storage, returned, keepForReturn });
+  const raku = mountRaku(root, { mothership, resolver, moderation, files: createFileStore(), shelf, auth, storage, returned, keepForReturn, install });
+  // Stage 9's update rule: a newer version on start is taken at once; later, only a note (S2: never interrupt).
+  // Just back from a sign-in in this tab there's something to finish (a save), so no reload then: the note.
+  const updates = createUpdateCheck({ session, startedAt: returned ? -Infinity : Date.now(), onNewer: (build) => raku.showUpdate(build), reload: () => globalThis.location.reload() });
+  watchForUpdates(globalThis, updates);
+  globalThis.__raku = Object.assign(raku, { updates });
   if (!returned) auth.start();
 }
 start();

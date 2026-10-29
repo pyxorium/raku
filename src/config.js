@@ -406,7 +406,7 @@ export function pageCsp(loadDomain = TILE_LOAD_DOMAIN, scheme = 'https', relays 
     "font-src 'self'",
     ["connect-src 'self' https:", ...relays].join(' '),
     `frame-src ${scheme}://${loadDomain} ${scheme}://*.${base}`,
-    "worker-src 'none'",
+    "worker-src 'self'",                   // stage 9: Raku's own service worker (public/sw.js), nothing else
     "manifest-src 'self'",
     "object-src 'none'",
     "base-uri 'none'",

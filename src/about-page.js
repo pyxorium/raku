@@ -29,6 +29,16 @@ export const MESSAGES_LINE = 'A tile can only talk to Raku. If it sends anything
 
 export const EXCEPTION = 'a tile can open a link in a new tab when you click it, and that link could carry information about what you did in the tile. It’s the same as clicking a link on any web page, so use the same care.';
 
+/** Installing Raku (stage 9, S3): the steps for each kind of browser, [where, how]. */
+export const INSTALL_STEPS = Object.freeze([
+  ['Chrome or Edge', ' (computer or Android): “Install Raku” in the account menu, or the install icon at the right of the address bar.'],
+  ['iPhone or iPad', ': in Safari, Share → Add to Home Screen. The home-screen Raku keeps its own shelf and sign-ins, separate from Safari’s; use Export and Import on Your shelf to bring your shelf across.'],
+  ['Safari on a Mac', ': File → Add to Dock.'],
+  ['Firefox', ': Raku works fine in a tab; Firefox doesn’t install web apps on computers.'],
+]);
+export const INSTALL_INTRO = 'Raku can have its own window and icon, like an app. It’s the same Raku, with the same privacy.';
+export const INSTALL_KEEPS = 'Installed Raku keeps one small page of its own (the “Raku needs the internet” screen), never tiles or anything you open, and checks for a new version each time it starts.';
+
 export function drawAbout(ctx) {
   const { p, tabs, tab, drawChrome } = ctx;
   p.title = `About ${SITE.name}`;
@@ -49,7 +59,8 @@ export function drawAbout(ctx) {
         h('li', {}, h('b', {}, 'Your shelf'), ': the tiles and accounts you keep (Export and Import move it to another browser).'),
         h('li', {}, h('b', {}, 'Your last visits'), ' to Following and Recent tiles, for the "New" marks.'),
         h('li', {}, h('b', {}, 'The app you chose'), ' for opening posts, and the accounts you’ve signed in with.'),
-        h('li', {}, 'A seat at a Daisy table you’ve joined, for a day.'))),
+        h('li', {}, 'A seat at a Daisy table you’ve joined, for a day.'),
+        h('li', {}, 'If you install Raku: its “Raku needs the internet” screen, for when there’s no connection.'))),
     sect('Who Raku talks to, and why',
       h('dl', { class: 'ab-who' }, ...TALKS_TO.flatMap(([who, what]) => [h('dt', {}, who), h('dd', {}, what)]))),
     sect('How tiles are kept in their box',
@@ -59,6 +70,10 @@ export function drawAbout(ctx) {
         h('li', {}, MESSAGES_LINE),
         h('li', {}, 'Large tiles ask before they load.')),
       h('div', { class: 'ab-exception' }, h('b', {}, 'One exception:'), ` ${EXCEPTION}`)),
+    sect('Install Raku',
+      h('p', {}, INSTALL_INTRO),
+      h('ul', {}, ...INSTALL_STEPS.map(([where, how]) => h('li', {}, h('b', {}, where), how))),
+      h('p', {}, INSTALL_KEEPS)),
     sect('Hidden tiles and reporting',
       h('p', {}, 'Raku hides tiles and accounts on lexicographer.space’s hide list, and accounts that Bluesky’s moderation hides. To report a tile, see ', outLink(TAKEDOWNS_PAGE, 'Reporting and takedowns ↗'), '.')),
     h('p', { class: 'ab-foot' }, `${SITE.name} is made by `, madeBy, '. Its code is public at ', outLink(SOURCE_CODE, SOURCE_CODE.replace(/^https:\/\//, '')), '. ', outLink(BLOG_POST, 'How Raku works, on the blog\u00a0→'))));

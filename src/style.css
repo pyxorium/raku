@@ -42,7 +42,9 @@ a { color: var(--glaze-light); }
   z-index: 2;
 }
 .strip-row { display: flex; align-items: flex-end; gap: 2px; padding: 8px 8px 0; min-height: var(--strip-h); }
-.brand { color: var(--glaze-light); font-weight: 650; letter-spacing: .02em; padding: 0 10px 9px 4px; white-space: nowrap; }
+.brand { color: var(--glaze-light); font-weight: 650; letter-spacing: .02em; padding: 0 10px 9px 4px; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px; }
+.brand-pot { width: 18px; height: 18px; flex: none; display: block; user-select: none; -webkit-user-drag: none; }
 .brand .lab, .first .lab { color: var(--muted); font-weight: 400; }
 .brand-small { display: none; }
 
@@ -68,6 +70,26 @@ a { color: var(--glaze-light); }
 .newtab { background: none; border: 0; color: var(--muted); padding: 6px 9px 9px; cursor: pointer; border-radius: 6px; display: grid; place-items: center; }
 .newtab:hover:not(:disabled) { color: var(--text); }
 .newtab:disabled { opacity: .35; cursor: default; }
+
+/* Stage 9 (S7): the installed window with its title bar folded away ("window controls overlay", Chrome and Edge on
+   a computer). The tab row becomes the title bar: it fits the title-bar area the browser gives (env(titlebar-area-*),
+   which leaves out the window's own buttons), the window moves by dragging the row (the Raku label, the space
+   beside the tabs, and the grip that's always kept free), and the tabs, + and their buttons still click. */
+.wco-grip { display: none; }
+/* (Set by src/app-shell.js from navigator.windowControlsOverlay, which says when the title bar is folded away.) */
+:root.wco .strip-row {
+  box-sizing: border-box;
+  margin-left: env(titlebar-area-x, 0px);
+  width: env(titlebar-area-width, 100%);
+  height: env(titlebar-area-height, var(--strip-h));
+  min-height: 0; padding: 4px 6px 0;
+  app-region: drag; -webkit-app-region: drag;
+}
+:root.wco .strip-row .tab, :root.wco .strip-row .tab-x, :root.wco .strip-row .newtab { app-region: no-drag; -webkit-app-region: no-drag; }
+:root.wco .strip-row .tab { padding-top: 4px; padding-bottom: 4px; }
+:root.wco .strip-row .brand { padding-bottom: 6px; cursor: default; user-select: none; }
+:root.wco .strip-row .newtab { padding: 3px 9px 6px; }
+:root.wco .wco-grip { display: block; flex: 1 0 40px; min-width: 40px; align-self: stretch; }
 
 .bar { display: flex; align-items: center; gap: 8px; height: var(--bar-h); padding: 0 10px; background: var(--clay); }
 .nav { display: flex; gap: 2px; }
@@ -98,6 +120,17 @@ a { color: var(--glaze-light); }
   border: 2px solid var(--glaze); color: #d9f5f0; font-weight: 650; font-size: 13px;
 }
 .note { padding: 7px 14px; background: #2d2722; color: var(--warn); border-top: 1px solid #3f362e; font-size: 13px; }
+/* Stage 9 (S2): a new version of Raku is ready; stays until Reload or × */
+.update-line { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 6px 10px 6px 14px; background: #1f2b28;
+  border-top: 1px solid #2f4a44; color: var(--text); font-size: 13px; }
+.update-line[hidden] { display: none; }
+.update-text { flex: 1 1 260px; min-width: 0; }
+.update-actions { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.update-reload { min-height: 30px; padding: 3px 14px; border-radius: 7px; border: 1px solid var(--glaze-btn); background: var(--glaze-btn);
+  color: var(--glaze-ink); font-weight: 600; cursor: pointer; }
+.update-close { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 7px; border: 1px solid transparent;
+  background: none; color: var(--muted); cursor: pointer; }
+.update-close:hover { border-color: var(--line); color: var(--text); }
 
 /* ---------- the stage: one pane per tab, only the front one in sight ---------- */
 .stage { position: relative; flex: 1; min-height: 0; background: var(--stage); }
@@ -147,7 +180,8 @@ a { color: var(--glaze-light); }
 /* ---------- phones: one tile at a time, a tab count (decision 8) ---------- */
 @media (max-width: 640px) {
   .strip-row { display: none; }
-  .brand-small { display: inline; padding: 0 2px 0 0; font-size: 13px; }
+  .brand-small { display: inline-flex; gap: 5px; padding: 0 2px 0 0; font-size: 13px; }
+  .brand-small .brand-pot { width: 16px; height: 16px; }
   .bar { padding: 0 8px; gap: 8px; height: 52px; }
   .nav { display: none; }
   .addr { font-size: 12px; padding: 0 10px; height: 36px; }
@@ -762,6 +796,11 @@ a { color: var(--glaze-light); }
 .acct-about { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 12px; padding: 10px 0 0; border: 0; border-top: 1px solid #3a322b;
   background: none; color: var(--glaze-light); font: inherit; font-size: 14px; cursor: pointer; text-align: left; }
 .acct-about:hover { text-decoration: underline; }
+/* Stage 9 (S3): Install Raku, just above the About row */
+.acct-install { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 12px; padding: 10px 0 0; border: 0; border-top: 1px solid #3a322b;
+  background: none; color: var(--glaze-light); font: inherit; font-size: 14px; cursor: pointer; text-align: left; }
+.acct-install:hover { text-decoration: underline; }
+.acct-install + .acct-about { margin-top: 8px; padding-top: 8px; border-top: 0; }
 @media (max-width: 640px) {
   .about { padding: 20px 16px 40px; }
   .ab-who { grid-template-columns: 1fr; gap: 2px; }

@@ -413,7 +413,7 @@ with sync_playwright() as pw:
     page.wait_for_selector('.about h1')
     check('it opens raku:about in the tab, titled About Raku, the address box empty', texts(page, '.tab.on .tab-title') == ['About Raku'] and 'raku%3Aabout' in page.evaluate('location.hash') and page.input_value('.addr') == '')
     heads = texts(page, '.ab-part h2')
-    check('...its sections', heads == ["You don't need an account", 'What stays in this browser', 'Who Raku talks to, and why', 'How tiles are kept in their box', 'Hidden tiles and reporting'], str(heads))
+    check('...its sections', heads == ["You don't need an account", 'What stays in this browser', 'Who Raku talks to, and why', 'How tiles are kept in their box', 'Install Raku', 'Hidden tiles and reporting'], str(heads))   # Install Raku: stage 9
     who = texts(page, '.ab-who dt')
     check('...who Raku talks to', who == ["Each tile's own account", "Bluesky's public servers", 'plc.directory', 'appmosphe.re', 'lexicographer.space', 'typeahead.waow.tech', 'The tile loading server', "Daisy's relay"], str(who))
     exc = page.inner_text('.ab-exception')

@@ -345,7 +345,8 @@ with sync_playwright() as p:
     pos = mp.eval_on_selector_all('.bar > *', "es => es.filter(e => getComputedStyle(e).display !== 'none').map(e => [e.className.split(' ')[0], Math.round(e.getBoundingClientRect().left), Math.round(e.getBoundingClientRect().width)])")
     order = [x[0] for x in sorted(pos, key=lambda x: x[1])]
     check('phone: the account button sits between the Raku label and the address (a drawn icon when signed out)', order == ['brand', 'account-btn', 'addr-form'] and mp.eval_on_selector('.account-btn', 'b => !!b.querySelector("svg.icon-person")'), str(pos))
-    check('phone: the address keeps most of the row', [x for x in pos if x[0] == 'addr-form'][0][2] > 280, str(pos))
+    # (stage 9, S8: the pot beside the small Raku label takes about 20 px of the row: over 260 px, was 280)
+    check('phone: the address keeps most of the row', [x for x in pos if x[0] == 'addr-form'][0][2] > 260, str(pos))
     mp.click('.account-btn')
     box = mp.eval_on_selector('.account-menu', 'm => { const r = m.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right), Math.round(r.bottom)]; }')
     check('phone: the menu opens as a sheet from the bottom', box == [0, 390, 800], str(box))

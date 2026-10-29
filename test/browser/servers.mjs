@@ -9,7 +9,8 @@ const RAKU = process.argv[3] || new URL('../..', import.meta.url).pathname;
 const { pageCsp, tableRelays } = await import(join(RAKU, 'src/config.js'));
 // Stage 5: the checks' stand-in relay for Daisy (daisy-tiles scripts/relay-standin.mjs, port 8787) as well.
 const csp = pageCsp('load.tiles.lex.localhost', 'http', [...tableRelays(), 'ws://127.0.0.1:8787']);
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.txt': 'text/plain' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.txt': 'text/plain',
+  '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };   // stage 9: the manifest and app icons
 let html = await readFile(join(RAKU, 'index.html'), 'utf8');
 html = html.replace('<meta name="referrer"', `<meta http-equiv="Content-Security-Policy" content="${csp}">\n  <meta name="referrer"`)
   .replace('<script type="module" src="/src/main.js"></script>', '<link rel="stylesheet" href="/assets/main.css"><script type="module" src="/assets/main.js"></script>');
@@ -20,6 +21,8 @@ createServer(async (req, res) => {
   for (const f of [join(W, 'site', path), join(W, 'override', path), join(RAKU, 'public', path)]) {
     try { const b = await readFile(f); res.writeHead(200, { 'content-type': TYPES[extname(f)] || 'application/octet-stream' }); return res.end(b); } catch {}
   }
+  // Stage 9: like the real built site, there's always a version.json (the bundle's id: --define:__RAKU_BUILD__='"test-1"').
+  if (path === '/version.json') { res.writeHead(200, { 'content-type': TYPES['.json'] }); return res.end(JSON.stringify({ build: 'test-1' })); }
   res.writeHead(404); res.end();
 }).listen(5180, '127.0.0.1');
 createServer(async (req, res) => {

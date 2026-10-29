@@ -20,7 +20,7 @@ import { createTabs, current } from './tabs.js';
 import { describeTile, sizeVerdict, createPathLoader, blobCidOf } from './tiles.js';
 import { formatBytes, NetError } from './net.js';
 import { sniffPicture } from './moderation.js';
-import { icon, ICON_WITH_PIP } from './icons.js';
+import { icon, ICON_WITH_PIP, RAKU_ICON_URL } from './icons.js';
 import { h, createCardKit, bannerCid } from './cards.js';
 import { drawYourShelf, drawAccountTiles, drawShelfTeaser } from './shelf-pages.js';
 import { attachTypeahead } from './typeahead.js';
@@ -32,7 +32,7 @@ import { createDiscover, drawDiscover } from './discover.js';
 import { drawAbout } from './about-page.js';
 import { groupThreads } from './posts.js';
 
-export function mountRaku(root, { mothership, resolver, moderation, files, shelf, auth, storage = null, returned = null, keepForReturn = () => {}, loc = globalThis.location, hist = globalThis.history, tableDeps = {} }) {
+export function mountRaku(root, { mothership, resolver, moderation, files, shelf, auth, storage = null, returned = null, keepForReturn = () => {}, loc = globalThis.location, hist = globalThis.history, tableDeps = {}, install = null }) {
   const kit = createCardKit({ files });
   // Discover (stage 6): what it keeps while Raku is open, shared by every Discover tab.
   const discover = createDiscover({ resolver, moderation, shelf, storage, loc });
@@ -44,7 +44,10 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   let notice = null;
 
   // ---------- the frame of the page ----------
-  const brand = h('span', { class: 'brand' }, SITE.name, SITE.lab ? h('span', { class: 'lab' }, ' (lab)') : null);
+  // The pot beside the Raku label (stage 9, S8: everywhere the label shows). In the installed window with the
+  // tabs in the title bar, the pot and the label are a handle for moving the window.
+  const pot = () => h('img', { class: 'brand-pot', src: RAKU_ICON_URL, alt: '', width: 18, height: 18, draggable: 'false' });
+  const brand = h('span', { class: 'brand' }, pot(), SITE.name, SITE.lab ? h('span', { class: 'lab' }, ' (lab)') : null);
   const strip = h('div', { class: 'tabstrip', role: 'tablist', 'aria-label': 'Open tabs' });
   const newTabBtn = h('button', { class: 'newtab', type: 'button', title: 'New tab', 'aria-label': 'New tab', onclick: () => openNew() }, icon('plus', 18));
   const backBtn = h('button', { class: 'nav-btn', type: 'button', title: 'Back', 'aria-label': 'Back', onclick: () => tabs.back(tabs.active.id) }, icon('back', 18));
@@ -73,9 +76,23 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   const countBtn = h('button', { class: 'count', type: 'button', title: 'Open tabs', 'aria-label': 'Show open tabs', onclick: () => toggleSheet(true) }, h('span', {}, '1'));
   const toolbar = h('nav', { class: 'toolbar', 'aria-label': 'Browsing' }, backTool, fwdTool, reloadTool, shelfTool, discoverTool, countBtn);
   const noteLine = h('div', { class: 'note', role: 'status', 'aria-live': 'polite', hidden: true });
+  // Stage 9 (S2): a new version of Raku is out. Only a note: the person chooses when to reload, so a game, a
+  // tile or a call is never cut off. It stays until Reload or ×; × hides it for that version (a newer one shows again).
+  let updateDismissed = null;
+  const updateText = h('span', { class: 'update-text' }, 'A new version of Raku is ready. Your tabs come back after a reload, but tiles and games that are running start over.');
+  const updateLine = h('div', { class: 'update-line', role: 'status', 'aria-live': 'polite', hidden: true },
+    updateText,
+    h('span', { class: 'update-actions' },
+      h('button', { type: 'button', class: 'update-reload', onclick: () => loc.reload() }, 'Reload'),
+      h('button', { type: 'button', class: 'update-close', 'aria-label': 'Hide this note', title: 'Hide this note', onclick: () => { updateLine.hidden = true; updateDismissed = updateLine.dataset.build || null; } }, icon('close', 14))));
+  function showUpdate(build) {
+    if (build && build === updateDismissed) return;
+    updateLine.dataset.build = build || '';
+    updateLine.hidden = false;
+  }
   // "Sign in in this tab instead" (Q41): what to pick up afterwards, with the open tabs.
   const keep = (info) => keepForReturn({ ...info, hash: tabs.toHash() });
-  const menu = createAccountMenu({ auth, moderation, keepForReturn: keep, say: (t) => say(t), onAbout: () => goAbout() });
+  const menu = createAccountMenu({ auth, moderation, keepForReturn: keep, say: (t) => say(t), onAbout: () => goAbout(), install });
   let pendingReturn = returned && returned.pending ? returned.pending : null;
   const stage = h('main', { class: 'stage' });
   const sheetList = h('ul', { class: 'sheet-list' });
@@ -88,10 +105,12 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
 
   root.replaceChildren(
     h('header', { class: 'chrome' },
-      h('div', { class: 'strip-row' }, brand, strip, newTabBtn),
-      h('div', { class: 'bar' }, h('span', { class: 'brand brand-small' }, SITE.name),
+      // Stage 9 (S7): in an installed window with its title bar folded away, this row is the title bar. The window
+      // moves by the Raku label, the free space beside the tabs and this grip, which tabs never cover.
+      h('div', { class: 'strip-row' }, brand, strip, newTabBtn, h('span', { class: 'wco-grip', 'aria-hidden': 'true' })),
+      h('div', { class: 'bar' }, h('span', { class: 'brand brand-small' }, pot(), SITE.name),
         h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn, shelfBtn, discoverBtn), form, menu.button),
-      noteLine, menu.panel),
+      updateLine, noteLine, menu.panel),
     stage, toolbar, sheet);
   // Links out of Raku (a post, a link in a post): Raku says where they go and opens them on a click.
   const linkMessage = createLinkMessage(root, { storage });
@@ -612,5 +631,5 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   if (returned) say(returned.did && auth.current() ? `Signed in as @${auth.current().handle}.` : "Sign-in didn't finish. Try again.");
   globalThis.addEventListener?.('hashchange', () => { if (loc.hash !== tabs.toHash()) tabs.fromHash(loc.hash); });
   // (for the checks and curious eyes: the table in the front tab, if any)
-  return { tabs, openNew, say, menu, get table() { return paneFor(tabs.active).table; } };
+  return { tabs, openNew, say, menu, showUpdate, get table() { return paneFor(tabs.active).table; } };
 }

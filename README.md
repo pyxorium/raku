@@ -320,10 +320,49 @@ Plan and decisions: `claude/raku-launch-plan.md` (Q133, Q134).
 
 ## Icons for other sites (Oct 22 2026)
 
+- (Redrawn in stage 9: the favicon is now the pot alone, the Apple icon the pot on charcoal, larger.)
 - Besides `public/icon.svg` (browsers' tabs), Raku now has `public/favicon.ico` (16, 32 and 48 px),
   `public/favicon-32.png` and `public/apple-touch-icon.png` (180 px, on the bar's charcoal), all drawn from the same
   pot and linked from `index.html`. Sites that show other sites' icons (Bluesky's profile links, link previews,
   search results) usually want a PNG or `/favicon.ico` and skip SVG. They're also the start for stage 9's app icons.
+
+## Stage 9 (Oct 29 2026): an installable web app
+
+Plan and decisions: `claude/raku-stage9-plan.md` (S1 to S5). Raku can be installed (Chrome and Edge on computers
+and Android; Add to Home Screen on an iPhone; Add to Dock in Safari on a Mac) and opens in its own window.
+
+- `public/manifest.webmanifest`: the name, its own window (`standalone`), the charcoal theme colour, `/` as start and
+  scope, and the app icons: `icon-192.png` and `icon-512.png` (the pot on the rounded charcoal tile) and
+  `icon-maskable-192.png` / `-512.png` (full-bleed charcoal, the pot inside Android's safe zone). The icon sheet's
+  T2. `apple-touch-icon.png` is T2 too.
+- The favicon (`icon.svg`, `favicon.ico`, `favicon-32.png`) is now the pot alone on transparency, enlarged, with a
+  thin charcoal outline and both cracks (the sheet's B); `RAKU_ICON` in `src/icons.js` (the signal pip) is the same
+  drawing, which `test/app.test.mjs` checks.
+- `public/sw.js`, registered only when Raku runs installed (`src/app-shell.js`). **Its one job: with no connection,
+  open `public/offline.html` ("Raku needs the internet", Try now, carries on by itself when back online) instead of
+  the browser's error page.** That page is all it keeps. It answers only navigations to Raku's own address, and
+  even those go to the network first (asking for a fresh copy, so an installed Raku starts on the newest version).
+  Everything else is never touched: tiles, account servers, Bluesky, appmosphe.re, the hide list, Raku's own files
+  and `version.json`; relays are WebSockets, which service workers never see. The page policy says
+  `worker-src 'self'`.
+- The update rule (`src/app-shell.js`): `npm run build` writes the build's id (the commit on GitHub) into the page and
+  into `/version.json`. On start, a newer version reloads Raku once (never in a loop); while Raku is open it looks
+  again when the window comes back into view (at most every ten minutes) and once an hour, and shows only a note:
+  "A new version of Raku is ready. Your tabs come back after a reload, but tiles and games that are running start
+  over." with Reload and ×. Nothing is ever reloaded under a running game, tile or call. `npm run dev` checks
+  nothing and registers nothing.
+- **The tabs in the title bar** (S7): in Chrome and Edge on a computer, installed Raku asks for "window controls
+  overlay" (`display_override` in the manifest). While the window's title bar is folded away (the browser's own
+  button switches), `src/app-shell.js` puts the class `wco` on the page and the tab row becomes the title bar: it
+  keeps to the area the browser gives (`env(titlebar-area-*)`, clear of the window's buttons), and the window moves
+  by dragging the Raku label, the space beside the tabs or the grip after + (always at least 40 px, tabs never
+  cover it); tabs, + and × still click. Everywhere else the ordinary window.
+- **The pot beside the Raku label** (S8), everywhere the label shows (18 px on a computer, 16 px beside the small
+  label on a phone; on a phone the address box is about 20 px narrower for it). The same drawing as the favicon
+  (`RAKU_ICON_URL`); in the title-bar mode it's part of the handle.
+- "Install Raku: its own window and icon" in the account menu, above About, when the browser offers installing
+  (Chrome and Edge) and Raku isn't already installed; the About page has an Install Raku section with the steps for
+  each browser (and the iPhone's separate shelf: use Export and Import).
 
 ## Try it
 
@@ -374,9 +413,10 @@ and open http://127.0.0.1:5181/.
 | `src/post-card.js` | a post drawn as a card |
 | `src/bluesky.js` | public reads of feeds and posts (one server, `APPVIEW` in config) |
 | `src/link-message.js` | the link message: where a link goes, Open / Cancel |
-| `src/about-page.js` | the About page: what Raku keeps, who it talks to, how tiles are kept in their box |
+| `src/about-page.js` | the About page: what Raku keeps, who it talks to, how tiles are kept in their box, installing Raku |
+| `src/app-shell.js` | stage 9: installed or not, the service worker's registration, the update rule, the install offer, the tabs in the title bar |
 | `src/style.css` | the look: raku pottery, turquoise, always dark |
-| `public/` | `CNAME`, `robots.txt`, the icon (`icon.svg`, and `favicon.ico`, `favicon-32.png`, `apple-touch-icon.png` for other sites); stage 6: `card.png` (the link card) and `banner.png` |
+| `public/` | `CNAME`, `robots.txt`, the icon (`icon.svg`, and `favicon.ico`, `favicon-32.png`, `apple-touch-icon.png` for other sites); stage 6: `card.png` (the link card) and `banner.png`; stage 9: `manifest.webmanifest`, the app icons, `sw.js` and `offline.html` |
 | `.github/workflows/deploy.yml` | test, build, check the policy is on the page and `oauth.json` names Raku's address, publish to GitHub Pages |
 
 ## Browser checks (in the chat sandbox)
@@ -390,6 +430,12 @@ growing game by game; several accounts; signing out; a blocked window and "Sign 
 the saved records passing the games' own checks; the phone). They need a bundle of `src/main.js` and a copy of the loading server's `public/` folder; see the
 top of each file. For the sign-in checks the bundle swaps in a stand-in for the sign-in library:
 `esbuild src/main.js --bundle --format=esm --alias:@atproto/oauth-client-browser=./test/browser/oauth-standin.js`.
+
+`check_app.py` (66 checks, stage 9) runs the same way as `check_page.py`, with the bundle made with
+`--define:__RAKU_BUILD__='"test-1"'` as well (servers.mjs answers `/version.json` with that id, like the built site):
+the manifest as Chromium reads it, the icons, no worker in an ordinary tab, the worker when installed (emulated) and
+its ground rule, the tabs in the title bar (a stand-in `navigator.windowControlsOverlay`), the offline page and coming back online, the update note and the one start-up reload, the Install
+row, the About page's section, the phone.
 
 `check_discover.py` (168 checks, stage 6, 6c and the About page) runs the same way as `check_page.py`: Discover's columns at four widths,
 Recent tiles (appmosphe.re's order, hidden ones, checked handles, blurred and icon pictures, More, "New"), Make a tile

@@ -30,10 +30,24 @@ const signInFile = () => ({
   },
 });
 
-export default defineConfig({
-  plugins: [policy(), signInFile(), card()],
+// Stage 9's update rule (src/app-shell.js): each build has an id, written into the page (__RAKU_BUILD__) and
+// into /version.json, which an open Raku reads now and then to see whether a newer version is out. On GitHub
+// the id is the commit; on this computer, the time of the build.
+const BUILD = (process.env.GITHUB_SHA || '').slice(0, 12) || `local-${Date.now().toString(36)}`;
+const versionFile = () => ({
+  name: 'raku-version-json',
+  apply: 'build',
+  generateBundle() {
+    this.emitFile({ type: 'asset', fileName: 'version.json', source: `${JSON.stringify({ build: BUILD })}\n` });
+  },
+});
+
+export default defineConfig(({ command }) => ({
+  plugins: [policy(), signInFile(), card(), versionFile()],
+  // Only in the built page: under `npm run dev` the id stays "dev" and the service worker is never registered.
+  define: command === 'build' ? { __RAKU_BUILD__: JSON.stringify(BUILD) } : {},
   // 127.0.0.1, not localhost: the sign-in needs it (the loopback sign-in comes back to 127.0.0.1). 5180, so the Foundry (5173) can run alongside.
   server: { host: '127.0.0.1', port: 5180, strictPort: true },
   preview: { host: '127.0.0.1', port: 5181, strictPort: true },
   build: { target: 'es2022', sourcemap: true, modulePreload: { polyfill: false } },
-});
+}));
