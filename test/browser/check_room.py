@@ -257,6 +257,55 @@ def run():
         check('…opened for everyone: the lab page opens its own copy', wait_for(lambda: lab.evaluate(f"document.querySelector('.rl-tile[data-uri=\"{COUNTER_URI}\"]')?.dataset.state") == 'open', 20, pages=[a, lab]))
         check('…on the stage on both', wait_for(lambda: a.evaluate("document.querySelector('.pane.front .rl-stage')?.dataset.on") == 'tile' and lab.evaluate("document.querySelector('.rl-stage')?.dataset.on") == 'tile', 15, pages=[a, lab]))
 
+        # ---- rooms step 3, Expand (claude/raku-rooms-step3.md): the room's stage fills Raku's tab area; Raku folds its
+        # own rows away where agreed: the address row in the installed window (RR20), the top bar and toolbar on a phone (RR19) ----
+        GEO = """(() => { const q = (s) => document.querySelector(s); const r = (el) => el ? el.getBoundingClientRect().toJSON() : null; const d = (s) => q(s) ? getComputedStyle(q(s)).display : null;
+          return { stage: r(q('.stage')), room: r(q('.pane.front .rl-stage')), xbar: r(q('.pane.front .rl-xbar')), card: r(q('.pane.front .rl-tile-on-stage')),
+            bar: d('.chrome > .bar'), strip: d('.strip-row'), chrome: d('.chrome'), toolbar: d('.toolbar'), html: document.documentElement.className,
+            x: !!q('.pane.front .rl-room.rl-expanded') }; })()"""
+        near = lambda u, v: abs(u - v) <= 1.5
+        def fills(g, bottom_bar=False):
+            if not (g['x'] and g['room'] and g['xbar']): return False
+            st, rm, xb = g['stage'], g['room'], g['xbar']
+            if bottom_bar: ok = near(rm['top'], st['top']) and near(rm['bottom'], xb['top']) and near(xb['bottom'], st['bottom'])
+            else: ok = near(xb['top'], st['top']) and near(rm['top'], xb['bottom']) and near(rm['bottom'], st['bottom'])
+            return ok and near(rm['left'], st['left']) and near(rm['width'], st['width']) and (g['card'] is None or (near(g['card']['top'], rm['top']) and near(g['card']['height'], rm['height'])))
+        a.evaluate(f"document.querySelector('{tile_sel} iframe').dataset.mark = 'kept'")
+        a.click(f'{tile_sel} .rl-tile-expand')
+        check('Expand (step 3), in a browser tab: the stage fills Raku’s tab area under the room bar, the counter over it', wait_for(lambda: fills(a.evaluate(GEO)), 10, pages=[a]), json.dumps(a.evaluate(GEO))[:400])
+        g = a.evaluate(GEO)
+        check('…Raku’s top bar stays in a browser tab (its tabs live there, RR20)', g['bar'] != 'none' and g['strip'] != 'none' and 'room-expanded-app' not in g['html'], g['html'])
+        check('…the same frame (nothing reloaded)', a.evaluate(f"document.querySelector('{tile_sel} iframe')?.dataset.mark") == 'kept')
+        check('…only Nick’s own view: the lab page isn’t expanded (RR15)', lab.evaluate("!document.querySelector('.rl-room.rl-expanded')"))
+        a.screenshot(path=str(OUT / 'expand-tab.png'))
+        a.click(f'{FRONT} .rl-x-back')
+        check('Back to the room: the stage back in the room', wait_for(lambda: not a.evaluate(GEO)['x'], 10, pages=[a]) and 'room-expanded' not in a.evaluate(GEO)['html'])
+        # The installed window (headless Chromium can't be one: the display-mode answer stood in, as in check_app.py).
+        a.evaluate("""(() => { const mm = window.matchMedia.bind(window); window.__mmReal = mm;
+          window.matchMedia = (q) => (/display-mode: standalone/.test(q) ? { matches: true, media: q, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} } : mm(q)); })()""")
+        top_before = a.evaluate(GEO)['stage']['top']
+        a.click(f'{tile_sel} .rl-tile-expand')
+        check('installed window: the address row folds away, the tabs stay (RR20)', wait_for(lambda: a.evaluate(GEO)['bar'] == 'none' and fills(a.evaluate(GEO)), 10, pages=[a]) and a.evaluate(GEO)['strip'] != 'none', json.dumps(a.evaluate(GEO))[:400])
+        check('…the stage grows into the address row’s place', a.evaluate(GEO)['stage']['top'] < top_before - 30, f"{top_before} → {a.evaluate(GEO)['stage']['top']}")
+        a.screenshot(path=str(OUT / 'expand-installed.png'))
+        room_tab = a.evaluate('__raku.tabs.active.id')
+        a.evaluate("__raku.openNew('raku:about')")
+        check('another tab in front: Raku’s address row comes back', wait_for(lambda: a.evaluate(GEO)['bar'] != 'none' and 'room-expanded' not in a.evaluate(GEO)['html'], 10, pages=[a]))
+        check('…and the room carries on, still expanded in its tab', joined(a) and rroom(a, 'r.expanded') is True)
+        about_tab = a.evaluate('__raku.tabs.active.id')
+        a.evaluate(f"__raku.tabs.activate({json.dumps(room_tab)})")
+        check('back to the room tab: the address row folds away again', wait_for(lambda: a.evaluate(GEO)['bar'] == 'none' and fills(a.evaluate(GEO)), 10, pages=[a]))
+        a.evaluate(f"__raku.tabs.close({json.dumps(about_tab)})")
+        a.set_viewport_size({'width': 390, 'height': 844})
+        check('phone: Raku’s top bar and toolbar fold away, the stage fills the screen, the room bar at the bottom (RR19)',
+              wait_for(lambda: (lambda g: g['chrome'] == 'none' and g['toolbar'] == 'none' and near(g['stage']['top'], 0) and near(g['stage']['bottom'], 844) and fills(g, bottom_bar=True))(a.evaluate(GEO)), 10, pages=[a]), json.dumps(a.evaluate(GEO))[:400])
+        check('…no sideways scroll', no_scroll(a))
+        a.screenshot(path=str(OUT / 'expand-phone.png'))
+        a.click(f'{FRONT} .rl-x-back')
+        check('…Back to the room: Raku’s bars come back', wait_for(lambda: (lambda g: g['chrome'] != 'none' and g['toolbar'] != 'none' and not g['x'])(a.evaluate(GEO)), 10, pages=[a]))
+        a.set_viewport_size({'width': 1280, 'height': 900})
+        a.evaluate("window.matchMedia = window.__mmReal")
+
         # ---- a screen from the lab page, on Raku's stage: the guest asks, the house on Raku's page sends it to the host ----
         lab.click('.rl-share')
         check("Robin (lab page) asks to present: the approval card on Nick's Raku page (the house's \"ask the host\")", wait_for(lambda: a.is_visible(f'{FRONT} .rl-approval button:has-text("Allow")'), 15, pages=[a, lab]))
@@ -364,6 +413,17 @@ def run():
         check('About: rooms in "You don\'t need an account", "What stays", "Who Raku talks to" and the box',
               all(s in about for s in ['joining a room with a typed name', 'A room you’re in', 'The name you typed', 'The rooms relay (relay.rooms.thunderbird.cafe)', 'The people in your room', 'connection helpers', 'only when you unmute in a room']))
         check('the room is still on while another tab is in front', joined(a))
+        # Closing the room tab while expanded (installed window): the room leaves and Raku's rows come back.
+        room_tab = a.evaluate('[...__raku.rooms.entries.entries()].find(([, e]) => e.joined)[0]')
+        a.evaluate(f"__raku.tabs.activate({json.dumps(room_tab)})")
+        wait_for(lambda: a.is_visible(f'{tile_sel} .rl-tile-stage-on'), 10, pages=[a])
+        a.click(f'{tile_sel} .rl-tile-stage-on')
+        wait_for(lambda: a.is_visible(f'{tile_sel} .rl-tile-expand'), 10, pages=[a])
+        a.evaluate("""(() => { const mm = window.matchMedia.bind(window); window.matchMedia = (q) => (/display-mode: standalone/.test(q) ? { matches: true, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} } : mm(q)); })()""")
+        a.click(f'{tile_sel} .rl-tile-expand')
+        wait_for(lambda: a.evaluate("document.documentElement.classList.contains('room-expanded-app')"), 10, pages=[a])
+        a.evaluate(f"__raku.tabs.close({json.dumps(room_tab)})")
+        check('closing the room tab while expanded: the room is left and Raku’s address row comes back', wait_for(lambda: not joined(a) and 'room-expanded' not in a.evaluate('document.documentElement.className') and a.evaluate("getComputedStyle(document.querySelector('.chrome > .bar')).display") != 'none', 10, pages=[a, lab]))
         b.close()
 
 try:

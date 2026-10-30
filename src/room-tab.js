@@ -12,7 +12,11 @@
 //     (the host link adds &k=…); the lab page's links are taken too while it's still up (RR3);
 //   - Raku's tile loader for the house tile (pinned, config.js ROOMS.house) and for tiles opened for everyone
 //     (Raku's one mothership, its frames: no camera, microphone or location for tiles);
-//   - one room at a time (RR6): opening another room while in one asks "Leave it and join this one?".
+//   - one room at a time (RR6): opening another room while in one asks "Leave it and join this one?";
+//   - Expand (rooms step 3, claude/raku-rooms-step3.md, RR15 to RR21): the room's expanded stage fills Raku's tab
+//     area (`expandArea`), and Raku hides its own rows meanwhile (`onExpand`, app.js): the address row in the
+//     installed window (the tabs stay in the title bar), the top bar and the toolbar on a phone; a browser tab on a
+//     computer keeps Raku's top bar (its tabs live there).
 // The room keeps the lab's look (room.css: Raku's palette), without the lab's heading and footer (the About page
 // says what the footer said).
 // (Its look, rooms-lab's room.css, is imported by main.js with Raku's own style.css.)
@@ -32,7 +36,7 @@ const put = (s, k, v) => { try { if (v == null) s?.removeItem(k); else s?.setIte
 
 /**
  * The rooms of this Raku window: at most one live (RR6). deps: { auth, mothership, resolver, session, storage, loc,
- * tabs, stage, say, keepForReturn, openRoomTab(), closeTab(id) }.
+ * tabs, stage, say, keepForReturn, openRoomTab(), closeTab(id), onExpand(tabId, on) }.
  */
 export function createRooms(deps) {
   const { auth, mothership, session, storage, loc, tabs, stage, say } = deps;
@@ -314,6 +318,9 @@ export function createRooms(deps) {
         keep({ code, host, ...(e.who || {}) });
       },
       onPeople: (list) => { e.people = list; },
+      // Expand (step 3): the room's stage fills Raku's tab area; Raku hides its own rows while this tab is in front.
+      expandArea: () => stage,
+      onExpand: (on) => { e.expanded = !!on; deps.onExpand?.(tab.id, !!on); },
       onOver: ({ code, again }) => {
         e.joined = false; e.people = [];
         e.screen = { left: true };
@@ -347,6 +354,8 @@ export function createRooms(deps) {
     get live() { const l = liveEntry(); return l ? { tabId: l[0], code: l[1].code, people: l[1].people } : null; },
     isLive: (tabId) => !!entries.get(tabId)?.joined,
     isRoomTab: (tabId) => entries.has(tabId),
+    /** Is this room tab's stage expanded (step 3)? */
+    isExpanded: (tabId) => !!entries.get(tabId)?.expanded,
     /** The Rooms card: a room tab comes to the front if there is one; else the given tab or a new one shows rooms. */
     openRooms(tabId = null) {
       const any = liveEntry() || [...entries.entries()][0];

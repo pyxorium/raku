@@ -824,3 +824,11 @@ a { color: var(--glaze-light); }
 .rk-room-join .rk-paste .rl-row { display: flex; gap: 8px; }
 .rk-room-join .rk-invite-box { flex: 1; min-width: 0; }
 .rk-room-join .rl-status:empty, .rk-room-join .rl-problem:empty { display: none; }
+
+/* Rooms step 3, Expand (claude/raku-rooms-step3.md, RR19 and RR20; app.js showExpanded): while the room tab in front
+   has its stage expanded. The installed window gives up the address row (its tabs stay in the title bar); a phone
+   gives up the top bar and the toolbar (the room bar at the bottom has "Back to the room"). */
+:root.room-expanded-app .chrome > .bar { display: none; }
+@media (max-width: 640px) {
+  :root.room-expanded .chrome, :root.room-expanded .toolbar { display: none; }
+}

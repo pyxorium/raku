@@ -370,8 +370,8 @@ Plan and decisions: `claude/raku-rooms-plan.md` (RR1 to RR10, FS1). Rooms (voice
 opened for everyone, for small meetups among friends) come from the Rooms lab:
 
 - **The room's code is rooms-lab's**, taken as a package pinned to a GitHub tag (`package.json`:
-  `"rooms-lab": "github:pyxorium/rooms-lab#v0.11.1"`; 0.11.1, Oct 29: the host's plainer house line, "House rules: when a
-  guest asks for something, you decide."), not copied. The Rooms lab page on thunderbird.cafe retired once this passed
+  `"rooms-lab": "github:pyxorium/rooms-lab#v0.12.0"`; 0.11.1, Oct 29: the host's plainer house line, "House rules: when a
+  guest asks for something, you decide."; 0.12.0: Expand, below), not copied. The Rooms lab page on thunderbird.cafe retired once this passed
   its two-computer test (Oct 29): it now says "Rooms have moved to Raku", and the rooms relay lets in only Raku. Updating rooms = a new tag in rooms-lab, the new
   tag here, `npm install`. `test/rooms.test.mjs` checks that Raku's own names for the room's servers
   (`ROOMS` in `src/config.js`: the relay, the "Rooms" permission set, the connection helpers, the pinned house tile)
@@ -399,6 +399,17 @@ opened for everyone, for small meetups among friends) come from the Rooms lab:
   rooms relay (`wss://relay.rooms.thunderbird.cafe`). On this computer `?roomsRelay=ws://…` picks another relay.
 - The words: the first screen's shorter opening line (FS1) and "Tables and rooms" (RR5), the sign-in promise
   (RR8), the About page's rooms lines (RR9).
+
+## Rooms, step 3: Expand (rooms-lab 0.12.0)
+
+Decisions: `claude/raku-rooms-step3.md` (RR15 to RR21). **Expand** (on the staged tile's card, or in the stage's bar
+for a shared screen) is each person's own view: the room's stage fills Raku's tab area and the rest of the room folds
+into one slim room bar (what's on, the people, Mute, Full screen, Back to the room; at the bottom on a phone). The
+room does that (rooms-lab); Raku gives it the area (`expandArea`: the tab area, `main.stage`) and, while the room tab
+in front is expanded (`onExpand`, `showExpanded` in `src/app.js`), folds its own rows away: **in the installed
+window the address row** (the tabs stay in the title bar), **on a phone the top bar and the toolbar**. A browser tab
+on a computer keeps Raku's top bar (its tabs live there). Another tab in front brings everything back; closing the
+room tab, or leaving, too.
 
 ## Try it
 
@@ -488,7 +499,7 @@ a table and the link, no relay to reach (the Joining box and its hint), the hove
 width, whole matches that re-check (`verifyMatch`), saving, full, held, leaving and coming back, a match
 between Raku and the Daisy page (both ways), and the house version check. Usage at the top of the file.
 
-`check_room.py` (67 checks, rooms step 1) bundles and starts everything itself: Raku's page with the stand-in
+`check_room.py` (81 checks, rooms steps 1 and 3) bundles and starts everything itself: Raku's page with the stand-in
 sign-in, the loader replica, and the Rooms lab's own dev page and its real relay (`room-servers.mjs`, from a
 rooms-lab folder: `--rooms-lab`; the relay's own sign-in check around a stand-in for Bluesky's `verifyJwt`, which
 still refuses another audience or method). Raku pages and lab pages share rooms, both ways (the mixed room):
@@ -496,7 +507,9 @@ the Rooms card and the join screen, the "Rooms" window the first time, the pass 
 never in Raku's address, the invite link, the house through Raku's loader, voice both ways, a tile opened for
 everyone from Raku, a guest's screen through the house's approval, an invite opening Raku, typed names, the room
 tab staying a room, one room at a time (Stay, Leave and join), a lab-made room joined from Raku, a reload and
-Rejoin, closing the tab, a pasted invite, the page policy, the phone, the About page.
+Rejoin, closing the tab, a pasted invite, the page policy, the phone, the About page; Expand (step 3) in a browser
+tab, in the installed window (the display mode stood in) with another tab in front and back, on a phone, and
+closing the room tab while expanded.
 
 `check_lounge.py` (48 checks, steps 5b and 5b-2) is set up the same way, with daisy-relay's lounge stand-in
 (`test/lounge-standin.mjs`, the real server.js and lounge.js with stand-in lookups) as the relay: mingling

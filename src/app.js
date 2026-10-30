@@ -35,6 +35,7 @@ import { drawAbout } from './about-page.js';
 import { groupThreads } from './posts.js';
 import { createRooms } from './room-tab.js';
 import { setLeaveWarning } from './signin-ui.js';
+import { isInstalled } from './app-shell.js';
 
 export function mountRaku(root, { mothership, resolver, moderation, files, shelf, auth, storage = null, session = null, returned = null, keepForReturn = () => {}, loc = globalThis.location, hist = globalThis.history, tableDeps = {}, install = null }) {
   const kit = createCardKit({ files });
@@ -129,7 +130,19 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   const rooms = createRooms({
     auth, mothership, resolver, session, storage, loc, tabs, stage, say: (t) => say(t),
     keepForReturn: (info) => keep(info), openRoomTab, closeTab: (id) => tabs.close(id),
+    onExpand: () => showExpanded(),
   });
+  // Rooms step 3 (Expand, RR19 and RR20): while the room tab in front has its stage expanded, Raku hides its own rows
+  // so the stage gets the room: in the installed window the address row (the tabs stay, in the title bar); on a phone
+  // the top bar and the toolbar. A browser tab on a computer keeps Raku's top bar (its tabs live in it). Another tab in
+  // front brings everything back.
+  function showExpanded() {
+    const html = root.ownerDocument?.documentElement;
+    if (!html) return;
+    const on = rooms.isExpanded(tabs.active.id);
+    html.classList.toggle('room-expanded', on);
+    html.classList.toggle('room-expanded-app', on && isInstalled(root.ownerDocument.defaultView || globalThis));
+  }
   // "Sign in in this tab instead" while in a room would hang up: the sign-in's blocked-window box says so first.
   setLeaveWarning(() => (rooms.live ? 'This leaves your room: you can rejoin it afterwards.' : ''));
   // A room tab you're in stays a room (it would hang up otherwise): addresses open in a new tab; Back, Forward and
@@ -609,6 +622,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   }
 
   function drawChrome() {
+    showExpanded();
     strip.replaceChildren(...tabs.list.map(tabButton));
     const tab = tabs.active;
     const p = paneFor(tab);
