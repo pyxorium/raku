@@ -370,7 +370,9 @@ Plan and decisions: `claude/raku-rooms-plan.md` (RR1 to RR10, FS1). Rooms (voice
 opened for everyone, for small meetups among friends) come from the Rooms lab:
 
 - **The room's code is rooms-lab's**, taken as a package pinned to a GitHub tag (`package.json`:
-  `"rooms-lab": "github:pyxorium/rooms-lab#v0.11.0"`), not copied. Updating rooms = a new tag in rooms-lab, the new
+  `"rooms-lab": "github:pyxorium/rooms-lab#v0.11.1"`; 0.11.1, Oct 29: the host's plainer house line, "House rules: when a
+  guest asks for something, you decide."), not copied. The Rooms lab page on thunderbird.cafe retired once this passed
+  its two-computer test (Oct 29): it now says "Rooms have moved to Raku", and the rooms relay lets in only Raku. Updating rooms = a new tag in rooms-lab, the new
   tag here, `npm install`. `test/rooms.test.mjs` checks that Raku's own names for the room's servers
   (`ROOMS` in `src/config.js`: the relay, the "Rooms" permission set, the connection helpers, the pinned house tile)
   are still rooms-lab's.
