@@ -19,7 +19,7 @@ import { NetError } from './net.js';
 import { h, bannerCid } from './cards.js';
 import { icon } from './icons.js';
 import { createFollowing } from './following.js';
-import { createRecent } from './recent.js';
+import { createRecent, createCollapser, earlierLine } from './recent.js';
 import { createMarks } from './marks.js';
 import { createPublicReads } from './bluesky.js';
 import { readPost, threadContext, whenText, groupThreads } from './posts.js';
@@ -327,12 +327,23 @@ function drawMake(ctx, into) {
 }
 
 // ---------- Recent tiles (stage 6c) ----------
-function recentCard(ctx, t, { badge = '' } = {}) {
+// Repeats collapse (Oct 30, claude/raku-recent-repeats.md): one card for the same account, name and description,
+// the newest, with a quiet "+23 earlier versions" line that opens the account's page (recent.js createCollapser).
+function recentCard(ctx, t, { badge = '', earlier = 0 } = {}) {
   const { kit, tabs, tab, openNew } = ctx;
   const card = kit.tileCard({ name: t.name, description: t.description, by: t.handle || t.did, when: whenText(t.createdAt), badge,
     onOpen: () => tabs.go(tab.id, t.uri), onOpenNew: () => openNew(t.uri) });
   if (t.picture) card.picture({ url: t.picture }, { look: `${t.pictureIsIcon ? 'icon' : ''} ${t.blur ? 'blur' : ''}` });
   card.el.dataset.uri = t.uri;
+  const line = h('button', { type: 'button', class: 'card-earlier', hidden: true,
+    title: `Every tile by ${t.handle ? `@${t.handle}` : 'this account'}`, onclick: () => tabs.go(tab.id, accountPageUri(t.handle || t.did)) });
+  card.el.append(line);
+  card.earlier = (n) => {
+    line.hidden = !n;
+    line.textContent = n ? earlierLine(n) : '';
+    card.el.classList.toggle('has-earlier', !!n);
+  };
+  card.earlier(earlier);
   return card;
 }
 
@@ -346,20 +357,31 @@ function drawRecent(ctx, into) {
   const foot = h('p', { class: 'dv-foot' }, `Listed by ${RECENT.name}.`);
   into.append(status, grid, more, end, foot);
   let next = 1;
-  const shown = new Set();
+  const cards = createCollapser();
+  const drawn = new Map();            // a collapser card -> its tile card
+  const fillCards = RECENT.fillCards ?? 12, fillPages = RECENT.fillPages ?? 3;
   const page = async () => {
     more.disabled = true;
     more.textContent = 'Loading…';
     try {
-      const r = await discover.recent.load(next);
-      if (!alive()) return;
-      for (const t of r.tiles) {
-        if (shown.has(t.uri)) continue;     // the list moved while reading (a new tile pushed one onto the next page)
-        shown.add(t.uri);
-        grid.append(recentCard(ctx, t, { badge: discover.recent.isNew(t) ? 'New' : '' }).el);
-      }
-      if (next === 1) discover.recent.markSeen();
-      next = r.page + 1;
+      // One press (or the first visit): a page, and more pages while repeats leave it thin (a few at most). Only
+      // repeats trigger it: a page that's short for other reasons (the hide list, say) stays as it is.
+      let fresh = 0, folded = 0, extra = 0, r;
+      do {
+        r = await discover.recent.load(next);
+        if (!alive()) return;
+        const { added, grown } = cards.add(r.tiles);
+        for (const c of added) {
+          const card = recentCard(ctx, c.tile, { badge: discover.recent.isNew(c.tile) ? 'New' : '', earlier: c.earlier });
+          drawn.set(c, card);
+          grid.append(card.el);
+        }
+        for (const c of [...added, ...grown]) drawn.get(c)?.earlier(c.earlier);
+        fresh += added.length;
+        folded += r.tiles.length - added.length;
+        if (next === 1) discover.recent.markSeen();
+        next = r.page + 1;
+      } while (r.more && folded > 0 && fresh < fillCards && extra++ < fillPages);
       status.hidden = !!grid.childElementCount;
       status.textContent = grid.childElementCount ? '' : 'No tiles to show yet.';
       more.hidden = !r.more;
@@ -581,9 +603,10 @@ function preview(ctx, source, uri) {
     } else if (source === 'recent') {
       const r = await discover.recent.load(1);
       if (!alive()) return;
-      const n = r.tiles.filter((t) => discover.recent.isNew(t)).length;
+      const shown = createCollapser().add(r.tiles).added.map((c) => c.tile);     // repeats as one (Oct 30)
+      const n = shown.filter((t) => discover.recent.isNew(t)).length;
       count.textContent = n ? `${n} new` : '';
-      fill(r.tiles.slice(0, 3).map((t) => row(t.name, t.handle ? `@${t.handle}` : whenText(t.createdAt),
+      fill(shown.slice(0, 3).map((t) => row(t.name, t.handle ? `@${t.handle}` : whenText(t.createdAt),
         t.picture ? { url: t.picture, look: [t.pictureIsIcon ? 'is-icon' : '', t.blur ? 'blurred' : ''].filter(Boolean).join(' ') } : null)), 'No tiles yet.');
     } else if (source === 'news') {
       const r = await discover.news();

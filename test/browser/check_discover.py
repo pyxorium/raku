@@ -406,6 +406,49 @@ with sync_playwright() as pw:
     page.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Results for “pebble”'")
     check('search: a tile already loaded in Recent tiles counts as "Already in Raku"', wait_for(lambda: 'Pebble Garden' in texts(page, '.dv-part:not([hidden]) .card-title'), page=page))
 
+    # ---------- Recent tiles: repeats collapse (Oct 30, claude/raku-recent-repeats.md) ----------
+    JOB = lambda rkey, hours: rt(MK, rkey, 'job-status', iso(NOW - timedelta(hours=hours)), desc='Feature job status snapshot')
+    OTHER = lambda rkey, name, hours: rt(MK, rkey, name, iso(NOW - timedelta(hours=hours)), desc='')
+    h_ = iter(range(1, 200))
+    saved_pages = dict(RECENT_PAGES)
+    RECENT_PAGES.clear()
+    RECENT_PAGES.update({
+        1: [JOB(f'j1{i}', next(h_)) for i in range(5)] + [OTHER('o1', 'Kiln Notes', next(h_)), rt(MK, 'u1', '', iso(NOW - timedelta(hours=next(h_)))), rt(MK, 'u2', '', iso(NOW - timedelta(hours=next(h_))))],
+        2: [JOB(f'j2{i}', next(h_)) for i in range(5)],
+        3: [JOB(f'j3{i}', next(h_)) for i in range(5)],
+        4: [JOB(f'j4{i}', next(h_)) for i in range(4)] + [rt(MK, 'j4x', 'Job-Status ', iso(NOW - timedelta(hours=next(h_))), desc='Feature  job status snapshot'), OTHER('o2', 'Glaze Test', next(h_))],
+        5: [JOB(f'j5{i}', next(h_)) for i in range(3)] + [OTHER('o3', 'job-status', next(h_))],
+        6: [OTHER('o4', 'Ash Bowl', next(h_))],
+    })
+    page.goto(RAKU + '?loader=' + LOADER + '#t=raku%3Adiscover%2Frecent&a=0'); page.wait_for_selector('.discover')
+    before = len(calls)
+    page.reload(); page.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Recent tiles'")
+    wait_for(lambda: 'Glaze Test' in texts(page, '.dv-centre .card-title'), page=page)
+    names = texts(page, '.dv-centre .card-title')
+    check('repeats: the same account, name and description show as one card, the newest (spaces and capitals tidied)', names.count('job-status') == 1 and names[0] == 'job-status' and page.get_attribute('.dv-centre .card:nth-child(1)', 'data-uri').endswith('/j10'), str(names))
+    check('...other tiles from that account stay, and two untitled tiles never collapse', names == ['job-status', 'Kiln Notes', 'Untitled tile', 'Untitled tile', 'Glaze Test'], str(names))
+    check('...a quiet line under it: "+19 earlier versions"', page.inner_text('.dv-centre .card:nth-child(1) .card-earlier') == '+19 earlier versions' and page.query_selector_all('.dv-centre .card-earlier:not([hidden])').__len__() == 1)
+    asked = [c for c in calls[before:] if '/api/tiles' in c]
+    check('...a page thinned by repeats filled itself from the next ones (three more at most)', asked == [f'https://appmosphe.re/api/tiles?page={n}' for n in (1, 2, 3, 4)], str(asked))
+    page.screenshot(path=str(OUT / 'd4e-recent-repeats.png'))
+    page.click('.dv-centre > .more')
+    wait_for(lambda: 'Ash Bowl' in texts(page, '.dv-centre .card-title'), page=page)
+    names = texts(page, '.dv-centre .card-title')
+    check('More: older copies add to the same card ("+22 earlier versions"), no second card; a same-named tile with another description stays its own', names.count('job-status') == 2 and page.inner_text('.dv-centre .card:nth-child(1) .card-earlier') == '+22 earlier versions' and names[-2:] == ['job-status', 'Ash Bowl'], str(names))
+    check("...then \"That's every tile appmosphe.re lists.\"", wait_for(lambda: page.is_visible('.dv-end'), page=page))
+    vp = page.viewport_size
+    page.set_viewport_size({'width': 390, 'height': 844}); time.sleep(0.4)
+    geo = page.evaluate("() => { const c = document.querySelector('.dv-centre .card:nth-child(1)'); const r = (s) => c.querySelector(s).getBoundingClientRect(); return { btn: r('.card-corner .card-btn').bottom, line: r('.card-earlier').top, w: document.documentElement.scrollWidth }; }")
+    check('phone: the line under the card, the new-tab button above it, no sideways scroll', geo['btn'] <= geo['line'] + 0.5 and geo['w'] <= 391, str(geo))
+    page.screenshot(path=str(OUT / 'd4f-recent-repeats-phone.png'))
+    page.set_viewport_size(vp); time.sleep(0.4)
+    page.click('.dv-centre .card:nth-child(1) .card-earlier')
+    check('the line opens the account’s page in Raku', wait_for(lambda: page.input_value('.addr') == f'@{MK_H}' and 'raku%3Atiles' in page.evaluate('location.hash'), page=page), page.input_value('.addr'))
+    page.click('.bar .nav-btn[title="Back"]'); page.wait_for_selector('.dv-centre .card')
+    page.click('.dv-src[data-source="following"]'); page.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Following'")
+    check('the right column’s Recent tiles shows repeats once too', wait_for(lambda: page.eval_on_selector_all('.dv-preview[data-source="recent"] .dv-mini-title', 'es => es.map(e => e.textContent)') == ['job-status', 'Kiln Notes', 'Untitled tile'], page=page), str(page.eval_on_selector_all('.dv-preview[data-source="recent"] .dv-mini-title', 'es => es.map(e => e.textContent)')))
+    RECENT_PAGES.clear(); RECENT_PAGES.update(saved_pages)
+
     # ---------- the About page (going public, Q134) ----------
     page.goto(RAKU + '?loader=' + LOADER + '#t=&a=0'); page.wait_for_selector('.first-about .linkish')
     check("the first screen's last line links to About Raku", 'About Raku: what it keeps, who it talks to' in page.inner_text('.first-about'))

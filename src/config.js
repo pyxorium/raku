@@ -357,6 +357,9 @@ export const FOLLOWING = Object.freeze({ perAccount: 10, max: 60, keepMs: 5 * 60
 export const RECENT = Object.freeze({
   name: 'appmosphe.re', url: 'https://appmosphe.re/api/tiles', imgPrefix: 'https://appmosphe.re/img/', imgOrigin: 'https://appmosphe.re',
   keepMs: 5 * 60 * 1000, maxBytes: 2 * 1024 * 1024, maxPages: 100,
+  // Repeats collapse (Oct 30, Q147): a page left thin by collapsing fills itself from the next pages, until it has
+  // fillCards new cards, reading at most fillPages more pages each time.
+  fillCards: 12, fillPages: 3,
 });
 // Make a tile (stage 6c, Q101/Q102, Q112 to Q118): makers of tiles, in two groups (Q113 C: "No code needed",
 // then "From your own files"; alphabetical inside each). Each card: a drawn mark (a letter in a glaze colour,

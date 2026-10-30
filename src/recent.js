@@ -7,6 +7,10 @@
 //   label blurs their pictures. The handle shown is the one Bluesky checked; else the account's DID.
 // - Pictures: the tile's first screenshot, else its icon, only from appmosphe.re's own /img/ copies.
 // - A quiet "New" on tiles made since your last visit (Q110 A), remembered on this device (marks.js).
+// - Repeats collapse (Oct 30, claude/raku-recent-repeats.md, Q145 to Q148): the same account, name and description
+//   again (spaces tidied, capitals ignored; only tiles with a real name) is the same tile again: one card, the newest,
+//   with a quiet "+23 earlier versions" line that opens the account's page. Across pages too; a thin page fills itself
+//   from the next ones (a few at most). Different tiles from that account, and everyone else, are untouched.
 // Raku reads only what it needs from each entry, and checks every piece (an address Raku can open, text of
 // sensible length), so a changed answer can't put anything strange on the page.
 
@@ -44,6 +48,7 @@ export function readRecentPage(json) {
     out.tiles.push({
       did, rkey, uri,
       name: text(t.name, 120) || 'Untitled tile',
+      named: !!text(t.name, 120),
       description: text(t.description, 300),
       createdAt: Number.isFinite(created) ? new Date(created).toISOString() : '',
       picture: shot || iconPic,
@@ -51,6 +56,43 @@ export function readRecentPage(json) {
     });
   }
   return out;
+}
+
+/** The same tile again? Same account, same name, same description (spaces tidied, capitals ignored). null: a tile
+ * with no real name never collapses (two "Untitled tile"s may well be different tiles). */
+export function repeatKey(t) {
+  if (!t || !t.named || !t.did) return null;
+  const norm = (v) => String(v || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const name = norm(t.name);
+  return name ? `${t.did}\n${name}\n${norm(t.description)}` : null;
+}
+/** The quiet line under a collapsed card. */
+export const earlierLine = (n) => `+${n} earlier version${n === 1 ? '' : 's'}`;
+
+/**
+ * Recent tiles as cards, newest first: each repeat (repeatKey) folds into the first card shown for it, page after page.
+ * add(tiles) → { added: [card], grown: [card] }, a card being { tile, earlier } (earlier: how many older copies folded
+ * in so far). A tile already seen (the list moved while reading) is skipped.
+ */
+export function createCollapser() {
+  const byKey = new Map();
+  const seen = new Set();
+  return {
+    add(tiles) {
+      const added = [], grown = new Set();
+      for (const t of tiles || []) {
+        if (!t?.uri || seen.has(t.uri)) continue;
+        seen.add(t.uri);
+        const k = repeatKey(t);
+        const first = k ? byKey.get(k) : null;
+        if (first) { first.earlier++; if (!added.includes(first)) grown.add(first); continue; }
+        const card = { tile: t, earlier: 0 };
+        if (k) byKey.set(k, card);
+        added.push(card);
+      }
+      return { added, grown: [...grown] };
+    },
+  };
 }
 
 export function createRecent({ moderation, storage = null, marks = null, fetchImpl = globalThis.fetch, now = () => Date.now(), limits = RECENT } = {}) {

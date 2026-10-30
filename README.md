@@ -250,6 +250,13 @@ Plan and decisions: `claude/raku-stage6c-plan.md` (Q106 to Q111).
   Following's older `raku-following-seen` moves in by itself). They stay on this device even when your shelf
   moves to your account later (Q111).
 - Tiles already loaded in Recent tiles count in search's "Already in Raku".
+- **Repeats collapse** (Oct 30 2026, `claude/raku-recent-repeats.md`, Q145 to Q148): the same account, name and
+  description again (spaces tidied, capitals ignored; only tiles with a real name) is the same tile again, as when
+  an account publishes a status snapshot every half hour. One card shows, the newest, with a quiet line under it,
+  "+23 earlier versions", which opens the account's page. Older copies on later pages (More) add to that count. A
+  page thinned by repeats fills itself from the next pages (until 12 new cards, three more pages at most:
+  `RECENT.fillCards`, `fillPages`). The right column's Recent tiles shows repeats once too. Everything else is as
+  before (`createCollapser`, `repeatKey` in `src/recent.js`).
 
 ## Stage 6c, Tile news fix (Oct 22 2026): one card per thread
 
@@ -501,8 +508,8 @@ the manifest as Chromium reads it, the icons, no worker in an ordinary tab, the 
 its ground rule, the tabs in the title bar (a stand-in `navigator.windowControlsOverlay`), the offline page and coming back online, the update note and the one start-up reload, the Install
 row, the About page's section, the phone.
 
-`check_discover.py` (168 checks, stage 6, 6c and the About page) runs the same way as `check_page.py`: Discover's columns at four widths,
-Recent tiles (appmosphe.re's order, hidden ones, checked handles, blurred and icon pictures, More, "New"), Make a tile
+`check_discover.py` (177 checks, stage 6, 6c and the About page) runs the same way as `check_page.py`: Discover's columns at four widths,
+Recent tiles (appmosphe.re's order, hidden ones, checked handles, blurred and icon pictures, More, "New"; repeats as one card with "+N earlier versions", the page filling itself, More adding to the count, the line opening the account's page, the phone), Make a tile
 (the groups, the cards, Open in a new tab, the phone), the About page (its three links, its outside links, what it says, the phone),
 Following (order, hidden ones, "New"), search from the box and from Discover (nothing sent while typing, one request
 with only the words), a word with a dot as a handle first, Tile news from a stand-in feed with a post linking a tile,

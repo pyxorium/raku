@@ -1,7 +1,7 @@
 // Stage 6c: Recent tiles (appmosphe.re's list) and the "last visit" marks. Plain data, no DOM.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readRecentPage, recentPicture, createRecent } from '../src/recent.js';
+import { readRecentPage, recentPicture, createRecent, repeatKey, createCollapser, earlierLine } from '../src/recent.js';
 import { createMarks } from '../src/marks.js';
 import { createModeration, blurringLabels } from '../src/moderation.js';
 import { parseTarget, discoverUri } from '../src/address.js';
@@ -183,4 +183,37 @@ test('card times read "3h ago", "just now", or a date', () => {
   const at = (ms) => new Date(now - ms).toISOString();
   assert.deepEqual([at(10e3), at(5 * 60e3), at(3 * 3600e3), at(2 * 86400e3), '2026-10-01T00:00:00Z', 'nope'].map((x) => whenText(x, now)),
     ['just now', '5m ago', '3h ago', '2d ago', 'Oct 1', '']);
+});
+
+// Repeats collapse (Oct 30, claude/raku-recent-repeats.md, Q145 to Q148).
+test('the same tile again: same account, same name, same description (spaces tidied, capitals ignored)', () => {
+  const t = (did, name, description, named = true) => ({ did, name, description, named });
+  assert.equal(repeatKey(t(A, 'job-status', 'Feature job status snapshot')), repeatKey(t(A, '  Job-Status ', 'feature job  status snapshot')));
+  assert.notEqual(repeatKey(t(A, 'job-status', 'Feature job status snapshot')), repeatKey(t(A, 'job-status', 'Another snapshot')), 'a different description');
+  assert.notEqual(repeatKey(t(A, 'job-status', '')), repeatKey(t(B, 'job-status', '')), 'another account');
+  assert.notEqual(repeatKey(t(A, 'job-status', '')), repeatKey(t(A, 'job-status 2', '')), 'another name');
+  assert.equal(repeatKey(t(A, 'My zine', '')), repeatKey(t(A, 'My zine', '')), 'an empty description on both is the same');
+  assert.equal(repeatKey(t(A, 'Untitled tile', '', false)), null, 'a tile with no real name never collapses');
+  assert.equal(repeatKey(null), null);
+  const page = readRecentPage({ page: 1, pages: 1, total: 2, tiles: [entry(A, 'a1', 'job-status', '2026-10-30T10:00:00Z'), entry(A, 'a2', '', '2026-10-30T09:00:00Z')] });
+  assert.deepEqual(page.tiles.map((x) => [x.name, x.named]), [['job-status', true], ['Untitled tile', false]]);
+});
+
+test('the collapser: one card per repeat, the newest; the count grows across pages; others untouched', () => {
+  const T = (did, rkey, name, description = 'Feature job status snapshot', named = true) => ({ uri: `at://${did}/ing.dasl.masl/${rkey}`, did, rkey, name, description, named });
+  const c = createCollapser();
+  const p1 = c.add([T(A, 's9', 'job-status'), T(B, 'b1', 'Lantern', ''), T(A, 's8', 'job-status'), T(A, 'z1', 'Zine', ''), T(A, 's7', 'job-status'),
+    T(C, 'u1', 'Untitled tile', '', false), T(C, 'u2', 'Untitled tile', '', false)]);
+  assert.deepEqual(p1.added.map((x) => [x.tile.rkey, x.earlier]), [['s9', 2], ['b1', 0], ['z1', 0], ['u1', 0], ['u2', 0]]);
+  assert.deepEqual(p1.grown, [], 'cards added this time aren\u2019t "grown"');
+  const p2 = c.add([T(A, 's7', 'job-status'), T(A, 's6', 'job-status'), T(A, 's5', 'job-status'), T(B, 'b2', 'Lantern 2', '')]);
+  assert.deepEqual(p2.added.map((x) => x.tile.rkey), ['b2'], 'older copies on the next page fold into the first card');
+  assert.deepEqual(p2.grown.map((x) => [x.tile.rkey, x.earlier]), [['s9', 4]], 'its count grows (s7 was already seen: not counted twice)');
+  assert.equal(earlierLine(1), '+1 earlier version');
+  assert.equal(earlierLine(23), '+23 earlier versions');
+});
+
+test('a thin page fills itself: at most a few pages more (config)', () => {
+  assert.equal(RECENT.fillCards, 12);
+  assert.equal(RECENT.fillPages, 3);
 });
