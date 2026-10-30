@@ -364,6 +364,40 @@ and Android; Add to Home Screen on an iPhone; Add to Dock in Safari on a Mac) an
   (Chrome and Edge) and Raku isn't already installed; the About page has an Install Raku section with the steps for
   each browser (and the iPhone's separate shelf: use Export and Import).
 
+## Rooms, step 1 (Oct 29 2026): a room as a tab
+
+Plan and decisions: `claude/raku-rooms-plan.md` (RR1 to RR10, FS1). Rooms (voice, one shared screen, and tiles
+opened for everyone, for small meetups among friends) come from the Rooms lab:
+
+- **The room's code is rooms-lab's**, taken as a package pinned to a GitHub tag (`package.json`:
+  `"rooms-lab": "github:pyxorium/rooms-lab#v0.11.0"`), not copied. Updating rooms = a new tag in rooms-lab, the new
+  tag here, `npm install`. `test/rooms.test.mjs` checks that Raku's own names for the room's servers
+  (`ROOMS` in `src/config.js`: the relay, the "Rooms" permission set, the connection helpers, the pinned house tile)
+  are still rooms-lab's.
+- **A room is a tab**, `raku:room` (`src/room-tab.js`): the Rooms card in the first screen's "Tables and rooms" row
+  opens it (New room, or paste an invite). The room code never goes into Raku's address: this browser tab keeps it
+  (sessionStorage `raku-room`, and the room's own `rooms-lab-host:<code>` for the host key), so a copied Raku link
+  never lets anyone in. After a reload the tab says "You were in room … Rejoin?" (one click: browsers won't play
+  other people's voices without one); closing the window or the browser tab forgets the room. Invite links are
+  Raku's own (`https://raku.lexicographer.space/#r=…`, the host link adds `&k=…`); opening one gives that room's
+  join screen and Raku takes the code out of its address. The lab page's invite links work too (in the address box
+  and the join screen's paste box) while it's still up.
+- **Joining**: signed in to Raku, "Join as @handle ✓" (or "or type a name instead"); the first time an account joins
+  a room, Raku asks for the **"Rooms"** permission (`cafe.thunderbird.rooms.authJoin`, a pass for the rooms relay
+  only) in a small window, then one more press to go in. Signed out: "Sign in to show your handle" or a typed name
+  (shown "(unverified)", can't start with "@"). did:web accounts are told rooms can't show their handle yet. Signing
+  in or out from the account menu redraws the join screen.
+- **One room at a time**: opening another room while in one brings the room's tab to the front and asks "You're in
+  a room with Nick and Robin. Leave it and join this one?" [Leave and join] [Stay]. While you're in a room its tab
+  stays a room: an address typed there opens in a new tab, and Back, Forward and Reload say to leave the room
+  first. Closing the room's tab leaves the room. Other tabs keep the call going (their controls are in the room
+  tab until the call bar, step 4).
+- The house tile and tiles opened for everyone run through Raku's own tile loader (the house pinned by its record
+  CID); the room keeps the lab's look (`room.css`), without the lab's heading and footer. The page policy names the
+  rooms relay (`wss://relay.rooms.thunderbird.cafe`). On this computer `?roomsRelay=ws://…` picks another relay.
+- The words: the first screen's shorter opening line (FS1) and "Tables and rooms" (RR5), the sign-in promise
+  (RR8), the About page's rooms lines (RR9).
+
 ## Try it
 
 ```
@@ -415,6 +449,7 @@ and open http://127.0.0.1:5181/.
 | `src/link-message.js` | the link message: where a link goes, Open / Cancel |
 | `src/about-page.js` | the About page: what Raku keeps, who it talks to, how tiles are kept in their box, installing Raku |
 | `src/app-shell.js` | stage 9: installed or not, the service worker's registration, the update rule, the install offer, the tabs in the title bar |
+| `src/room-tab.js`, `src/room-words.js` | rooms step 1: the room tab hosting rooms-lab's room (the join screen, invites, one room at a time, the rejoin after a reload); the words and links, tested in Node |
 | `src/style.css` | the look: raku pottery, turquoise, always dark |
 | `public/` | `CNAME`, `robots.txt`, the icon (`icon.svg`, and `favicon.ico`, `favicon-32.png`, `apple-touch-icon.png` for other sites); stage 6: `card.png` (the link card) and `banner.png`; stage 9: `manifest.webmanifest`, the app icons, `sw.js` and `offline.html` |
 | `.github/workflows/deploy.yml` | test, build, check the policy is on the page and `oauth.json` names Raku's address, publish to GitHub Pages |
@@ -450,6 +485,16 @@ sign-in) and plays Daisy on two and three "computers" (separate browser contexts
 a table and the link, no relay to reach (the Joining box and its hint), the hover on Back to the start, signing in to sit, the join message, a reload and a relay restart mid-match, the phone
 width, whole matches that re-check (`verifyMatch`), saving, full, held, leaving and coming back, a match
 between Raku and the Daisy page (both ways), and the house version check. Usage at the top of the file.
+
+`check_room.py` (67 checks, rooms step 1) bundles and starts everything itself: Raku's page with the stand-in
+sign-in, the loader replica, and the Rooms lab's own dev page and its real relay (`room-servers.mjs`, from a
+rooms-lab folder: `--rooms-lab`; the relay's own sign-in check around a stand-in for Bluesky's `verifyJwt`, which
+still refuses another audience or method). Raku pages and lab pages share rooms, both ways (the mixed room):
+the Rooms card and the join screen, the "Rooms" window the first time, the pass for the rooms relay only, the code
+never in Raku's address, the invite link, the house through Raku's loader, voice both ways, a tile opened for
+everyone from Raku, a guest's screen through the house's approval, an invite opening Raku, typed names, the room
+tab staying a room, one room at a time (Stay, Leave and join), a lab-made room joined from Raku, a reload and
+Rejoin, closing the tab, a pasted invite, the page policy, the phone, the About page.
 
 `check_lounge.py` (48 checks, steps 5b and 5b-2) is set up the same way, with daisy-relay's lounge stand-in
 (`test/lounge-standin.mjs`, the real server.js and lounge.js with stand-in lookups) as the relay: mingling

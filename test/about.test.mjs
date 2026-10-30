@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { parseTarget } from '../src/address.js';
 import { TALKS_TO, EXCEPTION, MESSAGES_LINE } from '../src/about-page.js';
 import { TYPEAHEAD_URL } from '../src/typeahead.js';
-import { PLC_DIRECTORY, HIDE_LIST_URL, SEARCH, RECENT, TILE_LOAD_DOMAIN, TABLES, MADE_BY, SOURCE_CODE, BLOG_POST, TILE_POPUPS } from '../src/config.js';
+import { PLC_DIRECTORY, HIDE_LIST_URL, SEARCH, RECENT, TILE_LOAD_DOMAIN, TABLES, ROOMS, MADE_BY, SOURCE_CODE, BLOG_POST, TILE_POPUPS } from '../src/config.js';
 
 test('the About page has its own address', () => {
   assert.deepEqual(parseTarget('raku:about'), { ok: true, kind: 'about', uri: 'raku:about' });
@@ -19,6 +19,10 @@ test('"Who Raku talks to" names every outside server Raku is set up to reach (ke
   assert.ok(/Bluesky/.test(text), "Bluesky's public servers");
   assert.ok(Object.values(TABLES).some((t) => t.relay) && /Daisy's relay/.test(text), "Daisy's relay");
   assert.ok(/just the words you typed/.test(text), 'search sends only the words');
+  // Rooms (rooms step 1, RR9): the relay, the people in the room, and the connection helpers (STUN, Cloudflare's TURN)
+  for (const h of [host(ROOMS.relay), ...ROOMS.stun]) assert.ok(text.includes(h), `${h} is on the About page`);
+  assert.ok(/The people in your room/.test(text) && /straight between your computers, encrypted/.test(text));
+  assert.ok(new RegExp(`${ROOMS.turn} passes the encrypted call along`).test(text), "Cloudflare's TURN");
 });
 
 test("the exception (owner's wording, Oct 22) matches the decision on tiles' new windows", () => {

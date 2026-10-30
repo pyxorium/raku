@@ -22,6 +22,10 @@ export const TALKS_TO = Object.freeze([
   ['typeahead.waow.tech', 'Handle suggestions while you type a handle in the address box.'],
   ['The tile loading server', 'Gives each tile its own address to run on (load.tiles.lexicographer.space).'],
   ["Daisy's relay", 'Only while you play Daisy with someone on another computer.'],
+  // Rooms (rooms step 1, RR9, owner's wording)
+  ['The rooms relay (relay.rooms.thunderbird.cafe)', 'Only while you’re in a room. It introduces the people in the room to each other and passes the room’s messages; it stores nothing.'],
+  ['The people in your room', 'Voice, a shared screen and live tiles go straight between your computers, encrypted.'],
+  ['Google’s and Cloudflare’s connection helpers', 'Only while you’re in a room, to help computers find a way to reach each other (stun.l.google.com, stun.cloudflare.com). On networks that block direct connections, Cloudflare passes the encrypted call along without being able to read it.'],
 ]);
 
 /** What a tile says to Raku, and where it shows (Oct 23: the button appears only once a tile sends something). */
@@ -52,7 +56,7 @@ export function drawAbout(ctx) {
     h('h1', {}, `About ${SITE.name}`),
     h('p', { class: 'lede' }, `${SITE.name} is a browser for web tiles: small pages and apps that people publish to their own atproto accounts. It opens them, keeps the ones you like on your shelf, and finds new ones.`),
     sect("You don't need an account",
-      h('p', {}, "Browsing, searching and playing the tables against the bot need no sign-in. Signing in is only for saving your match results from the tables (and, if you choose, being seen in Daisy's lounge). Raku never touches your posts, likes, follows or anything else.")),
+      h('p', {}, "Browsing, searching, joining a room with a typed name, and playing the tables against the bot need no sign-in. Signing in is only for saving your match results, showing your handle in a room, and (if you choose) being seen in Daisy's lounge. Raku never touches your posts, likes, follows or anything else.")),
     sect('What stays in this browser',
       h('p', {}, "Raku has no server of its own and no accounts of its own. These are kept in this browser only, and you can clear them by clearing this site's data:"),
       h('ul', {},
@@ -60,6 +64,8 @@ export function drawAbout(ctx) {
         h('li', {}, h('b', {}, 'Your last visits'), ' to Following and Recent tiles, for the "New" marks.'),
         h('li', {}, h('b', {}, 'The app you chose'), ' for opening posts, and the accounts you’ve signed in with.'),
         h('li', {}, 'A seat at a Daisy table you’ve joined, for a day.'),
+        h('li', {}, h('b', {}, 'A room you’re in'), ', for that tab only, so a reload brings you back in (for the host, also the host key).'),
+        h('li', {}, h('b', {}, 'The name you typed'), ' for rooms, for next time.'),
         h('li', {}, 'If you install Raku: its “Raku needs the internet” screen, for when there’s no connection.'))),
     sect('Who Raku talks to, and why',
       h('dl', { class: 'ab-who' }, ...TALKS_TO.flatMap(([who, what]) => [h('dt', {}, who), h('dd', {}, what)]))),
@@ -68,7 +74,8 @@ export function drawAbout(ctx) {
         h('li', {}, 'Every tile runs on its own address, apart from Raku and from other tiles. It can’t read your shelf, your sign-in, or another tile.'),
         h('li', {}, 'A tile can’t reach the internet on its own: no fetching, no pictures from elsewhere, no tracking pixels. What it shows comes from its author’s account.'),
         h('li', {}, MESSAGES_LINE),
-        h('li', {}, 'Large tiles ask before they load.')),
+        h('li', {}, 'Large tiles ask before they load.'),
+        h('li', {}, 'Raku asks for your microphone only when you unmute in a room, and for your screen only when you choose to share it.')),
       h('div', { class: 'ab-exception' }, h('b', {}, 'One exception:'), ` ${EXCEPTION}`)),
     sect('Install Raku',
       h('p', {}, INSTALL_INTRO),

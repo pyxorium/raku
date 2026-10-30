@@ -114,6 +114,45 @@ export function tableForTile(did, rkey) {
 }
 export const TABLE_TIMES = Object.freeze({ still: 4000, retry: 8000, heartbeat: 3000, misses: 2, tick: 1000 });
 
+// ---------- Rooms (rooms in Raku, step 1; claude/raku-rooms-plan.md, RR1 to RR10) ----------
+// The room itself is rooms-lab's code (package.json "rooms-lab", pinned to a GitHub tag; src/room-tab.js hosts it).
+// These are the addresses Raku names itself (its page policy, its sign-in, its About page, the shelf); they're the
+// same as rooms-lab's src/config.js and published.json, and test/rooms.test.mjs checks that they agree, so a new
+// rooms-lab tag can't move them without the test saying so.
+export const ROOMS = Object.freeze({
+  name: 'Rooms',
+  blurb: 'Voice, one shared screen, and tiles opened for everyone. For small meetups among friends.',
+  relay: 'wss://relay.rooms.thunderbird.cafe/',
+  // The connection helpers each computer asks for its own address (rooms-lab ICE_SERVERS); TURN credentials come
+  // from the relay (Cloudflare's), only while you're in a room.
+  stun: Object.freeze(['stun.l.google.com', 'stun.cloudflare.com']),
+  turn: 'Cloudflare',
+  // The "Rooms" permission set (published from thunderbird.cafe, rooms-lab lexicons/): a pass for this relay's
+  // join, nothing else in the account. Asked the first time an account joins a room (RR4).
+  scope: 'include:cafe.thunderbird.rooms.authJoin?aud=did:web:relay.rooms.thunderbird.cafe%23rooms_relay',
+  audience: 'did:web:relay.rooms.thunderbird.cafe#rooms_relay',
+  join: 'cafe.thunderbird.rooms.join',
+  // The house tile (the room's rules), pinned like a table's tiles: rooms-lab's published.json.
+  house: Object.freeze({ uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3mymwzw63gp2g', cid: 'bafyreidyssz5pnugrwbjs22g3kbgfgdqpyztae3cyeuxdol5xamt4hm5ue' }),
+  // The lab page's own invite links (thunderbird.cafe), taken too while the lab page is still up (RR3).
+  labPage: 'https://thunderbird.cafe/webtiles/rooms-lab/',
+  // sessionStorage, this tab only (RR2, RR10): the room you're in ({ code, name?, did?, handle?, host? }).
+  keepKey: 'raku-room',
+});
+/** The rooms relay: the live one; on this computer ?roomsRelay=ws://… for the checks (Daisy's ?relay= is its own). */
+export function roomsRelayUrl(loc = globalThis.location) {
+  if (!isLocal(loc)) return ROOMS.relay;
+  const v = new URLSearchParams(loc.search || '').get('roomsRelay');
+  return v && /^wss?:\/\/[^\s]+$/.test(v) ? v : ROOMS.relay;
+}
+/** Does a sign-in's permissions cover rooms? The server expands the set into the pass (rpc:…join?aud=…). */
+export function coversRooms(scope) {
+  const s = ` ${String(scope || '')} `;
+  return s.includes(` ${ROOMS.scope} `) || s.includes(` rpc:${ROOMS.join}?`) || s.includes(` rpc:${ROOMS.join} `);
+}
+/** The room's house tile: the shelf keeps it for the Rooms card (as a table keeps its player tile). */
+export const isRoomHouse = (did, rkey) => ROOMS.house.uri === `at://${did}/${COLLECTION}/${rkey}`;
+
 // ---------- Daisy across two computers (stage 5, claude/raku-plan.md section 15) ----------
 // The same rules as the Daisy page (the site's src/daisy/config.js), so the two can share a table:
 // - the relay: the live one, or on this computer the stand-in (node scripts/relay-standin.mjs in
@@ -164,7 +203,8 @@ export const SIGNIN = Object.freeze({
 });
 // Shown beside "Sign in to save matches" and in the account menu (Q43).
 // Since step 5b (Q53) it also names the lounge, which only asks when you turn mingling on.
-export const SIGNIN_PROMISE = `Signing in lets ${SITE.host} save your match results from the tables you play and, if you choose to mingle, let other players see you're in a game's lounge. Each game asks for its own permission the first time. Raku doesn't touch your posts, likes, follows or anything else.`;
+// Since rooms (RR8, owner Oct 29) it names rooms too, shorter.
+export const SIGNIN_PROMISE = `Signing in lets ${SITE.host} save your match results, show your handle in rooms, and, if you choose to mingle, show you in a game's lounge. Each asks for its own permission the first time. Raku doesn't touch your posts, likes, follows or anything else.`;
 export const recordLink = (uri) => `https://pdsls.dev/${uri}`;
 
 /** The permissions for a sign-in: your account, plus the sets of the given tables (ids). */
@@ -172,8 +212,8 @@ export function scopeFor(tableIds = []) {
   const sets = [...new Set(tableIds)].map((id) => TABLES[id] && TABLES[id].scope).filter(Boolean);
   return ['atproto', ...sets].join(' ');
 }
-/** Everything Raku may ever ask for (oauth.json's scope): every approved table's set, and their lounges' sets. */
-export const fullScope = () => [scopeFor(Object.keys(TABLES)), ...Object.values(TABLES).map((t) => t.lounge && t.lounge.scope).filter(Boolean)].join(' ');
+/** Everything Raku may ever ask for (oauth.json's scope): every approved table's set, their lounges' sets, and Rooms. */
+export const fullScope = () => [scopeFor(Object.keys(TABLES)), ...Object.values(TABLES).map((t) => t.lounge && t.lounge.scope).filter(Boolean), ROOMS.scope].join(' ');
 /** Does a sign-in's permissions cover a table's lounge? The server expands the set into the record and the pass. */
 export function coversLounge(scope, table) {
   const L = table && table.lounge;
@@ -392,11 +432,14 @@ export function loadSourceOverride(loc = globalThis.location) {
 // - scripts and styles only from Raku itself;
 // - pictures only Raku's own, made here from downloaded bytes (blob:), avatars from Bluesky's picture server, or
 //   (stage 6c) Recent tiles' pictures from appmosphe.re's /img/ copies;
-// - connections over https (lookups, the authors' account servers, Bluesky's public API), and the tables'
-//   own relays (stage 5: wss://relay.daisy.thunderbird.cafe/), named one by one;
+// - connections over https (lookups, the authors' account servers, Bluesky's public API), and the relays named
+//   one by one: the tables' (stage 5: wss://relay.daisy.thunderbird.cafe/) and the rooms relay (rooms step 1);
+//   a room's voice and screens go between the computers (WebRTC), which the policy doesn't cover;
 // - frames only from the tile loading server.
 export const tableRelays = () => [...new Set(Object.values(TABLES).map((t) => t.relay).filter(Boolean).map((u) => new URL(u).origin))];
-export function pageCsp(loadDomain = TILE_LOAD_DOMAIN, scheme = 'https', relays = tableRelays()) {
+/** Every relay Raku's page connects to: the tables' and the rooms relay. */
+export const pageRelays = () => [...new Set([...tableRelays(), new URL(ROOMS.relay).origin])];
+export function pageCsp(loadDomain = TILE_LOAD_DOMAIN, scheme = 'https', relays = pageRelays()) {
   const base = loadDomain.replace(/^load\./, '');
   return [
     "default-src 'self'",

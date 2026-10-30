@@ -58,8 +58,9 @@ test("the relay: Daisy's own (the same as the Daisy page's); the stand-in or ?re
   assert.equal(daisyRelayUrl(here('?relay=wss://relay.daisy.thunderbird.cafe/')), 'wss://relay.daisy.thunderbird.cafe/');
   assert.equal(daisyRelayUrl(here('?relay=javascript:alert(1)')), 'ws://127.0.0.1:8787/');
   assert.deepEqual(tableRelays(), ['wss://relay.daisy.thunderbird.cafe']);
-  assert.match(pageCsp(), /connect-src 'self' https: wss:\/\/relay\.daisy\.thunderbird\.cafe;/);
-  assert.doesNotMatch(pageCsp(), /wss: |ws:\/\/127/, 'only that relay, by name');
+  // since rooms step 1 the rooms relay too, also by name
+  assert.match(pageCsp(), /connect-src 'self' https: wss:\/\/relay\.daisy\.thunderbird\.cafe wss:\/\/relay\.rooms\.thunderbird\.cafe;/);
+  assert.doesNotMatch(pageCsp(), /wss: |wss:;|ws:\/\/127/, 'only those relays, by name');
 });
 
 test('the timers: the real ones, or ?timers=short on this computer only', () => {

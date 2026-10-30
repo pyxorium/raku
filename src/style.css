@@ -806,3 +806,21 @@ a { color: var(--glaze-light); }
   .ab-who { grid-template-columns: 1fr; gap: 2px; }
   .ab-who dd { margin-bottom: 8px; }
 }
+
+/* Rooms (rooms step 1, room-tab.js): rooms-lab's room (room.css, Raku's palette) inside a tab, without the lab's
+   heading and footer; Raku's own join screen uses the room's classes. */
+.room-pane { min-height: 100%; background: #171411; }
+.room-pane .rl-hosted { padding-top: 20px; }
+.rk-room-join .rk-room-h { font-size: 1.4rem; color: var(--glaze-light); margin: 0 0 8px; font-weight: 650; }
+.rk-room-join .rl-way-signed { margin-top: 12px; }
+.rk-room-join .rl-way-signed .rl-appear-as, .rk-room-back .rl-appear-as { margin: 0; flex-direction: row; align-items: baseline; gap: 8px; font-size: 17px; }
+.rk-room-join .rl-way-signed .rl-appear-label, .rk-room-back .rl-appear-label { font-size: 17px; color: var(--text); }
+.rk-room-join .rl-way-signed .rk-type-instead { display: block; margin-top: 6px; }
+.rk-room-join .rk-type-instead, .rk-room-join .rk-use-handle { margin-top: 10px; }
+.rk-room-join .rk-room-signin { margin-top: 12px; }
+.rk-room-join .rk-room-signin .signin-form { margin-top: 4px; }
+.rk-room-join .rk-promise { margin-top: 8px; }
+.rk-room-join .rk-paste { margin-top: 22px; padding-top: 14px; border-top: 1px solid #3a322b; }
+.rk-room-join .rk-paste .rl-row { display: flex; gap: 8px; }
+.rk-room-join .rk-invite-box { flex: 1; min-width: 0; }
+.rk-room-join .rl-status:empty, .rk-room-join .rl-problem:empty { display: none; }

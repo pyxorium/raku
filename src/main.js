@@ -1,4 +1,5 @@
 // Raku starts here.
+import 'rooms-lab/room.css';      // the room's look (rooms step 1): rooms-lab's, before Raku's own
 import './style.css';
 import { TileMothership } from '@dasl/tile-loader';
 import { TILE_LOAD_DOMAIN, SITE, SIGNIN, loadSourceOverride } from './config.js';
@@ -59,7 +60,7 @@ async function start() {
   // Another Raku tab changed your shelf: read it again.
   globalThis.addEventListener('storage', (ev) => { if (ev.key === STORAGE_KEY) shelf.reload(); });
   const keepForReturn = (info) => guarded(() => session.setItem(SIGNIN.returnKey, JSON.stringify(info)));
-  const raku = mountRaku(root, { mothership, resolver, moderation, files: createFileStore(), shelf, auth, storage, returned, keepForReturn, install });
+  const raku = mountRaku(root, { mothership, resolver, moderation, files: createFileStore(), shelf, auth, storage, session, returned, keepForReturn, install });
   // Stage 9's update rule: a newer version on start is taken at once; later, only a note (S2: never interrupt).
   // Just back from a sign-in in this tab there's something to finish (a save), so no reload then: the note.
   const updates = createUpdateCheck({ session, startedAt: returned ? -Infinity : Date.now(), onNewer: (build) => raku.showUpdate(build), reload: () => globalThis.location.reload() });

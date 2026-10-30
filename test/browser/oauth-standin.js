@@ -21,6 +21,8 @@ const SETS = {
   'include:cafe.thunderbird.daisy.authPlay': 'repo:cafe.thunderbird.daisy.match',
   // the lounge (step 5b): the record and the pass for the relay
   'include:cafe.thunderbird.daisy.authLounge?aud=did:web:relay.daisy.thunderbird.cafe%23daisy_relay': 'repo:cafe.thunderbird.daisy.lounge rpc:cafe.thunderbird.daisy.lounge.enter?aud=did:web:relay.daisy.thunderbird.cafe%23daisy_relay',
+  // Rooms (rooms step 1): the pass for the rooms relay only
+  'include:cafe.thunderbird.rooms.authJoin?aud=did:web:relay.rooms.thunderbird.cafe%23rooms_relay': 'rpc:cafe.thunderbird.rooms.join?aud=did:web:relay.rooms.thunderbird.cafe%23rooms_relay',
 };
 const expand = (scope) => String(scope || '').split(' ').filter(Boolean).map((s) => SETS[s] || s).join(' ');
 

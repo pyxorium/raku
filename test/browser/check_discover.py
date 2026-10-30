@@ -415,7 +415,8 @@ with sync_playwright() as pw:
     heads = texts(page, '.ab-part h2')
     check('...its sections', heads == ["You don't need an account", 'What stays in this browser', 'Who Raku talks to, and why', 'How tiles are kept in their box', 'Install Raku', 'Hidden tiles and reporting'], str(heads))   # Install Raku: stage 9
     who = texts(page, '.ab-who dt')
-    check('...who Raku talks to', who == ["Each tile's own account", "Bluesky's public servers", 'plc.directory', 'appmosphe.re', 'lexicographer.space', 'typeahead.waow.tech', 'The tile loading server', "Daisy's relay"], str(who))
+    check('...who Raku talks to', who == ["Each tile's own account", "Bluesky's public servers", 'plc.directory', 'appmosphe.re', 'lexicographer.space', 'typeahead.waow.tech', 'The tile loading server', "Daisy's relay",
+        'The rooms relay (relay.rooms.thunderbird.cafe)', 'The people in your room', 'Google’s and Cloudflare’s connection helpers'], str(who))   # rooms step 1 (RR9)
     exc = page.inner_text('.ab-exception')
     check("...the exception, in the owner's words", exc == 'One exception: a tile can open a link in a new tab when you click it, and that link could carry information about what you did in the tile. It\u2019s the same as clicking a link on any web page, so use the same care.', exc)
     links = page.eval_on_selector_all('.about a', 'as => as.map(a => [a.textContent, a.href, a.target, a.rel])')

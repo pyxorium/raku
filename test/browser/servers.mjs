@@ -6,9 +6,10 @@ import { readFile, appendFile, writeFile } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 const W = process.argv[2];
 const RAKU = process.argv[3] || new URL('../..', import.meta.url).pathname;
-const { pageCsp, tableRelays } = await import(join(RAKU, 'src/config.js'));
-// Stage 5: the checks' stand-in relay for Daisy (daisy-tiles scripts/relay-standin.mjs, port 8787) as well.
-const csp = pageCsp('load.tiles.lex.localhost', 'http', [...tableRelays(), 'ws://127.0.0.1:8787']);
+const { pageCsp, pageRelays } = await import(join(RAKU, 'src/config.js'));
+// Stage 5: the checks' stand-in relay for Daisy (daisy-tiles scripts/relay-standin.mjs, port 8787) as well; rooms
+// step 1: the rooms lab's dev relay (room-servers.mjs, port 8899).
+const csp = pageCsp('load.tiles.lex.localhost', 'http', [...pageRelays(), 'ws://127.0.0.1:8787', 'ws://127.0.0.1:8899']);
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.txt': 'text/plain',
   '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };   // stage 9: the manifest and app icons
 let html = await readFile(join(RAKU, 'index.html'), 'utf8');

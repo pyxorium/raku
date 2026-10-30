@@ -7,8 +7,8 @@
 // name and picture, or says the tile was deleted by its author, or that it isn't shown in Raku.
 // An account's tiles are read live from the account's own server, newest first, 100 at a time.
 
-import { TAKEDOWNS_PAGE, tableForTile } from './config.js';
-import { atUri, accountPageUri, SHELF_URI, tableUri, searchUri } from './address.js';
+import { TAKEDOWNS_PAGE, tableForTile, isRoomHouse } from './config.js';
+import { atUri, accountPageUri, SHELF_URI, ROOM_URI, tableUri, searchUri } from './address.js';
 import { describeTile } from './tiles.js';
 import { NetError } from './net.js';
 import { h, bannerCid } from './cards.js';
@@ -57,9 +57,10 @@ function refreshKeptTile(ctx, card, t, alive) {
 
 function keptTileCard(ctx, t, { removable, alive, queue }) {
   const { kit, tabs, tab, openNew, shelf } = ctx;
-  // A kept table (its player tile, kept with the star on the table's page) opens the table.
+  // A kept table (its player tile, kept with the star on the table's page) opens the table; kept Rooms (the house
+  // tile, kept with the star on a room tab) open a room tab.
   const table = tableForTile(t.did, t.rkey);
-  const uri = table ? tableUri(table.id) : atUri(t.did, t.rkey);
+  const uri = table ? tableUri(table.id) : isRoomHouse(t.did, t.rkey) ? ROOM_URI : atUri(t.did, t.rkey);
   const card = kit.tileCard({
     name: t.name, by: t.by,
     onOpen: () => tabs.go(tab.id, uri),

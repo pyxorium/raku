@@ -115,6 +115,18 @@ const TABLE_SUB = /^(bot|[a-z0-9]{8,32})$/;
 // both run the same pinned house through the same relay (stage 5, Q44).
 const DAISY_PAGE = { host: 'thunderbird.cafe', path: '/webtiles/daisy/' };
 export const accountPageUri = (actor) => `raku:tiles/${actor}`;
+// A room (rooms step 1, RR2): just raku:room. The room code stays out of Raku's address (this browser tab keeps
+// it); an invite link (Raku's own https://raku.lexicographer.space/#r=…, or the lab page's) opens a room tab.
+export const ROOM_URI = 'raku:room';
+const ROOMS_LAB_PAGE = { host: 'thunderbird.cafe', path: '/webtiles/rooms-lab/' };
+const ROOM_CODE = /^[A-Za-z0-9_-]{10,64}$/;           // as rooms-lab's formats.js (isRoomCode)
+const HOST_KEY = /^[A-Za-z0-9_-]{32,128}$/;           // as rooms-lab's formats.js (isHostKey)
+/** #r=<code>[&k=<host key>] → { room, hostKey } or null (the code only when it's one the relay takes). */
+export function roomInHash(hash) {
+  const q = new URLSearchParams(String(hash || '').replace(/^#/, ''));
+  const room = q.get('r'), key = q.get('k');
+  return room && ROOM_CODE.test(room) ? { room, hostKey: key && HOST_KEY.test(key) ? key : null } : null;
+}
 
 function account(actor) {
   actor = String(actor || '').replace(/^@/, '');
@@ -182,6 +194,7 @@ export function parseTarget(input, { inner = false } = {}) {
   const s = String(input || '').trim();
   if (s === SHELF_URI) return { ok: true, kind: 'shelf', uri: SHELF_URI };
   if (s === ABOUT_URI) return { ok: true, kind: 'about', uri: ABOUT_URI };
+  if (s === ROOM_URI) return { ok: true, kind: 'room', uri: ROOM_URI };
   if (s === DISCOVER_URI) return { ok: true, kind: 'discover', source: null, uri: DISCOVER_URI };
   const disc = s.match(/^raku:discover\/([a-z]{1,20})$/);
   if (disc) {
@@ -229,6 +242,11 @@ export function parseTarget(input, { inner = false } = {}) {
 function otherLink(s, inner) {
   let u;
   try { u = new URL(s); } catch { return null; }
+  // A room invite from Raku (or the lab's dev page) on this computer: only the code is taken from it.
+  if (u.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(u.hostname)) {
+    const inv = roomInHash(u.hash);
+    return inv ? { ok: true, kind: 'room-invite', room: inv.room, hostKey: inv.hostKey, uri: ROOM_URI } : null;
+  }
   if (u.protocol !== 'https:') return null;
   const host = u.hostname.toLowerCase();
   if ((host === DAISY_PAGE.host || host === `www.${DAISY_PAGE.host}`) && u.pathname === DAISY_PAGE.path) {
@@ -236,6 +254,12 @@ function otherLink(s, inner) {
     // A match against the bot lives in the browser that started it: its link opens Daisy's start screen.
     if (t && TABLE_SUB.test(t) && t !== 'bot' && u.searchParams.get('bot') !== '1') return { ok: true, kind: 'table', id: 'daisy', sub: t, uri: tableUri('daisy', t) };
     return { ok: true, kind: 'table', id: 'daisy', sub: null, uri: tableUri('daisy') };
+  }
+  // A room invite (rooms step 1): Raku's own, or the lab page's while it's up (RR3). The code never goes into a tab.
+  if ((host === SITE.host && u.pathname === '/') || ((host === ROOMS_LAB_PAGE.host || host === `www.${ROOMS_LAB_PAGE.host}`) && u.pathname === ROOMS_LAB_PAGE.path)) {
+    const inv = roomInHash(u.hash);
+    if (inv) return { ok: true, kind: 'room-invite', room: inv.room, hostKey: inv.hostKey, uri: ROOM_URI };
+    if (host !== SITE.host) return { ok: true, kind: 'room', uri: ROOM_URI };
   }
   if (host === SITE.host && !inner) {
     const p = new URLSearchParams(u.hash.replace(/^#/, ''));

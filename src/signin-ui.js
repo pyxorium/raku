@@ -25,8 +25,14 @@ export function openDialog(host, { label, onClose } = {}) {
   return { el, box, body, close, get closed() { return closed; } };
 }
 
+// While you're in a room (rooms step 1), signing in in this tab would hang up the call: app.js sets what to say.
+let leaveWarning = () => '';
+export function setLeaveWarning(fn) { leaveWarning = typeof fn === 'function' ? fn : () => ''; }
+
 /** "The sign-in window was blocked." with Try again and Sign in in this tab instead. */
 export function blockedBox({ onRetry, onHere, hereNote = 'Other tabs will reload.' }) {
+  const warn = leaveWarning();
+  if (warn) hereNote = `${warn} ${hereNote}`;
   return h('div', { class: 'signin-blocked', role: 'alert' },
     h('p', {}, h('b', {}, 'The sign-in window was blocked.'), ' Allow pop-ups for this page and try again, or sign in in this tab.'),
     h('div', { class: 'actions' },

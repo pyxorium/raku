@@ -12,10 +12,12 @@
 // Stage 4: the account menu in the top bar (account-menu.js) and saving at the tables (tables/saving.js).
 // Stage 6: Discover (discover.js), a button beside the Shelf's; words typed in the address box search; a post's
 // address opens through the link message (link-message.js), outside Raku.
+// Rooms (rooms step 1, room-tab.js): a room is a tab (raku:room). While you're in a room, its tab stays a room:
+// an address typed there opens in a new tab, and Back, Forward and Reload say to leave the room first.
 
 import { Tile } from '@dasl/tile-loader';
-import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS, TABLES, tableForTile, appmosphereCopy } from './config.js';
-import { parseAddress, parseTarget, atUri, SHELF_URI, ABOUT_URI, tableUri, DISCOVER_URI, discoverUri } from './address.js';
+import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS, TABLES, ROOMS, tableForTile, isRoomHouse, appmosphereCopy } from './config.js';
+import { parseAddress, parseTarget, atUri, SHELF_URI, ABOUT_URI, ROOM_URI, roomInHash, tableUri, DISCOVER_URI, discoverUri } from './address.js';
 import { createTabs, current } from './tabs.js';
 import { describeTile, sizeVerdict, createPathLoader, blobCidOf } from './tiles.js';
 import { formatBytes, NetError } from './net.js';
@@ -31,8 +33,10 @@ import { createLinkMessage } from './link-message.js';
 import { createDiscover, drawDiscover } from './discover.js';
 import { drawAbout } from './about-page.js';
 import { groupThreads } from './posts.js';
+import { createRooms } from './room-tab.js';
+import { setLeaveWarning } from './signin-ui.js';
 
-export function mountRaku(root, { mothership, resolver, moderation, files, shelf, auth, storage = null, returned = null, keepForReturn = () => {}, loc = globalThis.location, hist = globalThis.history, tableDeps = {}, install = null }) {
+export function mountRaku(root, { mothership, resolver, moderation, files, shelf, auth, storage = null, session = null, returned = null, keepForReturn = () => {}, loc = globalThis.location, hist = globalThis.history, tableDeps = {}, install = null }) {
   const kit = createCardKit({ files });
   // Discover (stage 6): what it keeps while Raku is open, shared by every Discover tab.
   const discover = createDiscover({ resolver, moderation, shelf, storage, loc });
@@ -115,6 +119,37 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   // Links out of Raku (a post, a link in a post): Raku says where they go and opens them on a click.
   const linkMessage = createLinkMessage(root, { storage });
 
+  // Rooms (rooms step 1): at most one room in this window (RR6). A raku:page tab (not a room) or a first screen can
+  // become the room tab; otherwise a new tab.
+  const ownPage = (uri) => !uri || (uri.startsWith('raku:') && uri !== ROOM_URI);
+  function openRoomTab() {
+    if (ownPage(current(tabs.active))) rawGo(tabs.active.id, ROOM_URI);
+    else openNew(ROOM_URI);
+  }
+  const rooms = createRooms({
+    auth, mothership, resolver, session, storage, loc, tabs, stage, say: (t) => say(t),
+    keepForReturn: (info) => keep(info), openRoomTab, closeTab: (id) => tabs.close(id),
+  });
+  // "Sign in in this tab instead" while in a room would hang up: the sign-in's blocked-window box says so first.
+  setLeaveWarning(() => (rooms.live ? 'This leaves your room: you can rejoin it afterwards.' : ''));
+  // A room tab you're in stays a room (it would hang up otherwise): addresses open in a new tab; Back, Forward and
+  // Reload ask you to leave the room first.
+  const rawGo = tabs.go, rawBack = tabs.back, rawForward = tabs.forward;
+  const inRoomHere = (id) => rooms.isLive(id);
+  const leaveFirst = () => say('You’re in a room in this tab. Leave the room first, or use another tab.');
+  tabs.go = (id, uri) => {
+    if (inRoomHere(id) && uri !== ROOM_URI) { openNew(uri); return; }
+    if (inRoomHere(id)) { tabs.activate(id); return; }
+    rawGo(id, uri);
+  };
+  tabs.back = (id) => (inRoomHere(id) ? leaveFirst() : rawBack(id));
+  tabs.forward = (id) => (inRoomHere(id) ? leaveFirst() : rawForward(id));
+  // The Rooms card (and raku:room typed or kept on the shelf): a room tab comes to the front if there is one.
+  function goRooms(tab, { inNew = false } = {}) {
+    if (rooms.openRooms()) return;
+    if (inNew) openNew(ROOM_URI); else tabs.go(tab.id, ROOM_URI);
+  }
+
   function say(text) {
     clearTimeout(notice);
     noteLine.textContent = text || '';
@@ -143,6 +178,10 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     input.blur();               // first, so the box shows the tab's own address afterwards (a table's, say)
     // A post opens outside Raku for now (stage 6, Q87/Q88), in the app chosen for posts, after the link message.
     if (r.kind === 'post') { linkMessage.show({ post: { actor: r.actor, rkey: r.rkey }, from: 'A post address you typed. Raku shows tiles, so posts open in their app.' }); return; }
+    // An invite link (rooms step 1): the room's join screen, the code kept out of the address (RR2); one room at a
+    // time (RR6). raku:room on its own: the room tab if there is one.
+    if (r.kind === 'room-invite') { rooms.takeInvite({ room: r.room, hostKey: r.hostKey }); return; }
+    if (r.kind === 'room' && !rooms.isRoomTab(tabs.active.id)) { goRooms(tabs.active); return; }
     tabs.go(tabs.active.id, r.uri);
   }
 
@@ -154,7 +193,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     const open = tabs.list.find((t) => current(t) === ABOUT_URI);
     if (open) { tabs.activate(open.id); return; }
     const here = current(tabs.active);
-    if (!here || here.startsWith('raku:')) tabs.go(tabs.active.id, ABOUT_URI);
+    if (ownPage(here)) tabs.go(tabs.active.id, ABOUT_URI);
     else openNew(ABOUT_URI);
   }
   const onDiscover = (uri) => !!uri && (uri === DISCOVER_URI || uri.startsWith(`${DISCOVER_URI}/`) || uri.startsWith('raku:search/'));
@@ -162,7 +201,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     const open = tabs.list.find((t) => onDiscover(current(t)));
     if (open) { tabs.activate(open.id); return; }
     const here = current(tabs.active);
-    if (!here || here.startsWith('raku:')) tabs.go(tabs.active.id, DISCOVER_URI);
+    if (ownPage(here)) tabs.go(tabs.active.id, DISCOVER_URI);
     else openNew(DISCOVER_URI);
   }
 
@@ -172,7 +211,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     const open = tabs.list.find((t) => current(t) === SHELF_URI);
     if (open) { tabs.activate(open.id); return; }
     const here = current(tabs.active);
-    if (!here || here.startsWith('raku:')) tabs.go(tabs.active.id, SHELF_URI);
+    if (ownPage(here)) tabs.go(tabs.active.id, SHELF_URI);
     else openNew(SHELF_URI);
   }
 
@@ -232,6 +271,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     const target = parseTarget(uri);
     if (target.ok && target.kind === 'shelf') { drawYourShelf(pageContext(p, tab)); drawChrome(); return; }
     if (target.ok && target.kind === 'about') { drawAbout(pageContext(p, tab)); return; }
+    if (target.ok && target.kind === 'room') { rooms.draw(p, tab); drawChrome(); return; }
     if (target.ok && target.kind === 'account') { drawAccountTiles(pageContext(p, tab), target.actor); return; }
     if (target.ok && target.kind === 'table') { openTable(p, tab, target.id, target.sub); return; }
     if (target.ok && target.kind === 'discover') { drawDiscover(pageContext(p, tab), { source: target.source }); return; }
@@ -273,6 +313,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   function reload(id) {
     const tab = tabs.list.find((t) => t.id === id);
     if (!tab) return;
+    if (rooms.isLive(id)) { leaveFirst(); return; }
     const p = paneFor(tab);
     p.uri = undefined;
     show(tab);
@@ -397,6 +438,12 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     p.el.append(p.panel.el, p.panel.button);
     // One of a table's own tiles, opened on its own: say so, and offer the table (decision Q34).
     const table = keep && tableForTile(keep.did, keep.rkey);
+    if (keep && isRoomHouse(keep.did, keep.rkey)) {
+      const hint = h('div', { class: 'table-hint' }, h('span', {}, 'This tile holds the rules of Raku’s rooms.'),
+        h('button', { type: 'button', class: 'primary', onclick: () => goRooms(tab) }, 'Open a room'),
+        h('button', { type: 'button', class: 'table-hint-x', 'aria-label': 'Hide this note', onclick: () => hint.remove() }, icon('close', 14)));
+      p.el.append(hint);
+    }
     if (table) {
       const hint = h('div', { class: 'table-hint' }, h('span', {}, 'This tile is part of a table.'),
         h('button', { type: 'button', class: 'primary', onclick: () => tabs.go(tab.id, tableUri(table.id)) }, `Play ${table.name}`),
@@ -439,7 +486,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     const grid = h('div', { class: 'cards picks' });
     const box = h('div', { class: 'first' },
       h('h1', {}, SITE.name, SITE.lab ? h('span', { class: 'lab' }, ' (lab)') : null),
-      h('p', { class: 'lede' }, 'A browser for web tiles: small pages people publish to their own atproto accounts. Paste a tile\'s address or someone\'s handle above, or start with one of these.'),
+      h('p', { class: 'lede' }, 'A browser for web tiles. Paste a tile\'s address or someone\'s handle above, or start with one of these.'),
       grid);
     p.el.append(box);
     for (const uri of PICKS) grid.append(pickCard(uri, tab));
@@ -447,9 +494,11 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       h('button', { type: 'button', class: 'more', onclick: () => goDiscover() }, icon('compass', 16), 'Discover more tiles'),
       h('span', { class: 'small-lede' }, 'Search, and new tiles from the accounts you keep.')));
     drawNewsRow(p, tab, box);
+    // "Tables and rooms" (RR5, owner's wording): the tables, then the Rooms card.
     const tables = h('div', { class: 'cards tables' });
-    box.append(h('h2', {}, 'Tables'), h('p', { class: 'small-lede' }, 'Groups of tiles that play together. Play the bot with no sign-in; sign in to save your matches, or to play Daisy with a friend on another computer.'), tables);
+    box.append(h('h2', {}, 'Tables and rooms'), h('p', { class: 'small-lede' }, 'Groups of tiles that play together, and rooms for meeting up.'), tables);
     for (const t of Object.values(TABLES)) tables.append(tableCard(t, tab));
+    tables.append(roomsCard(tab));
     drawShelfTeaser(pageContext(p, tab), box);
     box.append(h('p', { class: 'small first-about' }, 'Tiles run in their own sealed frames, loaded from their authors\' own accounts. Raku has no sign-in for browsing. ',
       h('button', { type: 'button', class: 'linkish', onclick: () => tabs.go(tab.id, ABOUT_URI) }, 'About Raku: what it keeps, who it talks to \u2192')));
@@ -494,10 +543,23 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     return card.el;
   }
 
+  // The Rooms card (RR5): opens a room tab with the join screen; its picture is the house tile's banner.
+  function roomsCard(tab) {
+    const card = kit.tileCard({ name: ROOMS.name, description: ROOMS.blurb, onOpen: () => goRooms(tab), onOpenNew: () => goRooms(tab, { inNew: true }) });
+    card.el.classList.add('rooms-card');
+    (async () => {
+      const [did, , rkey] = ROOMS.house.uri.replace(/^at:\/\//, '').split('/');
+      const [rec, acct] = await Promise.all([resolver.tileRecord(did, rkey), resolver.account(did)]);
+      const d = describeTile(rec);
+      if (d.ok) card.picture({ pds: acct.pds, did, cid: bannerCid(d.manifest) });
+    })().catch(() => { /* the card stays without a picture */ });
+    return card.el;
+  }
+
   function pickCard(uri, tab) {
     const parsed = parseAddress(uri);
     const pickTable = parsed.ok && parsed.actor.startsWith('did:') ? tableForTile(parsed.actor, parsed.rkey) : null;
-    const target = pickTable ? tableUri(pickTable.id) : uri;
+    const target = pickTable ? tableUri(pickTable.id) : parsed.ok && parsed.actor.startsWith('did:') && isRoomHouse(parsed.actor, parsed.rkey) ? ROOM_URI : uri;
     const card = kit.tileCard({ name: '…', onOpen: () => tabs.go(tab.id, target), onOpenNew: () => openNew(target) });
     (async () => {
       if (!parsed.ok) throw new Error('bad pick');
@@ -627,9 +689,18 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     }
     drawChrome();
   });
-  if (!tabs.fromHash(loc.hash)) sync();
+  // Raku opened from an invite link (#r=…, rooms step 1): a room tab with that room's join screen; Raku's address
+  // then holds the tab (raku:room), never the code (RR2).
+  const startInvite = roomInHash(loc.hash);
+  if (startInvite) { sync(); rooms.takeInvite(startInvite); } else if (!tabs.fromHash(loc.hash)) sync();
+  // Back from "Sign in in this tab instead" at a room's join screen: that room's join screen again.
+  if (pendingReturn && pendingReturn.kind === 'room') { const r = pendingReturn; pendingReturn = null; if (r.code) rooms.takeInvite({ room: r.code, hostKey: null }); }
   if (returned) say(returned.did && auth.current() ? `Signed in as @${auth.current().handle}.` : "Sign-in didn't finish. Try again.");
-  globalThis.addEventListener?.('hashchange', () => { if (loc.hash !== tabs.toHash()) tabs.fromHash(loc.hash); });
-  // (for the checks and curious eyes: the table in the front tab, if any)
-  return { tabs, openNew, say, menu, showUpdate, get table() { return paneFor(tabs.active).table; } };
+  globalThis.addEventListener?.('hashchange', () => {
+    const inv = roomInHash(loc.hash);
+    if (inv) { hist.replaceState(null, '', tabs.toHash()); rooms.takeInvite(inv); return; }
+    if (loc.hash !== tabs.toHash()) tabs.fromHash(loc.hash);
+  });
+  // (for the checks and curious eyes: the table in the front tab, if any; the rooms)
+  return { tabs, openNew, say, menu, showUpdate, rooms, get table() { return paneFor(tabs.active).table; } };
 }

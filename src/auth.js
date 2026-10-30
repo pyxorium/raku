@@ -13,7 +13,7 @@
 //   - "Always" choices per account and game, in this browser (Q37).
 // Uses @atproto/oauth-client-browser 0.5.8 (as the site and the Foundry). createAuth takes the library's
 // exports (loaded when needed), so the browser checks can hand in a stand-in (test/browser/oauth-standin.js).
-import { SIGNIN, fullScope, scopeFor, coversTable, coversLounge, tablesCovered, TABLES } from './config.js';
+import { SIGNIN, fullScope, scopeFor, coversTable, coversLounge, coversRooms, tablesCovered, TABLES, ROOMS } from './config.js';
 
 export class SignInNeeded extends Error {}
 export class SignInStopped extends Error {}
@@ -205,11 +205,19 @@ export function createAuth(getLib, { storage, loc = globalThis.location, win = g
     covers(did, tableId) { return coversTable(scopes.get(did), TABLES[tableId]); },
     known(did) { return scopes.has(did); },
     /** The permissions to ask for when this account (or a new one: did null) signs in for a table. The
-     *  games (and lounges, step 5b) its sign-in already allows are kept, so a new sign-in never loses them. */
+     *  games (and lounges, step 5b, and Rooms) its sign-in already allows are kept, so a new sign-in never loses them. */
     scopeFor(did, tableId) {
       const had = did ? tablesCovered(scopes.get(did)) : [];
       const lounges = did ? Object.keys(TABLES).filter((id) => coversLounge(scopes.get(did), TABLES[id])).map((id) => TABLES[id].lounge.scope) : [];
-      return [scopeFor(tableId ? [...had, tableId] : had), ...lounges].join(' ');
+      const rooms = did && coversRooms(scopes.get(did)) ? [ROOMS.scope] : [];
+      return [scopeFor(tableId ? [...had, tableId] : had), ...lounges, ...rooms].join(' ');
+    },
+    /** Does this account's sign-in cover rooms (the "Rooms" set: a pass for the rooms relay)? (Known without waiting.) */
+    coversRooms(did) { return coversRooms(scopes.get(did)); },
+    /** The permissions for joining a room signed in (RR4): what the account already allows, plus "Rooms". */
+    roomsScopeFor(did) {
+      const base = this.scopeFor(did, null);
+      return base.split(' ').includes(ROOMS.scope) ? base : `${base} ${ROOMS.scope}`;
     },
     /** Does this account's sign-in cover a table's lounge (step 5b)? (Known without waiting.) */
     coversLounge(did, tableId) { return coversLounge(scopes.get(did), TABLES[tableId]); },
@@ -283,6 +291,15 @@ export function createAuth(getLib, { storage, loc = globalThis.location, win = g
     async getPass(did, tableId) {
       const L = TABLES[tableId].lounge;
       const q = new URLSearchParams({ aud: L.audience, lxm: L.enter, exp: String(Math.floor(Date.now() / 1000) + 60) });
+      const body = await this.call(did, `com.atproto.server.getServiceAuth?${q}`, { method: 'GET' });
+      if (!body || typeof body.token !== 'string') throw new Error('no pass');
+      return body.token;
+    },
+
+    // A pass for the rooms relay (rooms step 1): a short token from the account's own server, addressed to the
+    // rooms relay and to joining only (as the lounge's). Good for a minute; each join or rejoin asks for a new one.
+    async getRoomPass(did) {
+      const q = new URLSearchParams({ aud: ROOMS.audience, lxm: ROOMS.join, exp: String(Math.floor(Date.now() / 1000) + 60) });
       const body = await this.call(did, `com.atproto.server.getServiceAuth?${q}`, { method: 'GET' });
       if (!body || typeof body.token !== 'string') throw new Error('no pass');
       return body.token;
