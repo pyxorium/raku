@@ -101,6 +101,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   let pendingReturn = returned && returned.pending ? returned.pending : null;
   const stage = h('main', { class: 'stage' });
   const sheetList = h('ul', { class: 'sheet-list' });
+  // Rooms step 4 (RR24, RR29): the call bar's place: under the address row on a computer, just above the toolbar on a
+  // phone (style.css). The room tab in a call puts its bar here; it shows while another tab is in front.
+  const callSlot = h('div', { class: 'call-slot' });
   const sheet = h('div', { class: 'sheet', hidden: true, role: 'dialog', 'aria-label': 'Open tabs' },
     h('div', { class: 'sheet-head' },
       h('span', {}, 'Open tabs'),
@@ -116,7 +119,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       h('div', { class: 'bar' }, h('span', { class: 'brand brand-small' }, pot(), SITE.name),
         h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn, shelfBtn, discoverBtn), form, menu.button),
       updateLine, noteLine, menu.panel),
-    stage, toolbar, sheet);
+    callSlot, stage, toolbar, sheet);
   // Links out of Raku (a post, a link in a post): Raku says where they go and opens them on a click.
   const linkMessage = createLinkMessage(root, { storage });
 
@@ -131,6 +134,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     auth, mothership, resolver, session, storage, loc, tabs, stage, say: (t) => say(t),
     keepForReturn: (info) => keep(info), openRoomTab, closeTab: (id) => tabs.close(id),
     onExpand: () => showExpanded(),
+    onCall: () => drawChrome(),
   });
   // Rooms step 3 (Expand, RR19 and RR20): while the room tab in front has its stage expanded, Raku hides its own rows
   // so the stage gets the room: in the installed window the address row (the tabs stay, in the title bar); on a phone
@@ -142,6 +146,16 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     const on = rooms.isExpanded(tabs.active.id);
     html.classList.toggle('room-expanded', on);
     html.classList.toggle('room-expanded-app', on && isInstalled(root.ownerDocument.defaultView || globalThis));
+  }
+  // Rooms step 4 (RR23 to RR32): the call bar of the room you're in, while another tab is in front (never with the room
+  // itself in front: its own controls are there).
+  function showCall() {
+    const live = rooms.call;
+    const bar = live ? live[1].bar : null;
+    if (callSlot.firstChild && callSlot.firstChild !== bar?.el) { callSlot.replaceChildren(); }
+    if (!bar) return;
+    if (callSlot.firstChild !== bar.el) callSlot.append(bar.el);
+    bar.show(live[0] !== tabs.active.id);
   }
   // "Sign in in this tab instead" while in a room would hang up: the sign-in's blocked-window box says so first.
   setLeaveWarning(() => (rooms.live ? 'This leaves your room: you can rejoin it afterwards.' : ''));
@@ -592,10 +606,24 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   }
 
   // ---------- drawing the chrome ----------
+  // Rooms step 4 (RR28): a room tab in a call shows the call's marker instead of its dot. Its own small target: a click
+  // folds or unfolds the call bar and leaves you on the tab you're on (the rest of the tab brings the room forward).
+  function roomMarker(tab, { sheetRow = false } = {}) {
+    const e = rooms.inCall(tab.id);
+    if (!e) return null;
+    if (sheetRow) return e.sheetMarker;
+    e.marker.onclick = (ev) => {
+      if (tab.id === tabs.active.id) return;            // the room is in front: its controls are right there
+      ev.stopPropagation();
+      e.bar.toggle();
+    };
+    e.marker.title = `${e.marker.getAttribute('aria-label') || 'In a room'}. Click to ${e.bar.folded ? 'show' : 'fold'} the call bar.`;
+    return e.marker;
+  }
   function tabButton(tab) {
     const p = paneFor(tab);
     const on = tab.id === tabs.active.id;
-    const mark = p.icon ? h('img', { class: 'tab-icon', src: p.icon, alt: '' }) : h('span', { class: 'tab-dot', 'data-state': p.state });
+    const mark = roomMarker(tab) || (p.icon ? h('img', { class: 'tab-icon', src: p.icon, alt: '' }) : h('span', { class: 'tab-dot', 'data-state': p.state }));
     const close = h('span', { class: 'tab-x', role: 'button', 'aria-label': `Close ${p.title}`, title: 'Close tab',
       onclick: (ev) => { ev.stopPropagation(); tabs.close(tab.id); } }, icon('close', 14));
     const b = h('div', { class: `tab${on ? ' on' : ''}`, role: 'tab', tabindex: '0', 'aria-selected': on ? 'true' : 'false', title: p.title,
@@ -614,7 +642,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       const on = tab.id === tabs.active.id;
       return h('li', { class: on ? 'on' : '' },
         h('button', { type: 'button', class: 'sheet-tab', onclick: () => { tabs.activate(tab.id); toggleSheet(false); } },
-          p.icon ? h('img', { class: 'tab-icon', src: p.icon, alt: '' }) : h('span', { class: 'tab-dot', 'data-state': p.state }),
+          roomMarker(tab, { sheetRow: true }) || (p.icon ? h('img', { class: 'tab-icon', src: p.icon, alt: '' }) : h('span', { class: 'tab-dot', 'data-state': p.state })),
           h('span', { class: 'tab-title' }, p.title),
           p.mark ? h('span', { class: 'tab-signal', title: p.mark.title, 'aria-label': p.mark.title }, '●') : null),
         h('button', { type: 'button', class: 'sheet-x', 'aria-label': `Close ${p.title}`, onclick: () => { tabs.close(tab.id); drawSheet(); } }, icon('close', 18)));
@@ -623,6 +651,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
 
   function drawChrome() {
     showExpanded();
+    showCall();
     strip.replaceChildren(...tabs.list.map(tabButton));
     const tab = tabs.active;
     const p = paneFor(tab);

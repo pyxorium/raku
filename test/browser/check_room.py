@@ -1,5 +1,7 @@
 # Rooms in Raku, step 1 (claude/raku-rooms-plan.md, RR1 to RR10): a room as a Raku tab, and the mixed room
 # (RR3): Raku pages and the rooms lab's own page in one room, through the lab's real relay.
+# Step 3 (Expand, claude/raku-rooms-step3.md) and step 4 (the call bar, the room tab's marker and the floating room
+# window, claude/raku-rooms-step4.md, RR23 to RR32) too.
 #
 # Separate browser contexts stand for separate computers (separate storage), with a fake microphone and screen.
 #   - Raku's page (servers.mjs, port 5180, with its page policy) bundled with the stand-in sign-in library
@@ -413,6 +415,64 @@ def run():
         check('About: rooms in "You don\'t need an account", "What stays", "Who Raku talks to" and the box',
               all(s in about for s in ['joining a room with a typed name', 'A room you’re in', 'The name you typed', 'The rooms relay (relay.rooms.thunderbird.cafe)', 'The people in your room', 'connection helpers', 'only when you unmute in a room']))
         check('the room is still on while another tab is in front', joined(a))
+
+        # ---- rooms step 4 (claude/raku-rooms-step4.md, RR23 to RR32): the call bar, the tab's marker, the floating window ----
+        about_tab = a.evaluate('__raku.tabs.active.id')
+        room_tab = a.evaluate('[...__raku.rooms.entries.entries()].find(([, e]) => e.joined)[0]')
+        CB = '.call-slot .rl-callbar'
+        def cbv(sel): return a.is_visible(f'{CB} {sel}')
+        def geo(sel): return a.evaluate(f"(() => {{ const e = document.querySelector('{sel}'); return e ? e.getBoundingClientRect().toJSON() : null; }})()")
+        check('step 4: another tab in front: the call bar shows under Raku’s address row (RR24)', wait_for(lambda: cbv('.rl-cb-row'), 10, pages=[a]) and (lambda bar, cb, st: bar and cb and st and near(cb['top'], bar['bottom']) and near(st['top'], cb['bottom']))(geo('.chrome'), geo(CB), geo('.stage')), f"{geo('.chrome')} {geo(CB)} {geo('.stage')}")
+        check('…what’s on, the people as chips, Mute, Pop out, Back to the room, End room (the host)',
+              sorted(a.locator(f'{CB} .rl-x-chip .rl-x-name').all_inner_texts()) == ['Robin', 'You'] and txt(a, f'{CB} .rl-cb-stage') != '' and cbv('.rl-cb-mic') and cbv('.rl-cb-pop')
+              and txt(a, f'{CB} .rl-cb-back') == 'Back to the room' and txt(a, f'{CB} .rl-cb-row > .rl-ask-place .rl-cb-leave') == 'End room', f"{a.locator(f'{CB} .rl-x-chip .rl-x-name').all_inner_texts()} {txt(a, f'{CB} .rl-cb-what')}")
+        mk = lambda: a.evaluate("(() => { const m = document.querySelector('.strip-row .tab .rl-marker'); return m ? { mic: m.dataset.mic, ring: m.classList.contains('rl-mk-ring'), dot: m.classList.contains('rl-mk-dot'), label: m.getAttribute('aria-label'), tab: m.closest('.tab').querySelector('.tab-title').textContent, dots: m.closest('.tab').querySelectorAll('.tab-dot').length } : null; })()")
+        check('the room tab shows the call’s marker in place of its dot (RR28)', (lambda m: m and m['tab'] == 'Room' and m['dots'] == 0 and m['label'].startswith('In a room'))(mk()), str(mk()))
+        mic_was = rroom(a, '!!r.micTrack && !r.muted')
+        a.click(f'{CB} .rl-cb-mic')
+        check('Mute in the call bar works the room’s microphone; the marker follows', wait_for(lambda: rroom(a, '!!r.micTrack && !r.muted') != mic_was and mk()['mic'] == ('off' if mic_was else 'on'), 10, pages=[a]), str(mk()))
+        if mic_was is False: a.click(f'{CB} .rl-cb-mic')
+        check('…the ring while someone talks (Robin’s fake microphone)', wait_for(lambda: mk()['ring'], 15, pages=[a, lab]), str(mk()))
+        a.click('.strip-row .tab .rl-marker')
+        check('a click on the marker folds the call bar, and Nick stays on his tab (RR28)', wait_for(lambda: not cbv('.rl-cb-row'), 5, pages=[a]) and a.evaluate('__raku.tabs.active.id') == about_tab)
+        a.click('.strip-row .tab .rl-marker')
+        check('…and unfolds it again', wait_for(lambda: cbv('.rl-cb-row'), 5, pages=[a]) and a.evaluate('__raku.tabs.active.id') == about_tab)
+        a.click(f'{CB} .rl-cb-fold')
+        lab.click('.rl-share')
+        check('folded, Robin asks to present: the bar opens by itself with Allow / Deny, the marker’s dot (RR24, RR28)',
+              wait_for(lambda: cbv('.rl-cb-allow') and 'Robin asks to present their screen.' in txt(a, f'{CB} .rl-cb-need') and mk()['dot'], 15, pages=[a, lab]), f"{txt(a, CB)} {mk()}")
+        a.click(f'{CB} .rl-cb-allow')
+        wait_for(lambda: lab.is_visible('button:has-text("Choose what to share")'), 15, pages=[a, lab])
+        lab.click('button:has-text("Choose what to share")')
+        check('…Allow from the bar: Robin’s screen is on, the bar says so', wait_for(lambda: 'Robin’s screen' in txt(a, f'{CB} .rl-cb-what') and not mk()['dot'], 20, pages=[a, lab]), txt(a, f'{CB} .rl-cb-what'))
+        a.screenshot(path=str(OUT / 'call-bar.png'))
+        with ca.expect_page() as info: a.click(f'{CB} .rl-cb-pop')
+        pip = info.value
+        check('Pop out: the floating window shows Robin’s screen as a picture, with the room’s look under Raku’s page policy (RR30)',
+              wait_for(lambda: pip.evaluate("document.querySelector('.rl-float')?.dataset.layout === 'picture' && document.querySelector('.rl-fl-video')?.videoWidth > 0 && getComputedStyle(document.querySelector('.rl-fl-strip')).display === 'flex'"), 20, pages=[a, lab, pip]))
+        check('…the call bar is one line: “The room is in its own window · Bring it back” (RR25)', wait_for(lambda: cbv('.rl-cb-popped') and not cbv('.rl-cb-row'), 5, pages=[a]) and txt(a, f'{CB} .rl-cb-popped .rl-cb-text') == 'The room is in its own window' and txt(a, f'{CB} .rl-cb-bring') == 'Bring it back')
+        pip.screenshot(path=str(OUT / 'float-picture.png'))
+        pip.click('.rl-fl-back')
+        check('Back to the room in the floating window: it closes and the room tab comes to the front', wait_for(lambda: pip.is_closed() and a.evaluate('__raku.tabs.active.id') == room_tab, 10, pages=[a]))
+        check('…the room in front: no call bar (its own controls are there); the hint and Pop out in the room (RR26)', not a.is_visible(CB) and a.is_visible(f'{FRONT} .rl-controls .rl-pop'))
+        check('Raku’s page policy refused nothing (the floating window included)', csp(a) == [], str(csp(a)))
+        a.evaluate(f"__raku.tabs.activate({json.dumps(about_tab)})")
+        a.set_viewport_size({'width': 390, 'height': 844})
+        check('phone: the call bar just above the toolbar: the count, Mute, Back to the room, “⋯” (RR29)',
+              wait_for(lambda: (lambda cb, tb: cb and tb and near(cb['bottom'], tb['top']))(geo(CB), geo('.toolbar')) and cbv('.rl-cb-count') and cbv('.rl-cb-more') and not cbv('.rl-cb-pop'), 10, pages=[a]), f"{geo(CB)} {geo('.toolbar')}")
+        check('…no sideways scroll', no_scroll(a))
+        a.screenshot(path=str(OUT / 'call-bar-phone.png'))
+        a.click(f'{CB} .rl-cb-more'); a.click(f'{CB} .rl-cb-menu-fold')
+        check('…folded: a round chip at the right edge, just above the toolbar', wait_for(lambda: (lambda c, tb: c and tb and c['width'] >= 40 and c['bottom'] <= tb['top'] and c['right'] > 300)(geo(f'{CB} .rl-cb-chip'), geo('.toolbar')), 5, pages=[a]), str(geo(f'{CB} .rl-cb-chip')))
+        a.screenshot(path=str(OUT / 'call-chip-phone.png'))
+        a.click('.toolbar .count')
+        check('the tabs sheet: the room’s row shows the marker (RR32)', wait_for(lambda: a.is_visible('.sheet .sheet-tab .rl-marker'), 5, pages=[a]))
+        a.click('.sheet-done')
+        a.click(f'{CB} .rl-cb-chip')
+        check('…the chip opens the bar again', wait_for(lambda: cbv('.rl-cb-row'), 5, pages=[a]))
+        a.set_viewport_size({'width': 1280, 'height': 900})
+        lab.click('.rl-share')          # Robin stops sharing
+        wait_for(lambda: not lroom(lab, '!!r.screenTrack'), 10, pages=[lab])
         # Closing the room tab while expanded (installed window): the room leaves and Raku's rows come back.
         room_tab = a.evaluate('[...__raku.rooms.entries.entries()].find(([, e]) => e.joined)[0]')
         a.evaluate(f"__raku.tabs.activate({json.dumps(room_tab)})")

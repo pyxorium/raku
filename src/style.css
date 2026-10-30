@@ -832,3 +832,18 @@ a { color: var(--glaze-light); }
 @media (max-width: 640px) {
   :root.room-expanded .chrome, :root.room-expanded .toolbar { display: none; }
 }
+
+/* Rooms step 4 (claude/raku-rooms-step4.md, RR23 to RR32): the call bar of the room you're in, while another tab is in
+   front (rooms-lab's call-ui.js draws it, with the room's own look). Under the address row on a computer; just above
+   the toolbar on a phone, where it folds into a round chip at the right edge (RR29). */
+.call-slot { flex: none; position: relative; z-index: 3; }
+.call-slot:empty { display: none; }
+@media (max-width: 640px) {
+  .stage { order: 1; }
+  .call-slot { order: 2; }
+  .toolbar { order: 3; }
+}
+/* The room tab's marker (RR28) in place of its dot: a small target of its own; in the phone's tabs sheet (RR32). */
+.tab .tab-marker { cursor: pointer; }
+.tab .tab-marker:hover { background: rgba(255,255,255,.1); }
+.sheet-tab .tab-marker { width: 22px; height: 22px; }

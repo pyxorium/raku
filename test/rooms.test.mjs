@@ -123,3 +123,17 @@ test('the room tab keeps the room out of Raku’s address and in this tab only (
   assert.match(tab, /get\(session, ROOMS\.keepKey\)/, 'tab storage (sessionStorage), not localStorage');
   assert.ok(!/localStorage/.test(tab));
 });
+
+test('step 4: the call away from the room comes from rooms-lab (RR23 to RR32): its call bar, its markers, Back to the room', async () => {
+  const tab = file('src/room-tab.js');
+  assert.match(tab, /import \{ createCallBar, drawMarker \} from 'rooms-lab\/call-ui\.js';/);
+  assert.match(tab, /onBackToRoom: \(\) => tabs\.activate\(tab\.id\)/, 'the floating window’s Back to the room brings the room tab forward');
+  assert.match(tab, /createCallBar\(\{ call: e\.api\.call, h: roomH, onBack: \(\) => tabs\.activate\(tab\.id\) \}\)/, 'and the call bar’s');
+  const app = file('src/app.js');
+  assert.match(app, /bar\.show\(live\[0\] !== tabs\.active\.id\)/, 'the call bar shows only while another tab is in front');
+  assert.match(app, /const mark = roomMarker\(tab\) \|\|/, 'the room tab’s marker in place of its dot');
+  assert.match(app, /roomMarker\(tab, \{ sheetRow: true \}\) \|\|/, 'and in the phone’s tabs sheet (RR32)');
+  const lab = await import('rooms-lab/call.js');
+  assert.equal(lab.POPPED_LINE, 'The room is in its own window');
+  assert.equal(lab.leaveQuestion(false), 'Leave?');
+});

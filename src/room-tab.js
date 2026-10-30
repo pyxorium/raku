@@ -16,11 +16,16 @@
 //   - Expand (rooms step 3, claude/raku-rooms-step3.md, RR15 to RR21): the room's expanded stage fills Raku's tab
 //     area (`expandArea`), and Raku hides its own rows meanwhile (`onExpand`, app.js): the address row in the
 //     installed window (the tabs stay in the title bar), the top bar and the toolbar on a phone; a browser tab on a
-//     computer keeps Raku's top bar (its tabs live there).
+//     computer keeps Raku's top bar (its tabs live there);
+//   - the call away from the room (rooms step 4, claude/raku-rooms-step4.md, RR23 to RR32; rooms-lab's call-ui.js): each
+//     room tab has a call bar (app.js shows it while another tab is in front) and two markers, one for its tab in the
+//     tab row (a click folds or unfolds the call bar) and one for its row in the phone's tabs sheet; "Back to the room"
+//     (the call bar's, the floating window's) brings this tab to the front.
 // The room keeps the lab's look (room.css: Raku's palette), without the lab's heading and footer (the About page
 // says what the footer said).
 // (Its look, rooms-lab's room.css, is imported by main.js with Raku's own style.css.)
-import { mountRoomPage, NAME_KEY, keepHostKey, keptHostKey, whoLabel } from 'rooms-lab/room-page.js';
+import { mountRoomPage, NAME_KEY, keepHostKey, keptHostKey, whoLabel, h as roomH } from 'rooms-lab/room-page.js';
+import { createCallBar, drawMarker } from 'rooms-lab/call-ui.js';
 import { cleanName, newRoomCode, isRoomCode } from 'rooms-lab/formats.js';
 import { createTileRecords } from 'rooms-lab/tile-records.js';
 import { Tile } from '@dasl/tile-loader';
@@ -36,7 +41,8 @@ const put = (s, k, v) => { try { if (v == null) s?.removeItem(k); else s?.setIte
 
 /**
  * The rooms of this Raku window: at most one live (RR6). deps: { auth, mothership, resolver, session, storage, loc,
- * tabs, stage, say, keepForReturn, openRoomTab(), closeTab(id), onExpand(tabId, on) }.
+ * tabs, stage, say, keepForReturn, openRoomTab(), closeTab(id), onExpand(tabId, on), onCall() }. onCall: the call started,
+ * ended or changed in a way the chrome shows (app.js redraws the tabs and places the call bar).
  */
 export function createRooms(deps) {
   const { auth, mothership, session, storage, loc, tabs, stage, say } = deps;
@@ -321,6 +327,8 @@ export function createRooms(deps) {
       // Expand (step 3): the room's stage fills Raku's tab area; Raku hides its own rows while this tab is in front.
       expandArea: () => stage,
       onExpand: (on) => { e.expanded = !!on; deps.onExpand?.(tab.id, !!on); },
+      // Step 4: "Back to the room" in the call bar or the floating window brings this tab to the front.
+      onBackToRoom: () => tabs.activate(tab.id),
       onOver: ({ code, again }) => {
         e.joined = false; e.people = [];
         e.screen = { left: true };
@@ -328,8 +336,20 @@ export function createRooms(deps) {
         e.code = code;
       },
     });
+    // Step 4 (RR23 to RR32): the call bar for this room (app.js places it and says when it shows) and the markers.
+    e.bar = createCallBar({ call: e.api.call, h: roomH, onBack: () => tabs.activate(tab.id) });
+    e.marker = roomH('span', { class: 'tab-marker', role: 'button', tabindex: '-1' });
+    e.sheetMarker = roomH('span', { class: 'tab-marker sheet-marker' });
+    e.inCall = false;
+    e.unsubCall = e.api.call.subscribe((s) => {
+      if (s.joined) { drawMarker(e.marker, s); drawMarker(e.sheetMarker, s); }
+      if (!!s.joined !== e.inCall) { e.inCall = !!s.joined; deps.onCall?.(); }
+    });
     // Closing the tab (or anything else that clears it) leaves the room, without asking (as the room's Leave).
     p.dispose = () => {
+      e.unsubCall?.();
+      e.bar.show(false);
+      e.bar.el.remove();
       if (e.joined) { try { e.api.leave(); } catch { /* fine */ } }
       else if (e.wasBack && kept()?.code === was?.code) keep(null);    // closed without rejoining: forgotten too
       entries.delete(tab.id);
@@ -356,6 +376,10 @@ export function createRooms(deps) {
     isRoomTab: (tabId) => entries.has(tabId),
     /** Is this room tab's stage expanded (step 3)? */
     isExpanded: (tabId) => !!entries.get(tabId)?.expanded,
+    /** Step 4: the room tab in a call (its bar and markers), or null. */
+    inCall(tabId) { const e = entries.get(tabId); return e?.inCall ? e : null; },
+    /** Step 4: the room tab in a call: [tabId, entry] or null. */
+    get call() { const l = [...entries.entries()].find(([, e]) => e.inCall); return l || null; },
     /** The Rooms card: a room tab comes to the front if there is one; else the given tab or a new one shows rooms. */
     openRooms(tabId = null) {
       const any = liveEntry() || [...entries.entries()][0];

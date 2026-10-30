@@ -370,8 +370,8 @@ Plan and decisions: `claude/raku-rooms-plan.md` (RR1 to RR10, FS1). Rooms (voice
 opened for everyone, for small meetups among friends) come from the Rooms lab:
 
 - **The room's code is rooms-lab's**, taken as a package pinned to a GitHub tag (`package.json`:
-  `"rooms-lab": "github:pyxorium/rooms-lab#v0.12.0"`; 0.11.1, Oct 29: the host's plainer house line, "House rules: when a
-  guest asks for something, you decide."; 0.12.0: Expand, below), not copied. The Rooms lab page on thunderbird.cafe retired once this passed
+  `"rooms-lab": "github:pyxorium/rooms-lab#v0.13.0"`; 0.11.1, Oct 29: the host's plainer house line, "House rules: when a
+  guest asks for something, you decide."; 0.12.0: Expand, below; 0.13.0: the call bar and the floating room window, below), not copied. The Rooms lab page on thunderbird.cafe retired once this passed
   its two-computer test (Oct 29): it now says "Rooms have moved to Raku", and the rooms relay lets in only Raku. Updating rooms = a new tag in rooms-lab, the new
   tag here, `npm install`. `test/rooms.test.mjs` checks that Raku's own names for the room's servers
   (`ROOMS` in `src/config.js`: the relay, the "Rooms" permission set, the connection helpers, the pinned house tile)
@@ -410,6 +410,22 @@ in front is expanded (`onExpand`, `showExpanded` in `src/app.js`), folds its own
 window the address row** (the tabs stay in the title bar), **on a phone the top bar and the toolbar**. A browser tab
 on a computer keeps Raku's top bar (its tabs live there). Another tab in front brings everything back; closing the
 room tab, or leaving, too.
+
+## Rooms, step 4: the call bar and the floating room window (rooms-lab 0.13.0)
+
+Decisions: `claude/raku-rooms-step4.md` (RR23 to RR32). While you're in a room and another Raku tab is in front, **the
+call bar** shows under the address row (on a phone, just above the toolbar): what's on, or what needs you (a guest's
+request for the host, with Allow / Deny; "Choose what to share…" when someone asks for your screen; "You're sharing
+your screen · Stop"), the people, Mute, Pop out, Back to the room, and Leave (End room for the host), which asks in
+place: "Leave? Yes · No". It folds (on a phone into a round chip at the right edge) and opens again by itself when
+something new needs you. **The room's tab** shows the call's marker in place of its dot (a mic, a ring while anyone
+talks, crossed while you're muted, a dot when something needs you); a click on the marker folds or unfolds the call
+bar and leaves you on your tab. On a phone the room's row in the tabs sheet shows the marker. **Pop out** (Chrome and
+Edge on computers) opens the floating room window, on top of every program: someone else's shared screen as a
+picture, compact otherwise; while it's open the call bar is one line, "The room is in its own window · Bring it
+back". The room, the bar and the window are rooms-lab's (`call-ui.js`); Raku places the bar (`showCall` in
+`src/app.js`, `.call-slot`), draws the markers (`roomMarker`), and brings the room's tab forward for "Back to the
+room" (`onBackToRoom`, `src/room-tab.js`).
 
 ## Try it
 
@@ -499,7 +515,7 @@ a table and the link, no relay to reach (the Joining box and its hint), the hove
 width, whole matches that re-check (`verifyMatch`), saving, full, held, leaving and coming back, a match
 between Raku and the Daisy page (both ways), and the house version check. Usage at the top of the file.
 
-`check_room.py` (81 checks, rooms steps 1 and 3) bundles and starts everything itself: Raku's page with the stand-in
+`check_room.py` (100 checks, rooms steps 1, 3 and 4) bundles and starts everything itself: Raku's page with the stand-in
 sign-in, the loader replica, and the Rooms lab's own dev page and its real relay (`room-servers.mjs`, from a
 rooms-lab folder: `--rooms-lab`; the relay's own sign-in check around a stand-in for Bluesky's `verifyJwt`, which
 still refuses another audience or method). Raku pages and lab pages share rooms, both ways (the mixed room):
@@ -509,7 +525,11 @@ everyone from Raku, a guest's screen through the house's approval, an invite ope
 tab staying a room, one room at a time (Stay, Leave and join), a lab-made room joined from Raku, a reload and
 Rejoin, closing the tab, a pasted invite, the page policy, the phone, the About page; Expand (step 3) in a browser
 tab, in the installed window (the display mode stood in) with another tab in front and back, on a phone, and
-closing the room tab while expanded.
+closing the room tab while expanded; the call bar (step 4) under the address row with another tab in front, Mute
+from it, the room tab's marker (the ring, the dot, a click folding and unfolding the bar), the bar opening by itself
+for a guest's request and Allow from it, Pop out with the floating window showing a shared screen under Raku's page
+policy, Back to the room from the window, and on a phone the bar above the toolbar, its chip and the tabs sheet's
+marker.
 
 `check_lounge.py` (48 checks, steps 5b and 5b-2) is set up the same way, with daisy-relay's lounge stand-in
 (`test/lounge-standin.mjs`, the real server.js and lounge.js with stand-in lookups) as the relay: mingling
