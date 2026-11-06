@@ -1,20 +1,21 @@
 // The tabs, as data: which are open, which is in front, each one's history. No DOM here (tested in Node).
 //
 // A tab shows a tile (its at:// address), your shelf (raku:shelf), an account's tiles (raku:tiles/<actor>),
-// a table (raku:table/…), Discover or search results (raku:discover…, raku:search/…, stage 6) or the first
+// a table (raku:table/…), Discover or search results (raku:discover…, raku:search/…, stage 6), a record shown by its
+// renderer (at://…/<collection>/<rkey>, renderer tiles) or the first
 // screen (address null). Back and forward
 // move through the addresses that tab has shown. The open tabs are kept in the page's own address
 // (the part after #), so a reload or a copied link reopens the same set:
 //   #t=<at:// address, encoded>,<…>&a=<the tab in front, from 0>       (an empty slot = a first screen)
 
-import { TABS } from './config.js';
-import { parseTarget, opensOutside } from './address.js';
+import { TABS, RENDERERS } from './config.js';
+import { parseTarget, opensHere } from './address.js';
 
 let nextId = 1;
 const newTab = (uri = null) => ({ id: `t${nextId++}`, history: [uri], at: 0 });
 export const current = (tab) => tab.history[tab.at];
 
-export function createTabs({ max = TABS.max } = {}) {
+export function createTabs({ max = TABS.max, renderers = RENDERERS } = {}) {
   let tabs = [newTab()];
   let active = tabs[0].id;
   const listeners = new Set();
@@ -83,7 +84,9 @@ export function createTabs({ max = TABS.max } = {}) {
         let v;
         try { v = decodeURIComponent(s); } catch { return null; }
         const r = parseTarget(v);
-        return r.ok && !opensOutside(r.kind) ? r.uri : null;  // posts (stage 6), other records and collections (open links) open outside Raku, never in a tab
+        // posts (stage 6), other records and collections (open links) open outside Raku, never in a tab; a record with a
+        // pinned renderer (renderer tiles, RT2) is the exception: it opens in its tab
+        return opensHere(r, renderers) ? r.uri : null;
       });
       tabs = (uris.length ? uris : [null]).map((u) => newTab(u));
       const a = Math.min(Math.max(0, Number(p.get('a')) || 0), tabs.length - 1);

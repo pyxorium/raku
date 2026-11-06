@@ -9,7 +9,7 @@
 //   @<did or handle>/<rkey>
 // Everything here is plain string work: no network, so it's tested in Node.
 
-import { COLLECTION, SITE } from './config.js';
+import { COLLECTION, SITE, RENDERERS, rendererFor } from './config.js';
 
 export const DID_PLC = /^did:plc:[a-z2-7]{24}$/;
 export const DID_WEB = /^did:web:[a-z0-9.-]+(%3[Aa][0-9]+)?$/i;
@@ -194,6 +194,10 @@ const EXPLORERS = Object.freeze([
 /** Kinds the address box shows in the link message instead of a tab. */
 export const OPENS_OUTSIDE = Object.freeze(['post', 'record', 'collection']);
 export const opensOutside = (kind) => OPENS_OUTSIDE.includes(kind);
+/** Does a parsed target open in a tab? Everything but the kinds above, and a record whose kind has a pinned renderer
+ *  (renderer tiles, RT2: a place opens in a tab; a whole collection still opens the link message). */
+export const opensHere = (r, renderers = RENDERERS) => !!r && !!r.ok
+  && (!opensOutside(r.kind) || (r.kind === 'record' && !!rendererFor(r.collection, renderers)));
 
 // at://<actor>/<collection>[/<rkey>] for a collection that isn't tiles (posts are parsePost's). → a target or null
 function otherRecord(s) {

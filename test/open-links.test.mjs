@@ -74,11 +74,16 @@ test('unknown links and broken addresses still fall through with a reason', () =
   assert.equal(isNsid('a.b.9c'), false);
 });
 
-test('records, collections and posts never become a tab\'s address', () => {
+test('records with no renderer, collections and posts never become a tab\'s address', () => {
   assert.deepEqual(['post', 'record', 'collection', 'tile', 'account'].map(opensOutside), [true, true, true, false, false]);
-  const tabs = createTabs({ max: 10 });
-  tabs.fromHash(`#t=${encodeURIComponent(PLACE)},${encodeURIComponent(`at://${DID}/app.bsky.feed.post`)},${encodeURIComponent(FOREST)}&a=0`);
+  const hash = `#t=${encodeURIComponent(PLACE)},${encodeURIComponent(`at://${DID}/app.bsky.feed.post`)},${encodeURIComponent(FOREST)}&a=0`;
+  const tabs = createTabs({ max: 10, renderers: {} });          // as before renderer tiles: no renderers
+  tabs.fromHash(hash);
   assert.deepEqual(tabs.list.map((t) => t.history?.[t.at] ?? null), [null, null, FOREST]);
+  // Since renderer tiles (claude/raku-renderer-tiles-plan.md, RT2) a place, whose kind has a pinned renderer, does.
+  const now = createTabs({ max: 10 });
+  now.fromHash(hash);
+  assert.deepEqual(now.list.map((t) => t.history?.[t.at] ?? null), [PLACE, null, FOREST]);
 });
 
 test('the explorers menu (OL4): PDSls first, Taproot, links built from the AT URI, its own remembered choice', () => {

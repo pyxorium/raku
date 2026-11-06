@@ -426,6 +426,29 @@ export function recordApp(storage = null) {
   return RECORD_APPS.find((a) => a.id === id) || RECORD_APPS[0];
 }
 export const explorerLink = (app, uri) => `https://${app.host}${app.prefix}${uri}`;
+
+// ---------- Renderer tiles (claude/raku-renderer-tiles-plan.md, RT1 to RT10) ----------
+// A record that isn't a tile opens in a tab when its kind (collection) has a renderer here: a tile written to show
+// records of that kind, pinned by its record CID like a table's tiles (RT2), so Raku runs exactly the version that was
+// checked. Raku hands it the record over the tiles spec's data protocol (tp-data, RT1 and RT4) and lets it ask for one
+// thing: to open an at:// address in a new tab (RT5). Kinds without a renderer open the link message, as before.
+// The place renderer is published from C:\thunderbird-cafe\maze-tiles (node scripts/publish.mjs --place, which prints
+// these two values; its published.json keeps them under "place-renderer"). Without both, places open the link message. Republishing it means a new pin here, or Raku refuses the changed tile (publish and pin before pushing).
+export const RENDERERS = Object.freeze({
+  'cafe.thunderbird.way.place': Object.freeze({ name: 'Places', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3mznn4ogtza2s',
+    cid: 'bafyreibw7fq7qy677hy2sxh3hxw724xv2pnyxotxddie5m26cy2hntfaqu' }),   // published Nov 6 2026
+});
+/** The pinned renderer for records of this kind, or null (none, or not pinned yet). */
+export function rendererFor(collection, renderers = RENDERERS) {
+  const r = Object.prototype.hasOwnProperty.call(renderers, collection) ? renderers[collection] : null;
+  return r && typeof r.uri === 'string' && r.uri.startsWith(`at://`) && typeof r.cid === 'string' && r.cid ? r : null;
+}
+/** Every pinned renderer (for the pinned loader). */
+export const pinnedRenderers = (renderers = RENDERERS) => Object.keys(renderers).map((c) => rendererFor(c, renderers)).filter(Boolean);
+// A renderer asking Raku to open an address (RT5): at:// addresses only, at most this long, and requests closer than
+// gapMs to the last one from the same tab are ignored. handleMs: how long the record waits for its author's handle
+// to check out before it's sent without one (the tile shows the DID then).
+export const RENDER = Object.freeze({ openMaxChars: 600, gapMs: 1000, handleMs: 1500 });
 // On this computer only: ?feed=at://…/app.bsky.feed.generator/… shows Tile news from another feed (the checks'
 // stand-in feed, say).
 export function feedUri(loc = globalThis.location) {

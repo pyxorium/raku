@@ -14,9 +14,14 @@
 // address opens through the link message (link-message.js), outside Raku.
 // Rooms (rooms step 1, room-tab.js): a room is a tab (raku:room). While you're in a room, its tab stays a room:
 // an address typed there opens in a new tab, and Back, Forward and Reload say to leave the room first.
+// Renderer tiles (claude/raku-renderer-tiles-plan.md, RT1 to RT10): a record that isn't a tile, of a kind with a pinned
+// renderer (config.js RENDERERS: places), opens in a tab: Raku reads the record, runs the renderer tile, hands it the
+// record over the tiles spec's data protocol (renderers.js), opens what it asks for in a new tab (at:// only), and puts
+// "Open in ▾" (PDSls, Taproot) beside the address box. Other records still open the link message.
 
 import { Tile } from '@dasl/tile-loader';
-import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS, TABLES, ROOMS, tableForTile, isRoomHouse, appmosphereCopy } from './config.js';
+import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS, TABLES, ROOMS, tableForTile, isRoomHouse, appmosphereCopy,
+  rendererFor, pinnedRenderers, RENDER, RECORD_APPS, RECORD_APP_KEY, recordApp, explorerLink } from './config.js';
 import { parseAddress, parseTarget, atUri, SHELF_URI, ABOUT_URI, ROOM_URI, roomInHash, tableUri, DISCOVER_URI, discoverUri } from './address.js';
 import { createTabs, current } from './tabs.js';
 import { describeTile, sizeVerdict, createPathLoader, blobCidOf } from './tiles.js';
@@ -27,7 +32,8 @@ import { h, createCardKit, bannerCid } from './cards.js';
 import { drawYourShelf, drawAccountTiles, drawShelfTeaser } from './shelf-pages.js';
 import { attachTypeahead } from './typeahead.js';
 import { drawTable, createPanel } from './tables/table-page.js';
-import { createPinnedLoader } from './tables/pinned.js';
+import { createPinnedLoader, TileChanged } from './tables/pinned.js';
+import { READY, UP, DOWN, recordPayload, recordTitle, readOpenRequest, openDecision, createOpenGate } from './renderers.js';
 import { createAccountMenu } from './account-menu.js';
 import { createLinkMessage } from './link-message.js';
 import { createDiscover, drawDiscover } from './discover.js';
@@ -42,7 +48,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   // Discover (stage 6): what it keeps while Raku is open, shared by every Discover tab.
   const discover = createDiscover({ resolver, moderation, shelf, storage, loc });
   // Tables (stage 3): their tiles load through Raku's one mothership, but only the pinned versions.
-  mothership.addLoader(createPinnedLoader({ Tile, pins: Object.values(TABLES).flatMap((t) => [t.house, t.player]), resolver }));
+  // Renderer tiles too (RT2): the same pinned loading, for the renderers on Raku's list.
+  mothership.addLoader(createPinnedLoader({ Tile, pins: [...Object.values(TABLES).flatMap((t) => [t.house, t.player]), ...pinnedRenderers()], resolver }));
   const tabs = createTabs();
   const panes = new Map();          // tab id -> pane state
   const largeOk = new Set();        // tiles the visitor said "Open anyway" to, this visit
@@ -66,6 +73,12 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   // The star (decision Q30): keeps the tile or the account this tab shows; filled turquoise when kept.
   const starBtn = h('button', { class: 'star-btn', type: 'button', hidden: true, onclick: () => toggleKeep() });
   const form = h('form', { class: 'addr-form', role: 'search', onsubmit: (ev) => { ev.preventDefault(); submitAddress(); } }, input, starBtn);
+  // "Open in ▾" (renderer tiles, RT3): on a tab showing a record through its renderer, the record in an explorer (PDSls,
+  // Taproot), the same list and the same remembered choice as the link message's (config.js RECORD_APPS, RECORD_APP_KEY).
+  const openInBtn = h('button', { class: 'openin-btn', type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false',
+    title: 'Open this record in an explorer', onclick: () => toggleOpenIn() }, 'Open in', h('span', { class: 'openin-caret', 'aria-hidden': 'true' }, '▾'));
+  const openInMenu = h('div', { class: 'openin-menu', role: 'menu', 'aria-label': 'Open this record in', hidden: true });
+  const openIn = h('span', { class: 'openin', hidden: true }, openInBtn, openInMenu);
   // Handle suggestions under the box (typeahead.js): choosing one opens that account's tiles.
   attachTypeahead(input, form, { onChoose: (handle) => { input.value = handle; submitAddress(); } });
   const shelfBtn = h('button', { class: 'nav-btn', type: 'button', title: 'Your shelf', 'aria-label': 'Your shelf', onclick: () => goShelf() }, icon('shelf', 18));
@@ -117,7 +130,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       // moves by the Raku label, the free space beside the tabs and this grip, which tabs never cover.
       h('div', { class: 'strip-row' }, brand, strip, newTabBtn, h('span', { class: 'wco-grip', 'aria-hidden': 'true' })),
       h('div', { class: 'bar' }, h('span', { class: 'brand brand-small' }, pot(), SITE.name),
-        h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn, shelfBtn, discoverBtn), form, menu.button),
+        h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn, shelfBtn, discoverBtn), form, openIn, menu.button),
       updateLine, noteLine, menu.panel),
     callSlot, stage, toolbar, sheet);
   // Links out of Raku (a post, a link in a post): Raku says where they go and opens them on a click.
@@ -206,6 +219,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     // A post opens outside Raku for now (stage 6, Q87/Q88), in the app chosen for posts, after the link message.
     // The tab stays where it was, so the box goes back to the tab's own address (open links: it kept what was typed).
     if (r.kind === 'post') { tabAddress(); linkMessage.show({ post: { actor: r.actor, rkey: r.rkey }, from: 'A post address you typed. Raku shows tiles, so posts open in their app.' }); return; }
+    // A record whose kind has a renderer (renderer tiles, RT2, RT8): in this tab, shown by the renderer.
+    if (r.kind === 'record' && rendererFor(r.collection)) { tabs.go(tabs.active.id, r.uri); return; }
     // A record or collection that isn't tiles (open links, OL1/OL5): the link message with the explorers' menu.
     if (r.kind === 'record' || r.kind === 'collection') { tabAddress(); showRecord(r); return; }
     // An invite link (rooms step 1): the room's join screen, the code kept out of the address (RR2); one room at a
@@ -280,7 +295,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     let p = panes.get(tab.id);
     if (!p) {
       const el = h('section', { class: 'pane', 'data-tab': tab.id });
-      p = { el, uri: undefined, attempt: 0, timers: [], frame: null, title: 'New tab', icon: null, shownAddress: '', state: 'new', keep: null, dispose: null, panel: null, table: null, mark: null };
+      p = { el, uri: undefined, attempt: 0, timers: [], frame: null, title: 'New tab', icon: null, shownAddress: '', state: 'new', keep: null, dispose: null, panel: null, table: null, mark: null, record: null, renderer: null };
       panes.set(tab.id, p);
       // Step 5b-2: a page can put a quiet mark on its tab (Daisy's lounge: someone arrived while it was behind).
       const pane = p;
@@ -301,6 +316,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     p.panel = null;
     p.table = null;
     p.mark = null;
+    p.record = null;
+    p.renderer = null;
     p.el.replaceChildren();
   }
 
@@ -319,6 +336,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (target.ok && target.kind === 'table') { openTable(p, tab, target.id, target.sub); return; }
     if (target.ok && target.kind === 'discover') { drawDiscover(pageContext(p, tab), { source: target.source }); return; }
     if (target.ok && target.kind === 'search') { drawDiscover(pageContext(p, tab), { source: 'search', query: target.query }); return; }
+    if (target.ok && target.kind === 'record' && rendererFor(target.collection)) { openRecord(p, tab, target); return; }
     openTile(p, tab, uri);
   }
 
@@ -495,13 +513,144 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     }
   }
 
+  // A record shown by its renderer (renderer tiles, RT1 to RT8): find the record (its account, moderation, the record
+  // from the author's own server), then start the pinned renderer tile; the record is handed over when the tile says
+  // it's ready (fromRenderer below). The address box shows the record's address; the star stays hidden (the shelf keeps
+  // tiles and accounts); "Open in ▾" shows the record in an explorer.
+  async function openRecord(p, tab, target) {
+    const mine = p.attempt;
+    const alive = () => mine === p.attempt;
+    const renderer = rendererFor(target.collection);
+    p.state = 'finding';
+    p.title = target.rkey;
+    p.shownAddress = target.uri;
+    drawChrome();
+    status(p, 'loading', 'Finding this record…');
+    let did, rec;
+    try {
+      did = await resolver.didFor(target.actor);
+      if (!alive()) return;
+      if (await moderation.isAccountHidden(did)) {
+        if (!alive()) return;
+        p.state = 'hidden';
+        p.title = 'Not shown';
+        drawChrome();
+        status(p, 'hidden', "This account's records aren't shown in Raku.",
+          h('a', { href: TAKEDOWNS_PAGE, target: '_blank', rel: 'noopener noreferrer' }, 'Reporting and takedowns ↗'));
+        return;
+      }
+      rec = await resolver.record(did, target.collection, target.rkey);
+      if (!alive()) return;
+    } catch (err) {
+      if (!alive()) return;
+      p.state = 'error';
+      const msg = err instanceof NetError ? err.message : "Couldn't find this record.";
+      const retry = !(err instanceof NetError) || ['network', 'timeout', 'upstream'].includes(err.code);
+      status(p, 'error', msg, retry ? button('Try again', () => reload(tab.id)) : null);
+      return;
+    }
+    const didForm = `at://${did}/${target.collection}/${target.rkey}`;
+    p.title = recordTitle(rec.value, target.rkey);
+    p.shownAddress = didForm;
+    p.record = { uri: didForm };                    // for "Open in ▾": the explorers are given the DID (OL3)
+    drawChrome();
+    const handle = resolver.checkedHandle(did).catch(() => null);
+    handle.then((hd) => {
+      if (hd && alive() && p.shownAddress === didForm) { p.shownAddress = `at://${hd}/${target.collection}/${target.rkey}`; drawChrome(); }
+    });
+    // The record goes out with the handle once it checks out, or without one after a moment (the tile shows the DID).
+    const handleSoon = Promise.race([handle, new Promise((r) => setTimeout(() => r(null), RENDER.handleMs))]);
+    const record = { did, collection: target.collection, rkey: target.rkey, cid: rec.cid, value: rec.value };
+    startRenderer(p, tab, renderer, async () => recordPayload({ ...record, handle: await handleSoon }));
+  }
+
+  async function startRenderer(p, tab, renderer, payload) {
+    const mine = p.attempt;
+    const alive = () => mine === p.attempt;
+    p.state = 'loading';
+    status(p, 'loading', 'Loading…');
+    const again = () => button('Try again', () => reload(tab.id));
+    p.timers = [
+      setTimeout(() => { if (alive() && p.state === 'loading') status(p, 'loading', 'Still loading…'); }, TIMES.still),
+      setTimeout(() => { if (alive() && p.state === 'loading') status(p, 'loading', 'Still loading…', again()); }, TIMES.retry),
+    ];
+    let tile = null;
+    let error = null;
+    try { tile = await mothership.loadTile(renderer.uri); } catch (err) { error = err; }
+    if (!alive()) return;
+    if (!tile) {
+      p.timers.forEach(clearTimeout);
+      p.state = 'error';
+      if (error instanceof TileChanged) status(p, 'error', `The tile that shows these records (${renderer.name}) has changed since Raku was set up to use it, so Raku doesn't run it. "Open in" still shows the record.`);
+      else status(p, 'error', `Raku couldn't load the tile that shows these records (${renderer.name}).`, again());
+      return;
+    }
+    const frame = tile.renderContent(600);
+    frame.className = 'tile-frame';
+    frame.removeAttribute('style');
+    frame.title = p.title;
+    frame.setAttribute('allow', '');
+    frame.setAttribute('referrerpolicy', 'no-referrer');
+    if (!TILE_POPUPS) frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-downloads');
+    p.frame = frame;
+    p.el.prepend(frame);
+    p.renderer = { payload, gate: createOpenGate() };
+  }
+
+  // A renderer's messages (RT1, RT5): "ready" is answered with the record (every time: a reloaded tile asks again);
+  // { open: "at://…" } opens that address as if it had been typed, a tile or a record with a renderer in a new tab.
+  // Nothing else is answered, and nothing a renderer sends can write anywhere.
+  async function fromRenderer(pane, d) {
+    const r = pane.renderer;
+    if (d.action === READY) {
+      const mine = pane.attempt;
+      const payload = await r.payload();
+      if (mine !== pane.attempt || !pane.frame) return;
+      pane.frame.contentWindow.postMessage({ action: DOWN, payload }, '*');
+      if (pane.state !== 'ready') { pane.timers.forEach(clearTimeout); pane.state = 'ready'; hideStatus(pane); drawChrome(); }
+      return;
+    }
+    if (d.action !== UP) return;
+    const address = readOpenRequest(d.payload);
+    if (!address || !r.gate.take()) return;
+    const decision = openDecision(address);
+    if (decision.action === 'tab') openNew(decision.uri);
+    else if (decision.action === 'record') showRecord(decision.target);
+    else if (decision.action === 'post') linkMessage.show({ post: { actor: decision.target.actor, rkey: decision.target.rkey }, from: `"${pane.title}" asked to open a post. Raku shows tiles, so posts open in their app.` });
+    else say(decision.reason);
+  }
+
+  // "Open in ▾" (RT3): the explorers, the remembered one ticked; choosing one opens the record in a new window (no
+  // opener, no referrer) and remembers it for records, as the link message does.
+  function toggleOpenIn(open = openInMenu.hidden) {
+    if (!open) { openInMenu.hidden = true; openInBtn.setAttribute('aria-expanded', 'false'); return; }
+    const uri = paneFor(tabs.active).record?.uri;
+    if (!uri) return;
+    const chosen = recordApp(storage);
+    openInMenu.replaceChildren(
+      ...RECORD_APPS.map((a) => h('button', { type: 'button', role: 'menuitemradio', 'aria-checked': a.id === chosen.id ? 'true' : 'false', class: 'openin-item',
+        onclick: () => {
+          try { storage?.setItem(RECORD_APP_KEY, a.id); } catch { /* fine: this visit only */ }
+          toggleOpenIn(false);
+          globalThis.open(explorerLink(a, uri), '_blank', 'noopener,noreferrer');
+        } }, h('span', { class: 'openin-tick', 'aria-hidden': 'true' }, a.id === chosen.id ? '✓' : ''), a.name)),
+      h('p', { class: 'openin-note' }, 'Remembered for records in this browser.'));
+    openInMenu.hidden = false;
+    openInBtn.setAttribute('aria-expanded', 'true');
+    openInMenu.querySelector('[aria-checked="true"]')?.focus();
+  }
+  document.addEventListener('pointerdown', (e) => { if (!openInMenu.hidden && !openIn.contains(e.target)) toggleOpenIn(false); }, true);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !openInMenu.hidden) { toggleOpenIn(false); openInBtn.focus(); } });
+
   // Messages from ordinary tiles (tiles-protocol-up-…): logged on their tab's panel. Raku doesn't answer
-  // any protocol yet; the panel just shows what was asked.
+  // any protocol yet; the panel just shows what was asked. (A renderer's are answered: fromRenderer.)
   addEventListener('message', (e) => {
     const d = e.data;
     if (!d || typeof d.action !== 'string' || !d.action.startsWith('tiles-protocol-up-')) return;
     for (const pane of panes.values()) {
-      if (!pane.frame || pane.frame.contentWindow !== e.source || !pane.panel) continue;
+      if (!pane.frame || pane.frame.contentWindow !== e.source) continue;
+      if (pane.renderer) { fromRenderer(pane, d); return; }
+      if (!pane.panel) continue;
       const what = d.action.slice('tiles-protocol-up-'.length);
       const kind = d.payload && typeof d.payload === 'object' && typeof d.payload.kind === 'string' ? `${what} · ${d.payload.kind}` : what;
       pane.panel.log({ dir: 'page', from: 'tile', to: 'Raku', kind: kind.slice(0, 80), note: "Raku doesn't answer this yet" });
@@ -677,6 +826,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     reloadBtn.disabled = reloadTool.disabled = !current(tab);
     const k = p.keep;
     starBtn.hidden = !k;
+    openIn.hidden = !p.record;
+    if (!p.record && !openInMenu.hidden) toggleOpenIn(false);
     if (k) {
       const kept = k.kind === 'tile' ? shelf.hasTile(k.did, k.rkey) : shelf.hasAccount(k.did);
       const what = k.kind === 'tile' ? 'this tile' : 'this account';

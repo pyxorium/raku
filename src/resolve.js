@@ -82,6 +82,17 @@ export function createResolver({ fetchImpl = globalThis.fetch, now = () => Date.
     return r.json;
   }
 
+  /** Any record (renderer tiles, RT4): what Raku hands a renderer. → { uri, cid, value } ; NetError 'not-found'
+   *  when there's none. The same careful fetching and size limit as a tile's record. */
+  async function record(did, collection, rkey) {
+    const { pds } = await account(did);
+    const url = `${pds}/xrpc/com.atproto.repo.getRecord?repo=${encodeURIComponent(did)}&collection=${encodeURIComponent(collection)}&rkey=${encodeURIComponent(rkey)}`;
+    const r = await fetchJson(url, { timeoutMs: LIMITS.lookupMs, maxBytes: LIMITS.recordBytes, fetchImpl });
+    if (r.status === 400 || r.status === 404) throw new NetError('not-found', "There's no record at that address (it may have been deleted).");
+    if (!r.ok || !r.json?.value || typeof r.json.value !== 'object') throw new NetError('upstream', "The record's account server didn't answer properly.");
+    return r.json;
+  }
+
   /** One page of an account's tile records, newest first. → { records: [{ uri, cid, value, rkey }], cursor } */
   async function listTiles(did, cursor = null, limit = 100) {
     const { pds } = await account(did);
@@ -120,5 +131,5 @@ export function createResolver({ fetchImpl = globalThis.fetch, now = () => Date.
     return { count: n, more: n >= cap && typeof r.json.cursor === 'string' };
   }
 
-  return { resolveHandle, account, checkedHandle, didFor, tileRecord, listTiles, countTiles, countRecords, didDocumentUrl };
+  return { resolveHandle, account, checkedHandle, didFor, tileRecord, record, listTiles, countTiles, countRecords, didDocumentUrl };
 }

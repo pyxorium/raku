@@ -449,6 +449,34 @@ error: "Raku doesn't show <collection> records yet." (for a collection, "… Thi
 handle). The tab stays where it was, as for a post; these addresses never become a tab's address (`opensOutside` in
 `src/address.js`). `at://<account>/ing.dasl.masl` still opens the account's tiles.
 
+## Renderer tiles (Nov 2026): places in a tab
+
+Decisions: `claude/raku-renderer-tiles-plan.md` (RT1 to RT10). Read-only; the sign-in promise is unchanged. **A record
+whose kind has a renderer** opens in a tab instead of the link message, shown by a **renderer tile**: a tile written
+to show records of that kind. The list is `RENDERERS` in `src/config.js` (`rendererFor`, `pinnedRenderers`): one
+renderer per collection, pinned by its record CID like a table's tiles, loaded by the same pinned loader
+(`src/tables/pinned.js`), so Raku runs exactly the checked version and refuses a changed one ("…has changed since Raku was
+set up to use it"). The first is **Places** for `cafe.thunderbird.way.place` (e.g. `at://pyxorium.com/cafe.thunderbird.way.place/maze`),
+published from `C:\thunderbird-cafe\maze-tiles` (`node scripts/publish.mjs --place`, which prints the address and CID
+for `RENDERERS`). Until its `uri` and `cid` are filled in, places keep opening the link message.
+
+- **How the record reaches the tile:** the tiles spec's data protocol, tp-data (`/.well-known/web-tiles/data.js`,
+  which the loading server already serves). Raku reads the record from its author's server (`resolver.record`), starts
+  the renderer, and answers its `tiles-protocol-up-data-ready` with one `tiles-protocol-down-data-payload`:
+  `{ uri, cid, did, handle, collection, rkey, value }`, the record as stored, the same shape for every kind
+  (`src/renderers.js`). Every "ready" is answered (a reloaded tile asks again); the handle goes along once it checks
+  out both ways, or after 1.5 s without it.
+- **The one thing a renderer may ask:** `{ open: "at://…" }` (`tiles-protocol-up-data-payload`), opened as if typed:
+  a tile, an account or a record with a renderer in a **new tab**; a record or collection with no renderer, or a post,
+  in the link message. `at://` only, at most 600 characters, and requests within a second of the last from the same
+  tab are ignored (`RENDER` in config.js). Nothing it sends can write anywhere.
+- **The tab:** titled with the record's own `name` (else its key); the address box shows the record's address (the
+  checked handle once known); no star (the shelf keeps tiles and accounts) and no Messages button; **Open in ▾** beside
+  the address box shows the record in an explorer (PDSls, Taproot), sharing the link message's remembered choice.
+  A `#t=` link or a reload brings the tab back (`opensHere` in `src/address.js`). Accounts hidden by Raku's moderation
+  aren't shown ("This account's records aren't shown in Raku."). A whole collection still opens the link message.
+- Unit tests: `test/renderers.test.mjs`. Browser: `test/browser/check_renderer.py` (below).
+
 ## Try it
 
 ```
@@ -474,7 +502,7 @@ and open http://127.0.0.1:5181/.
 | `src/config.js` | every setting: Raku's address, the loading server, limits, picks, the page policy |
 | `src/address.js` | the address forms the box accepts |
 | `src/net.js` | careful fetching (https, public hosts, time and size limits) |
-| `src/resolve.js` | handle → account → server → a tile's record |
+| `src/resolve.js` | handle → account → server → a tile's record (and any record, for renderer tiles) |
 | `src/tiles.js` | a tile's files (adapted copy of the site's `src/lib/at-tile-loader.js`), its declared size |
 | `src/moderation.js` | the coded hide list and Bluesky's moderation |
 | `src/tabs.js` | the tabs as data (history, the cap, the page address) |
@@ -498,6 +526,7 @@ and open http://127.0.0.1:5181/.
 | `src/post-card.js` | a post drawn as a card |
 | `src/bluesky.js` | public reads of feeds and posts (one server, `APPVIEW` in config) |
 | `src/link-message.js` | the link message: where a link goes, Open / Cancel |
+| `src/renderers.js` | renderer tiles: what a renderer is handed, what it may ask for (tp-data) |
 | `src/about-page.js` | the About page: what Raku keeps, who it talks to, how tiles are kept in their box, installing Raku |
 | `src/app-shell.js` | stage 9: installed or not, the service worker's registration, the update rule, the install offer, the tabs in the title bar |
 | `src/room-tab.js`, `src/room-words.js` | rooms step 1: the room tab hosting rooms-lab's room (the join screen, invites, one room at a time, the rejoin after a reload); the words and links, tested in Node |
@@ -552,6 +581,19 @@ from it, the room tab's marker (the ring, the dot, a click folding and unfolding
 for a guest's request and Allow from it, Pop out with the floating window showing a shared screen under Raku's page
 policy, Back to the room from the window, and on a phone the bar above the toolbar, its chip and the tabs sheet's
 marker.
+
+`check_renderer.py` (42 checks, renderer tiles) sets everything up itself, like `check_daisy.py`: a copy of this folder
+with a test pin in `RENDERERS`, bundled, Raku's page and the loader replica, and the real place renderer from a
+maze-tiles folder. Usage: `python3 test/browser/check_renderer.py <work folder> <tiles-loading-server folder> <maze-tiles
+folder>`. A place typed in the box opens in its tab through the real loader; the record handed over (name, checked
+handle, date, the tile behind it); Open in (PDSls ticked, Taproot opening the record with the DID and no opener, the
+choice shared with the link message, Escape); Step into opening the forest tile in a new tab; two presses at once
+opening one tab; an https request refused, anything but `{ open }` ignored, another place asked for opening in a new
+tab, a record with no renderer asked for opening the link message; a reload bringing the tab back; a collection and
+another kind still opening the link message; a hidden account's place; a missing place; a renderer that changed since
+it was pinned; the phone (the button in the top bar, its menu as a sheet). It ignores the stand-in servers' "no such
+record" lines (the first screen's picks) and the loading server's `form-src` policy typo, and fails if Raku stops
+answering "ready".
 
 `check_lounge.py` (48 checks, steps 5b and 5b-2) is set up the same way, with daisy-relay's lounge stand-in
 (`test/lounge-standin.mjs`, the real server.js and lounge.js with stand-in lookups) as the relay: mingling
