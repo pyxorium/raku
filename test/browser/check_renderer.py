@@ -276,8 +276,13 @@ try:
         check('phone: the place shows', wait_for(lambda: phone_text('h1') == 'Winter Forest', 15))
         check('phone: "Open in" fits in the top bar', pp.is_visible('.openin-btn') and pp.evaluate("() => { const r = document.querySelector('.openin-btn').getBoundingClientRect(); return r.right <= innerWidth && r.top < 60; }"))
         pp.tap('.openin-btn')
-        check('phone: its menu comes up as a sheet from the bottom', pp.evaluate("() => { const r = document.querySelector('.openin-menu').getBoundingClientRect(); return Math.abs(r.bottom - innerHeight) < 2 && r.width === innerWidth; }"))
+        # RT3a: a dropdown right under the button, its right side lined up with the button's, all of it on screen
+        check('phone: its menu drops down right under the button, all of it on screen', pp.evaluate("() => { const m = document.querySelector('.openin-menu').getBoundingClientRect(), b = document.querySelector('.openin-btn').getBoundingClientRect(); return m.top >= b.bottom && m.top - b.bottom < 12 && Math.abs(m.right - b.right) < 2 && m.left >= 0 && m.right <= innerWidth && m.bottom < innerHeight / 2; }"))
         pp.screenshot(path=str(OUT / 'renderer-phone.png'))
+        pp.set_viewport_size({'width': 320, 'height': 640})
+        check('phone: on a small screen (320 px) too', pp.evaluate("() => { const m = document.querySelector('.openin-menu').getBoundingClientRect(), b = document.querySelector('.openin-btn').getBoundingClientRect(); return !document.querySelector('.openin-menu').hidden && m.top >= b.bottom && m.left >= 0 && m.right <= innerWidth; }"))
+        pp.tap('.openin-item:has-text("PDSls")')
+        check('phone: picking an explorer closes the menu', pp.evaluate("() => document.querySelector('.openin-menu').hidden"))
         phone.close()
 
         POKE['page'] = page

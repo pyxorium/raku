@@ -859,7 +859,7 @@ a { color: var(--glaze-light); }
   .card.has-earlier .card-corner { bottom: 40px; }    /* the new-tab button stays above the line */
 }
 
-/* ---------- renderer tiles (claude/raku-renderer-tiles-plan.md, RT3): "Open in ▾" beside the address box ---------- */
+/* ---------- renderer tiles (claude/raku-renderer-tiles-plan.md, RT3, RT3a): "Open in ▾" beside the address box ---------- */
 .openin { position: relative; flex: none; display: inline-flex; }
 .openin[hidden] { display: none; }
 .openin-btn { display: inline-flex; align-items: center; gap: 4px; height: 31px; padding: 0 10px; border-radius: 7px;
@@ -878,6 +878,7 @@ a { color: var(--glaze-light); }
 @media (max-width: 640px) {
   .openin { order: 4; }
   .openin-btn { height: 36px; padding: 0 9px; font-size: 12px; }
-  .openin-menu { position: fixed; left: 0; right: 0; top: auto; bottom: 0; width: auto; border-radius: 14px 14px 0 0;
-    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+  /* RT3a (owner, Nov 6): on phones too the menu drops down under the button (it was a sheet from the bottom), lined
+     up with the button's right side, which sits at the screen's right edge, and never wider than the screen */
+  .openin-menu { max-width: calc(100vw - 16px); }
 }
