@@ -9,7 +9,21 @@
 
 import { h } from './cards.js';
 import { icon } from './icons.js';
-import { POST_APPS, POST_APP_KEY, postApp, postLink } from './config.js';
+import { POST_APPS, POST_APP_KEY, postApp, postLink, RECORD_APPS, RECORD_APP_KEY, recordApp, explorerLink } from './config.js';
+
+// The two "Open in" menus: one for posts (stage 6b, Q98), one for records and collections that aren't tiles (open
+// links, OL4). Each remembers its own choice in this browser.
+function menuFor({ post, record }, storage) {
+  if (post) return {
+    apps: POST_APPS, key: POST_APP_KEY, app: postApp(storage), label: 'Open posts in',
+    note: 'Remembered for posts in this browser.', link: (a) => postLink(a, post.actor, post.rkey), names: '.post-app-name',
+  };
+  if (record) return {
+    apps: RECORD_APPS, key: RECORD_APP_KEY, app: recordApp(storage), label: 'Open records in',
+    note: 'Remembered for records in this browser.', link: (a) => explorerLink(a, record.uri), names: null,
+  };
+  return null;
+}
 
 export function safeLink(url) {
   try {
@@ -21,7 +35,8 @@ export function safeLink(url) {
 }
 
 /**
- * createLinkMessage(holder, { open, storage }) → { show({ url, from } | { post: { actor, rkey }, from }), close() };
+ * createLinkMessage(holder, { open, storage }) → { show({ url, from } | { post: { actor, rkey }, from } |
+ *   { record: { uri }, from }), close() };
  * open(url) is a new window by default. For a post (stage 6b, Q98), the message carries "Open in [app ▾]": the
  * app that shows posts (Bluesky by default), remembered in this browser; switching it updates the address shown,
  * and every "Open post in …" on the page (elements with class post-app-name).
@@ -39,28 +54,34 @@ export function createLinkMessage(holder, { open = (url) => globalThis.open(url,
   }
   function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
 
-  /** Shows the message. `from` is a short line saying what's asking (optional). → false if the address isn't openable. */
-  function show({ url = null, post = null, from = '' }) {
-    let app = post ? postApp(storage) : null;
-    let u = safeLink(post ? postLink(app, post.actor, post.rkey) : url);
+  /**
+   * Shows the message. `from` is a short line saying what's asking (optional). A post ({ actor, rkey }) or a record
+   * ({ uri }: an at:// address of a record or collection that isn't a tile) carries an "Open in" menu.
+   * → false if the address isn't openable.
+   */
+  function show({ url = null, post = null, record = null, from = '' }) {
+    const menu = menuFor({ post, record }, storage);
+    let u = safeLink(menu ? menu.link(menu.app) : url);
     close();
     if (!u) return false;
     before = document.activeElement;
     const site = h('b', {}, u.hostname.replace(/^www\./, ''));
     const full = h('p', { class: 'link-msg-url' }, u.toString());
     let choice = null;
-    if (post) {
-      const select = h('select', { class: 'link-msg-app', 'aria-label': 'Open posts in' },
-        POST_APPS.map((a) => h('option', { value: a.id, selected: a.id === app.id }, a.name)));
+    if (menu) {
+      const select = h('select', { class: 'link-msg-app', 'aria-label': menu.label },
+        menu.apps.map((a) => h('option', { value: a.id, selected: a.id === menu.app.id }, a.name)));
       select.addEventListener('change', () => {
-        app = POST_APPS.find((a) => a.id === select.value) || POST_APPS[0];
-        u = safeLink(postLink(app, post.actor, post.rkey));
+        const app = menu.apps.find((a) => a.id === select.value) || menu.apps[0];
+        const next = safeLink(menu.link(app));
+        if (!next) return;
+        u = next;
         site.textContent = u.hostname.replace(/^www\./, '');
         full.textContent = u.toString();
-        try { storage?.setItem(POST_APP_KEY, app.id); } catch { /* fine: this visit only */ }
-        for (const el of document.querySelectorAll('.post-app-name')) el.textContent = app.name;
+        try { storage?.setItem(menu.key, app.id); } catch { /* fine: this visit only */ }
+        if (menu.names) for (const el of document.querySelectorAll(menu.names)) el.textContent = app.name;
       });
-      choice = h('div', { class: 'link-msg-choice' }, h('label', {}, 'Open in ', select), h('span', { class: 'small' }, 'Remembered for posts in this browser.'));
+      choice = h('div', { class: 'link-msg-choice' }, h('label', {}, 'Open in ', select), h('span', { class: 'small' }, menu.note));
     }
     const openBtn = h('button', { type: 'button', class: 'primary', onclick: () => { const go = u.toString(); close(); open(go); } }, 'Open');
     const cancel = h('button', { type: 'button', onclick: close }, 'Cancel');

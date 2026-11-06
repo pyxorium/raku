@@ -412,6 +412,20 @@ export function postApp(storage = null) {
   return POST_APPS.find((a) => a.id === id) || POST_APPS[0];
 }
 export const postLink = (app, actor, rkey) => `https://${app.host}/profile/${actor}/post/${rkey}`;
+// Where a record or collection that isn't a tile (or a post) opens outside Raku (open links, OL1/OL4; PDSls by
+// default). Each explorer shows one at https://<host><prefix><at:// address> (seen in the owner's browser, Nov 5).
+// Kept apart from the post apps: its own choice, its own key.
+export const RECORD_APPS = Object.freeze([
+  Object.freeze({ id: 'pdsls', name: 'PDSls', host: 'pdsls.dev', prefix: '/' }),
+  Object.freeze({ id: 'taproot', name: 'Taproot', host: 'atproto.at', prefix: '/uri/' }),
+]);
+export const RECORD_APP_KEY = 'raku-record-app';       // localStorage: the chosen explorer's id
+export function recordApp(storage = null) {
+  let id = null;
+  try { id = storage?.getItem(RECORD_APP_KEY); } catch { id = null; }
+  return RECORD_APPS.find((a) => a.id === id) || RECORD_APPS[0];
+}
+export const explorerLink = (app, uri) => `https://${app.host}${app.prefix}${uri}`;
 // On this computer only: ?feed=at://…/app.bsky.feed.generator/… shows Tile news from another feed (the checks'
 // stand-in feed, say).
 export function feedUri(loc = globalThis.location) {

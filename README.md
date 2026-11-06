@@ -16,7 +16,8 @@ Plans and decisions: `claude/raku-plan.md` in the Web Tile Foundry project.
   button. Up to 10 open. Background tabs keep running. The open tabs live in the page's own address (after
   `#`), so a reload or a copied link reopens them.
 - **The address box** takes `at://…/ing.dasl.masl/…`, lexicographer.space and appmosphe.re tile links
-  (`/@handle/rkey`), webtil.es links (`#url=at://…`), Beaver's `tile://<rkey>.<did>/`, and `@handle/rkey`.
+  (`/@handle/rkey`), webtil.es links (`#url=at://…`), Beaver's `tile://<rkey>.<did>/`, and `@handle/rkey`
+  (since Nov 2026 also PDSls and Taproot links, profile links, and records that aren't tiles: "Open links" below).
 - **The first screen**: the address box and a few picks (`PICKS` in `src/config.js`).
 - **Safety** (Raku's address box opens anyone's tile):
   - every request for a tile goes over https to a host that isn't obviously private, with time and size
@@ -433,6 +434,20 @@ picture, compact otherwise; while it's open the call bar is one line, "The room 
 back". The room, the bar and the window are rooms-lab's (`call-ui.js`); Raku places the bar (`showCall` in
 `src/app.js`, `.call-slot`), draws the markers (`roomMarker`), and brings the room's tab forward for "Back to the
 room" (`onBackToRoom`, `src/room-tab.js`).
+
+## Open links (Nov 2026): any AT URI, and pasted links
+
+Decisions: `claude/raku-open-links-plan.md` (OL1 to OL6). Read-only; the sign-in promise is unchanged. **The address
+box** also takes links that carry an AT URI, read back to it and taken as if it had been typed: PDSls
+(`https://pdsls.dev/at://…`, `https://pds.ls/at://…`), Taproot (`https://atproto.at/uri/at://…`) and webtil.es links
+to anything, not only tiles. A profile link on its own (`https://bsky.app/profile/<handle or DID>`, any app's)
+opens the account's tiles, like `at://<handle>`. **A record or collection that isn't a tile or a post**
+(`at://<account>/<collection>/<rkey>`, `at://<account>/<collection>`) opens the link message instead of the old
+error: "Raku doesn't show <collection> records yet." (for a collection, "… This opens the list of them."), with an
+**Open in** menu of explorers (PDSls by default, Taproot), remembered in this browser apart from the posts menu
+(`RECORD_APPS`, `RECORD_APP_KEY`, `explorerLink` in `src/config.js`). The explorer is given the account's DID (looked up for a
+handle). The tab stays where it was, as for a post; these addresses never become a tab's address (`opensOutside` in
+`src/address.js`). `at://<account>/ing.dasl.masl` still opens the account's tiles.
 
 ## Try it
 

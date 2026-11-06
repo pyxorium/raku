@@ -204,12 +204,28 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     say('');
     input.blur();               // first, so the box shows the tab's own address afterwards (a table's, say)
     // A post opens outside Raku for now (stage 6, Q87/Q88), in the app chosen for posts, after the link message.
-    if (r.kind === 'post') { linkMessage.show({ post: { actor: r.actor, rkey: r.rkey }, from: 'A post address you typed. Raku shows tiles, so posts open in their app.' }); return; }
+    // The tab stays where it was, so the box goes back to the tab's own address (open links: it kept what was typed).
+    if (r.kind === 'post') { tabAddress(); linkMessage.show({ post: { actor: r.actor, rkey: r.rkey }, from: 'A post address you typed. Raku shows tiles, so posts open in their app.' }); return; }
+    // A record or collection that isn't tiles (open links, OL1/OL5): the link message with the explorers' menu.
+    if (r.kind === 'record' || r.kind === 'collection') { tabAddress(); showRecord(r); return; }
     // An invite link (rooms step 1): the room's join screen, the code kept out of the address (RR2); one room at a
     // time (RR6). raku:room on its own: the room tab if there is one.
     if (r.kind === 'room-invite') { rooms.takeInvite({ room: r.room, hostKey: r.hostKey }); return; }
     if (r.kind === 'room' && !rooms.isRoomTab(tabs.active.id)) { goRooms(tabs.active); return; }
     tabs.go(tabs.active.id, r.uri);
+  }
+
+  function tabAddress() { input.value = paneFor(tabs.active).shownAddress || ''; }
+  // The explorers (PDSls, Taproot) are given the account's DID (OL3): looked up for a handle, or the handle as typed
+  // when the lookup fails. The tab stays where it was, as for a post.
+  async function showRecord(r) {
+    let did = r.actor;
+    if (!did.startsWith('did:')) { try { did = await resolver.didFor(r.actor); } catch { did = r.actor; } }
+    const uri = r.kind === 'record' ? `at://${did}/${r.collection}/${r.rkey}` : `at://${did}/${r.collection}`;
+    const from = r.kind === 'record'
+      ? `Raku doesn't show ${r.collection} records yet.`
+      : `Raku doesn't show ${r.collection} records yet. This opens the list of them.`;
+    linkMessage.show({ record: { uri }, from });
   }
 
   // The Discover button: like the Shelf button. A tab already on Discover comes to the front; else this tab if it

@@ -202,7 +202,7 @@ def route(r):
         if u.path.endswith('getBlob'):
             b = blobs.get(q.get('cid'))
             return r.fulfill(status=200 if b else 404, headers={**cors, 'content-type': 'application/octet-stream'}, body=b or b'')
-    if u.hostname in ('bsky.app', 'example.org', 'mu.social', 'atmosynth.at', 'treeline.world', 'foundry.thunderbird.cafe', 'dasl.ing', 'szzt.app') or (u.hostname == 'appmosphe.re' and u.path == '/publish'):
+    if u.hostname in ('bsky.app', 'example.org', 'mu.social', 'atmosynth.at', 'treeline.world', 'foundry.thunderbird.cafe', 'dasl.ing', 'szzt.app', 'pdsls.dev', 'atproto.at') or (u.hostname == 'appmosphe.re' and u.path == '/publish'):
         return r.fulfill(status=200, headers={'content-type': 'text/html'}, body='<!doctype html><title>outside</title>')
     r.fulfill(status=404, headers=cors, body='')
 
@@ -230,7 +230,8 @@ with sync_playwright() as pw:
     ctx = b.new_context(viewport={'width': 1400, 'height': 900})
     for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**',
                  'https://appmosphe.re/**', 'https://typeahead.waow.tech/**', 'https://bsky.app/**', 'https://example.org/**', 'https://mu.social/**', 'https://evil.example/**',
-                 'https://atmosynth.at/**', 'https://treeline.world/**', 'https://foundry.thunderbird.cafe/**', 'https://dasl.ing/**', 'https://szzt.app/**']:
+                 'https://atmosynth.at/**', 'https://treeline.world/**', 'https://foundry.thunderbird.cafe/**', 'https://dasl.ing/**', 'https://szzt.app/**',
+                 'https://pdsls.dev/**', 'https://atproto.at/**']:
         ctx.route(host, route)
     ctx.add_init_script(f"if (!sessionStorage.getItem('seeded')) {{ localStorage.setItem('raku-shelf', {json.dumps(SHELF)}); sessionStorage.setItem('seeded', '1'); }}")
     popups = []
@@ -656,7 +657,57 @@ with sync_playwright() as pw:
     page.fill('.addr', f'https://bsky.app/profile/{MK_H}/post/3post1'); page.press('.addr', 'Enter')
     page.wait_for_selector('.link-msg')
     check("a post's address in the box: the link message, the tab stays", page.inner_text('.link-msg-url') == f'https://bsky.app/profile/{MK_H}/post/3post1' and page.evaluate('location.hash') == tabs_before)
+    check("...and the box shows the tab's own address again", not page.input_value('.addr').startswith('https://bsky.app'), page.input_value('.addr'))
     page.keyboard.press('Escape')
+
+    # ---------- open links (claude/raku-open-links-plan.md, OL1 to OL6) ----------
+    PLACE = f'at://{A}/cafe.thunderbird.way.place/winter-forest'
+    def typed(s):
+        page.fill('.addr', s); page.press('.addr', 'Enter')
+        return wait_for(lambda: page.query_selector('.link-msg'), page=page)
+    typed(f'at://{A_H}/cafe.thunderbird.way.place/winter-forest')
+    check('a record that isn\'t a tile (typed with a handle): the link message, not an error', page.query_selector('.link-msg') is not None and not page.is_visible('.note'), page.inner_text('.note') if page.query_selector('.note') else '')
+    check('...the explorer gets the account\'s DID, PDSls by default', page.inner_text('.link-msg-site') == 'pdsls.dev' and page.inner_text('.link-msg-url') == f'https://pdsls.dev/{PLACE}', page.inner_text('.link-msg-url'))
+    check('...says why (OL6)', page.inner_text('.link-msg-from') == "Raku doesn't show cafe.thunderbird.way.place records yet.", page.inner_text('.link-msg-from'))
+    check('...offers "Open in": PDSls, Taproot', page.eval_on_selector_all('.link-msg-app option', 'os => os.map(o => o.textContent)') == ['PDSls', 'Taproot'] and page.input_value('.link-msg-app') == 'pdsls'
+          and 'Remembered for records in this browser.' in page.inner_text('.link-msg-choice'))
+    check('...the tab stays where it was, the box shows its own address', page.evaluate('location.hash') == tabs_before and 'cafe.thunderbird.way.place' not in page.input_value('.addr'), page.input_value('.addr'))
+    page.select_option('.link-msg-app', 'taproot')
+    check('...Taproot: its address for the same record', page.inner_text('.link-msg-site') == 'atproto.at' and page.inner_text('.link-msg-url') == f'https://atproto.at/uri/{PLACE}')
+    page.screenshot(path=str(OUT / 'd7c-record-open-in.png'))
+    n2 = len(popups)
+    page.click('.link-msg .actions button.primary')
+    pop = wait_for(lambda: popups[n2] if len(popups) > n2 else None, page=page)
+    if pop: pop.wait_for_load_state()
+    check('...Open goes there, in a new window with no opener', pop is not None and pop.url == f'https://atproto.at/uri/{PLACE}' and pop.evaluate('window.opener === null'), pop.url if pop else 'none')
+    if pop: pop.close()
+    kept = page.evaluate("() => [localStorage.getItem('raku-record-app'), localStorage.getItem('raku-post-app')]")
+    check('...remembered for records, apart from the posts\' "Open in"', kept == ['taproot', 'bluesky'], str(kept))
+    typed(f'at://{A_H}/app.bsky.feed.post')
+    check('a collection that isn\'t tiles (OL5): its list, in the remembered explorer', page.inner_text('.link-msg-url') == f'https://atproto.at/uri/at://{A}/app.bsky.feed.post' and page.input_value('.link-msg-app') == 'taproot', page.inner_text('.link-msg-url'))
+    check('...says why', page.inner_text('.link-msg-from') == "Raku doesn't show app.bsky.feed.post records yet. This opens the list of them.", page.inner_text('.link-msg-from'))
+    page.select_option('.link-msg-app', 'pdsls'); page.keyboard.press('Escape')
+    typed(f'https://pds.ls/{PLACE}')
+    check('a pds.ls link to it: the same message', page.inner_text('.link-msg-url') == f'https://pdsls.dev/{PLACE}', page.inner_text('.link-msg-url'))
+    page.keyboard.press('Escape')
+    typed(f'https://atproto.at/uri/{PLACE}')
+    check('a Taproot link to it: the same message', page.inner_text('.link-msg-url') == f'https://pdsls.dev/{PLACE}', page.inner_text('.link-msg-url'))
+    page.keyboard.press('Escape')
+    typed(f'https://webtil.es/browser/#url={PLACE}')
+    check('a webtil.es link to it: the same message (no longer "isn\'t a web tile")', page.inner_text('.link-msg-url') == f'https://pdsls.dev/{PLACE}', page.inner_text('.link-msg-url'))
+    page.keyboard.press('Escape')
+    check('...and none of them changed the tabs', page.evaluate('location.hash') == tabs_before)
+    page.fill('.addr', f'https://pdsls.dev/at://{A}/ing.dasl.masl/coaster2'); page.press('.addr', 'Enter')
+    wait_for(lambda: page.input_value('.addr').endswith('/ing.dasl.masl/coaster2') or page.input_value('.addr').endswith('/coaster2'), page=page)
+    check('a PDSls link to a tile opens the tile in Raku, no message', page.query_selector('.link-msg') is None and 'coaster2' in page.evaluate('location.hash'), page.input_value('.addr'))
+    page.fill('.addr', f'https://bsky.app/profile/{A_H}'); page.press('.addr', 'Enter')
+    page.wait_for_function("() => document.querySelector('.tab.on .tab-title')?.textContent === \"@thunderbird.cafe's tiles\"")
+    check('a profile link on its own opens the account\'s tiles (OL2)', page.query_selector('.link-msg') is None and page.input_value('.addr') == f'@{A_H}', page.input_value('.addr'))
+    page.fill('.addr', 'https://example.com/page'); page.press('.addr', 'Enter')
+    check('an unknown web page is still refused, with the hint', wait_for(lambda: 'not other web pages' in page.inner_text('.note'), page=page) and page.query_selector('.link-msg') is None)
+    page.goto(RAKU + '?loader=' + LOADER + '#t=' + quote(PLACE, safe='') + ',raku%3Aabout&a=0')
+    page.wait_for_selector('.tab')
+    check('a record that isn\'t a tile never becomes a tab from a link (a first screen instead)', len(page.query_selector_all('.tab')) == 2 and 'cafe.thunderbird.way.place' not in page.evaluate('location.hash'), page.evaluate('location.hash'))
 
     check("Raku's own policy refused nothing", not policy, str(policy[:3]))
 

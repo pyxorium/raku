@@ -176,6 +176,72 @@ export function parsePost(input) {
   return { ok: true, kind: 'post', actor: a.actor, rkey: a.rkey, uri: postUri(a.actor, a.rkey) };
 }
 
+// ---- open links (claude/raku-open-links-plan.md, OL1 to OL6) ----
+// Records and collections that aren't tiles (or posts) open outside Raku, in an explorer chosen in the link
+// message (PDSls or Taproot), never in a tab:
+//   at://<did or handle>/<collection>/<rkey>   kind 'record'
+//   at://<did or handle>/<collection>          kind 'collection'   (ing.dasl.masl: the account's tiles, as before)
+// Explorer links are read back to the AT URI they carry, then taken as if it had been typed:
+//   https://pdsls.dev/at://…  https://pds.ls/at://…  https://atproto.at/uri/at://…
+// A profile link on its own, https://<any app>/profile/<did or handle>, is that account's tiles (OL2).
+// Collection names (NSIDs): dot-separated, at least three parts, a letter-led last part.
+const NSID = /^(?=.{5,317}$)[a-zA-Z]([a-zA-Z0-9-]{0,62}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,62}[a-zA-Z0-9])?)+\.[a-zA-Z][a-zA-Z0-9]{0,62}$/;
+export const isNsid = (s) => NSID.test(s);
+const EXPLORERS = Object.freeze([
+  Object.freeze({ hosts: ['pdsls.dev', 'www.pdsls.dev', 'pds.ls', 'www.pds.ls'], prefix: '/' }),
+  Object.freeze({ hosts: ['atproto.at', 'www.atproto.at'], prefix: '/uri/' }),
+]);
+/** Kinds the address box shows in the link message instead of a tab. */
+export const OPENS_OUTSIDE = Object.freeze(['post', 'record', 'collection']);
+export const opensOutside = (kind) => OPENS_OUTSIDE.includes(kind);
+
+// at://<actor>/<collection>[/<rkey>] for a collection that isn't tiles (posts are parsePost's). → a target or null
+function otherRecord(s) {
+  const m = s.match(/^at:\/\/([^/?#\s]+)\/([^/?#\s]+)(?:\/([^/?#\s]+))?\/?$/i);
+  if (!m || m[2] === COLLECTION || !isNsid(m[2])) return null;
+  let actor;
+  try { actor = decodeURIComponent(m[1]); } catch { return null; }
+  const a = account(actor);
+  if (!a.ok) return a;
+  const collection = m[2];
+  if (m[3] === undefined) return { ok: true, kind: 'collection', actor: a.actor, collection, uri: `at://${a.actor}/${collection}` };
+  let rkey;
+  try { rkey = decodeURIComponent(m[3]); } catch { return null; }
+  if (!isRkey(rkey)) return fail("That record's key isn't valid.");
+  return { ok: true, kind: 'record', actor: a.actor, collection, rkey, uri: `at://${a.actor}/${collection}/${rkey}` };
+}
+
+// The AT URI inside an explorer's link or a webtil.es link, or null when the link isn't one.
+function carriedAtUri(u) {
+  const host = u.hostname.toLowerCase();
+  if (WEBTILES_HOSTS.has(host)) {
+    const inner = new URLSearchParams(u.hash.replace(/^#/, '')).get('url');
+    return inner && /^at:\/\//i.test(inner) ? inner : null;
+  }
+  const ex = EXPLORERS.find((e) => e.hosts.includes(host));
+  if (!ex || !u.pathname.startsWith(ex.prefix)) return null;
+  let rest;
+  try { rest = decodeURIComponent(u.pathname.slice(ex.prefix.length)); } catch { return null; }
+  return /^at:\/\//i.test(rest) ? rest : null;
+}
+function linkAtUri(s) {
+  let u;
+  try { u = new URL(s); } catch { return null; }
+  return u.protocol === 'https:' || u.protocol === 'http:' ? carriedAtUri(u) : null;
+}
+
+// https://<any app>/profile/<did or handle> → the account's tiles, or null.
+function profileLink(s) {
+  let u;
+  try { u = new URL(s); } catch { return null; }
+  if (u.protocol !== 'https:') return null;
+  const m = u.pathname.match(/^\/profile\/([^/]+)\/?$/);
+  if (!m) return null;
+  let actor;
+  try { actor = decodeURIComponent(m[1]); } catch { return null; }
+  return account(actor);
+}
+
 // Words to search for: anything typed that isn't an address of some kind (Q95: a single word with a dot is
 // tried as a handle first, before this).
 function looksLikeWords(s) {
@@ -188,7 +254,9 @@ function looksLikeWords(s) {
  * Everything the address box accepts: a tile (as parseAddress), your shelf, or an account's tiles
  * (a handle or DID on its own: @thunderbird.cafe, thunderbird.cafe, did:plc:…, at://handle, or a
  * lexicographer.space / appmosphe.re link to an account), Discover, a post (stage 6), or words to search
- * for. → { ok, kind: 'tile' | 'shelf' | 'account' | 'table' | 'discover' | 'search' | 'post', uri, … }
+ * for; since the open-links round, a record or collection that isn't tiles, and links from PDSls, Taproot and
+ * profile pages. → { ok, kind: 'tile' | 'shelf' | 'account' | 'table' | 'discover' | 'search' | 'post' | 'record'
+ * | 'collection', uri, … }. 'post', 'record' and 'collection' open outside Raku (opensOutside), never in a tab.
  */
 export function parseTarget(input, { inner = false } = {}) {
   const s = String(input || '').trim();
@@ -217,6 +285,17 @@ export function parseTarget(input, { inner = false } = {}) {
   }
   const link = otherLink(s, inner);
   if (link) return link;
+  // A link carrying an AT URI (PDSls, Taproot, webtil.es): as if that AT URI had been typed (OL3, OL4).
+  const carried = linkAtUri(s);
+  if (carried) return parseTarget(carried, { inner: true });
+  // A profile link on its own (OL2): the account's tiles. Posts were taken above.
+  const profile = profileLink(s);
+  if (profile) return profile;
+  // A record or collection that isn't tiles (OL1, OL5): the link message.
+  if (/^at:\/\//i.test(s)) {
+    const other = otherRecord(s.replace(/^at:\/\//i, 'at://'));
+    if (other) return other;
+  }
   const page = s.match(/^raku:tiles\/([^/\s]+)$/);
   if (page) return account(decodeURIComponent(page[1]));
   const tile = parseAddress(s);

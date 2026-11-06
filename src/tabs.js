@@ -8,7 +8,7 @@
 //   #t=<at:// address, encoded>,<…>&a=<the tab in front, from 0>       (an empty slot = a first screen)
 
 import { TABS } from './config.js';
-import { parseTarget } from './address.js';
+import { parseTarget, opensOutside } from './address.js';
 
 let nextId = 1;
 const newTab = (uri = null) => ({ id: `t${nextId++}`, history: [uri], at: 0 });
@@ -83,7 +83,7 @@ export function createTabs({ max = TABS.max } = {}) {
         let v;
         try { v = decodeURIComponent(s); } catch { return null; }
         const r = parseTarget(v);
-        return r.ok && r.kind !== 'post' ? r.uri : null;      // posts open outside Raku (stage 6), never in a tab
+        return r.ok && !opensOutside(r.kind) ? r.uri : null;  // posts (stage 6), other records and collections (open links) open outside Raku, never in a tab
       });
       tabs = (uris.length ? uris : [null]).map((u) => newTab(u));
       const a = Math.min(Math.max(0, Number(p.get('a')) || 0), tabs.length - 1);
