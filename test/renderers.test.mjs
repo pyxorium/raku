@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import { RENDERERS, rendererFor, pinnedRenderers, RENDER } from '../src/config.js';
 import { parseTarget, opensHere } from '../src/address.js';
 import { createTabs, current } from '../src/tabs.js';
-import { READY, UP, DOWN, recordPayload, recordTitle, readOpenRequest, openDecision, createOpenGate, readGetRequest, getTarget, createGetBudget } from '../src/renderers.js';
+import { READY, UP, DOWN, recordPayload, recordTitle, readOpenRequest, openDecision, createOpenGate, readGetRequest, getTarget, createGetBudget,
+  readPictureRequest, pictureSource, PICTURE_TYPES } from '../src/renderers.js';
 
 const PLACE = 'cafe.thunderbird.way.place';
 const PINNED = { [PLACE]: { name: 'Places', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3mzplacesxxxx', cid: 'bafyreiplaces' } };
@@ -149,4 +150,38 @@ test('at most RENDER.getMax reads per load', () => {
   assert.equal(RENDER.getMax, 20);
   const b = createGetBudget({ max: 3 });
   assert.deepEqual([b.take(), b.take(), b.take(), b.take()], [true, true, true, false]);
+});
+
+// ---------- pictures (claude/raku-places-card-plan.md, PC6) ----------
+
+const TILE_URI = 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3myxm45elkp22';
+const BANNER = 'bafkreiforestbannerstandinaaaaaaaaaaa';
+const blobRef = (cid) => ({ $type: 'blob', ref: { $link: cid }, mimeType: 'image/jpeg', size: 10 });
+
+test('a picture request: a blob cid and the at:// record it comes from, nothing else', () => {
+  assert.deepEqual(readPictureRequest({ picture: BANNER, from: TILE_URI }), { cid: BANNER, from: TILE_URI });
+  for (const bad of [null, 'x', { picture: BANNER }, { from: TILE_URI }, { picture: 'Qm123', from: TILE_URI }, { picture: BANNER, from: 'https://example.com/' },
+    { picture: BANNER, from: `at://${'a'.repeat(RENDER.openMaxChars)}` }, { picture: `${BANNER} `, from: TILE_URI }, { picture: BANNER, from: 'at://did:plc:x/c/k extra' }]) {
+    assert.equal(readPictureRequest(bad), null, JSON.stringify(bad));
+  }
+  assert.equal(readGetRequest({ picture: BANNER, from: TILE_URI }), null, 'not a get');
+  assert.equal(readOpenRequest({ picture: BANNER, from: TILE_URI }), null, 'not an open');
+});
+
+test('which pictures (PC6): one a record already handed over in this load lists as a blob, from that record only', () => {
+  const tileValue = { $type: 'ing.dasl.masl', tile: { name: 'Winter Forest', screenshots: [{ src: '/banner.jpg' }], resources: { '/banner.jpg': { src: blobRef(BANNER) } } } };
+  const seen = new Map([
+    ['at://did:plc:6vxjigxrqizmbo56gojxico3/cafe.thunderbird.way.place/winter-forest', { did: 'did:plc:6vxjigxrqizmbo56gojxico3', value: { tile: TILE_URI, cid: 'bafyreiplace' } }],
+    [TILE_URI, { did: 'did:plc:6vxjigxrqizmbo56gojxico3', value: tileValue }],
+  ]);
+  assert.deepEqual(pictureSource({ cid: BANNER, from: TILE_URI }, seen), { did: 'did:plc:6vxjigxrqizmbo56gojxico3' });
+  assert.equal(pictureSource({ cid: 'bafkreinotlistedanywhereaaaaaaaaaaaaa', from: TILE_URI }, seen), null, 'a blob the record doesn\'t list');
+  assert.equal(pictureSource({ cid: BANNER, from: 'at://did:plc:rqbqpaaluty5v47jwciowpik/ing.dasl.masl/3myyjuyr2ja2s' }, seen), null, 'a record not handed over');
+  assert.equal(pictureSource({ cid: BANNER, from: 'at://thunderbird.cafe/ing.dasl.masl/3myxm45elkp22' }, seen), null, 'only by the address it was sent with');
+  assert.equal(pictureSource({ cid: 'bafyreiplace', from: 'at://did:plc:6vxjigxrqizmbo56gojxico3/cafe.thunderbird.way.place/winter-forest' }, seen), null, 'a CID written as text isn\'t a blob');
+  const notBlob = new Map([[TILE_URI, { did: 'did:plc:x', value: { ref: { $link: BANNER } } }]]);
+  assert.equal(pictureSource({ cid: BANNER, from: TILE_URI }, notBlob), null, 'a link without $type blob');
+  assert.equal(pictureSource({ cid: BANNER, from: TILE_URI }, null), null);
+  assert.deepEqual([...PICTURE_TYPES], ['image/png', 'image/jpeg', 'image/webp', 'image/gif'], 'no SVG');
+  assert.equal(RENDER.pictureMaxBytes, 1024 * 1024, 'at most 1 MB');
 });

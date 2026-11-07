@@ -483,6 +483,14 @@ for `RENDERERS`). Until its `uri` and `cid` are filled in, places keep opening t
   `hidden`, `not-found`). Only a single record **named in the record the renderer was given, exactly as written there,
   or in that record's own account**; at most 20 per load (`RENDER.getMax`); hidden accounts and tiles refused
   (`getTarget`, `createGetBudget` in `src/renderers.js`; `answerGet` in `src/app.js`). Read-only, like the rest.
+- **Pictures for renderers (Places' tile card, claude/raku-places-card-plan.md, PC1 to PC6):** Places asks for the tile
+  record behind a place with `{ get }`, then for its banner: `{ picture: "<blob cid>", from: "at://…" }`, answered with
+  `{ gotPicture, from, type, bytes }` (an `ArrayBuffer`, which the tile shows as a `blob:` picture) or `{ gotPicture,
+  from, error }` (`not-allowed`, `too-many`, `too-big`, `not-a-picture`, `not-found`). Only a blob **listed in a record
+  already handed to that renderer in this load** (the record it was given, or one a `{ get }` sent back, by the address
+  it was sent with); fetched from that record's account's own server as a tab's icon is; a PNG, JPEG, WebP or GIF by
+  its bytes (no SVG), at most 1 MB (`RENDER.pictureMaxBytes`); counted against the same 20 per load as `{ get }`
+  (`readPictureRequest`, `pictureSource`, `PICTURE_TYPES` in `src/renderers.js`; `answerPicture` in `src/app.js`).
 - Unit tests: `test/renderers.test.mjs`. Browser: `test/browser/check_renderer.py` (below).
 
 ## Try it
@@ -590,7 +598,7 @@ for a guest's request and Allow from it, Pop out with the floating window showin
 policy, Back to the room from the window, and on a phone the bar above the toolbar, its chip and the tabs sheet's
 marker.
 
-`check_renderer.py` (42 checks, renderer tiles) sets everything up itself, like `check_daisy.py`: a copy of this folder
+`check_renderer.py` (75 checks, renderer tiles) sets everything up itself, like `check_daisy.py`: a copy of this folder
 with a test pin in `RENDERERS`, bundled, Raku's page and the loader replica, and the real place renderer from a
 maze-tiles folder. Usage: `python3 test/browser/check_renderer.py <work folder> <tiles-loading-server folder> <maze-tiles
 folder>`. A place typed in the box opens in its tab through the real loader; the record handed over (name, checked
@@ -599,7 +607,10 @@ choice shared with the link message, Escape); Step into opening the forest tile 
 opening one tab; an https request refused, anything but `{ open }` ignored, another place asked for opening in a new
 tab, a record with no renderer asked for opening the link message; a reload bringing the tab back; a collection and
 another kind still opening the link message; a hidden account's place; a missing place; a renderer that changed since
-it was pinned; the phone (the button in the top bar, its menu as a sheet). It ignores the stand-in servers' "no such
+it was pinned; the phone (the button in the top bar, its menu under it); the signpost renderer's reads; Places' tile
+card (the tile record Raku read, its banner fetched from the author's server and shown from the bytes; a picture the
+record doesn't list, from a record not handed over, over 1 MB, an SVG or not a picture refused; pictures sharing the 20
+per load; a place whose tile is gone). It ignores the stand-in servers' "no such
 record" lines (the first screen's picks) and the loading server's `form-src` policy typo, and fails if Raku stops
 answering "ready".
 

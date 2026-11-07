@@ -435,8 +435,8 @@ export const explorerLink = (app, uri) => `https://${app.host}${app.prefix}${uri
 // The place renderer is published from C:\thunderbird-cafe\maze-tiles (node scripts/publish.mjs --place, which prints
 // these two values; its published.json keeps them under "place-renderer"). Without both, places open the link message. Republishing it means a new pin here, or Raku refuses the changed tile (publish and pin before pushing).
 export const RENDERERS = Object.freeze({
-  'cafe.thunderbird.way.place': Object.freeze({ name: 'Places', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3mznn4ogtza2s',
-    cid: 'bafyreibw7fq7qy677hy2sxh3hxw724xv2pnyxotxddie5m26cy2hntfaqu' }),   // published Nov 6 2026
+  'cafe.thunderbird.way.place': Object.freeze({ name: 'Places', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3mzp2cmnlwa26',
+    cid: 'bafyreigdzwamcyeeqxfaf6okekdyosybbilwznlb7qolyucky3pj4w6ica' }),   // republished Nov 7 2026 (the tile's card)
   // The signpost renderer (claude/raku-renderer-tiles-plan.md, "The signpost renderer"): node scripts/publish.mjs
   // --signpost in C:\thunderbird-cafe\maze-tiles prints these two values (its published.json: "signpost-renderer").
   'cafe.thunderbird.way.signpost': Object.freeze({ name: 'Signposts', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3mzoty54cln2u',
@@ -452,8 +452,10 @@ export const pinnedRenderers = (renderers = RENDERERS) => Object.keys(renderers)
 // A renderer asking Raku to open an address (RT5): at:// addresses only, at most this long, and requests closer than
 // gapMs to the last one from the same tab are ignored. handleMs: how long the record waits for its author's handle
 // to check out before it's sent without one (the tile shows the DID then). getMax: how many records a renderer may
-// have Raku read for it, per load (SR6: only records named in the one it was given, or in that record's account).
-export const RENDER = Object.freeze({ openMaxChars: 600, gapMs: 1000, handleMs: 1500, getMax: 20 });
+// have Raku read for it, per load (SR6: only records named in the one it was given, or in that record's account);
+// its picture requests count against the same allowance. pictureMaxBytes: the largest picture Raku hands a renderer
+// (claude/raku-places-card-plan.md, PC6: a tile's banner).
+export const RENDER = Object.freeze({ openMaxChars: 600, gapMs: 1000, handleMs: 1500, getMax: 20, pictureMaxBytes: 1024 * 1024 });
 // On this computer only: ?feed=at://…/app.bsky.feed.generator/… shows Tile news from another feed (the checks'
 // stand-in feed, say).
 export function feedUri(loc = globalThis.location) {

@@ -1,7 +1,10 @@
 # Renderer tiles in a browser (claude/raku-renderer-tiles-plan.md, RT1 to RT10): a place address opens in a tab, shown
 # by the real place renderer tile (C:\thunderbird-cafe\maze-tiles\place\tile\, pinned by its record CID) through a
 # replica of the tile loading server; Raku hands it the record over the tiles spec's data protocol; "Step into" opens
-# the place's tile in a new tab; "Open in" shows the record in an explorer; the refusals and the limits.
+# the place's tile in a new tab; "Open in" shows the record in an explorer; the refusals and the limits. Places' tile
+# card (claude/raku-places-card-plan.md, PC1 to PC6): the tile record Raku reads for it, and the banner's bytes Raku
+# fetches for it ({ picture, from }) only when a record it was handed lists that file, of the four picture kinds, at most
+# 1 MB, within the same 20 per load.
 #
 # It sets everything up itself: a copy of this Raku folder with a test pin in RENDERERS (the real pin is filled in
 # after publishing), bundled with esbuild and the stand-in sign-in, then servers.mjs and loader-replica.mjs.
@@ -52,10 +55,16 @@ FOREST_TILE = f'at://{A}/{TILE}/3myxm45elkp22'
 MAZE_TILE = f'at://{P}/{TILE}/3myyjuyr2ja2s'
 records = {   # (repo, collection, rkey) -> (cid, value)
     (A, TILE, RENDERER_RKEY): (RENDERER_CID, renderer_record),
-    (A, TILE, '3myxm45elkp22'): ('bafyreiforest', {'$type': TILE, 'cid': 'bafy', 'tile': {'name': 'Winter Forest', 'resources': {'/': res(PLAIN('Winter Forest tile'), 'text/html')}}}),
+    (A, TILE, '3myxm45elkp22'): ('bafyreiforest', {'$type': TILE, 'cid': 'bafy', 'createdAt': '2026-10-28T20:30:00.000Z', 'tile': {'name': 'Winter Forest',
+        'description': 'A snowy night forest. A lamp post glows in a clearing.', 'screenshots': [{'src': '/banner.jpg'}], 'icons': [{'src': '/icon.png'}],
+        'resources': {'/': res(PLAIN('Winter Forest tile'), 'text/html'), '/banner.jpg': res((MAZE / 'forest' / 'tile' / 'banner.jpg').read_bytes(), 'image/jpeg'),
+          '/icon.png': res((MAZE / 'forest' / 'tile' / 'icon.png').read_bytes(), 'image/png'),
+          '/big.png': res(b'\x89PNG\r\n\x1a\n' + bytes(1024 * 1024 + 10), 'image/png'),          # over the 1 MB limit
+          '/note.svg': res(b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>', 'image/svg+xml')}}}),
     (P, TILE, '3myyjuyr2ja2s'): ('bafyreimaze', {'$type': TILE, 'cid': 'bafy', 'tile': {'name': 'Escher maze', 'resources': {'/': res(PLAIN('Escher maze tile'), 'text/html')}}}),
     (A, PLACE, 'winter-forest'): ('bafyreiplaceforest', {'$type': PLACE, 'tile': FOREST_TILE, 'cid': 'bafyreiforest', 'name': 'Winter Forest', 'updatedAt': '2026-10-28T20:36:27.450Z'}),
     (P, PLACE, 'maze'): ('bafyreiplacemaze', {'$type': PLACE, 'tile': MAZE_TILE, 'cid': 'bafyreimaze', 'name': 'Escher maze', 'updatedAt': '2026-10-29T05:29:18.784Z'}),
+    (A, PLACE, 'gone'): ('bafyreiplacegone', {'$type': PLACE, 'tile': f'at://{A}/{TILE}/3mzgonegonegon', 'cid': 'x', 'name': 'A cleared lot', 'updatedAt': '2026-11-01T00:00:00Z'}),
     (B, PLACE, 'hidden'): ('bafyreiplacehidden', {'$type': PLACE, 'tile': FOREST_TILE, 'cid': 'x', 'name': 'Should not show', 'updatedAt': '2026-10-28T00:00:00Z'}),
     (A, 'app.bsky.feed.like', '3mzlike'): ('bafyreilike', {'$type': 'app.bsky.feed.like', 'subject': {}}),
 }
@@ -202,7 +211,52 @@ try:
         check('the tab is kept in the page address (#t=)', 'winter-forest' in page.url and '#t=' in page.url)
         reads = [c for c in calls if 'getRecord' in c and PLACE in c]
         check('the record was read from its author\'s own server', any(f'repo={A.replace(":", "%3A")}' in c for c in reads), str(reads[:2]))
+        # 1b. Places' tile card (PC1 to PC6): the tile record Raku read, and the banner Raku fetched for it
+        rec = records[(A, TILE, '3myxm45elkp22')][1]['tile']['resources']
+        BANNER_CID, BIG_CID, SVG_CID, HTML_CID = (rec[k]['src']['ref']['$link'] for k in ['/banner.jpg', '/big.png', '/note.svg', '/'])
+        check('the tile\'s card: its name and who made it, from the tile record Raku read', wait_for(lambda: tile_text('.card h2') == 'Winter Forest' and tile_text('.card .tby') == 'A tile by @thunderbird.cafe. Published Oct 28, 2026.', 10), str(tile_text('.card .tby')))
+        check('...its description', tile_text('.card .desc') == 'A snowy night forest. A lamp post glows in a clearing.')
+        check('...the tile record read from its author\'s server', any('getRecord' in c and 'rkey=3myxm45elkp22' in c for c in calls))
+        check('...its banner, from the bytes Raku fetched (a blob: picture, 1280 px)', wait_for(lambda: inner().locator('img.pic').evaluate('i => i.src.startsWith("blob:") && i.complete && i.naturalWidth === 1280'), 10))
+        check('...fetched from the author\'s own server', any('getBlob' in c and BANNER_CID in c and A.replace(':', '%3A') in c for c in calls))
+        check('...the tile\'s address still under it', tile_text('.card code') == FOREST_TILE)
         page.screenshot(path=str(OUT / 'renderer-place.png'))
+        f = inner()
+        f.evaluate('''() => { window.__pics = []; addEventListener('message', (e) => { const p = e.data && e.data.payload; if (p && typeof p.gotPicture === 'string') window.__pics.push({ cid: p.gotPicture, from: p.from, error: p.error || null, type: p.type || null, n: p.bytes ? p.bytes.byteLength : 0 }); }); }''')
+        up = lambda payload: f.evaluate('(p) => parent.postMessage({ action: "tiles-protocol-up-data-payload", payload: p }, "*")', payload)
+        pics = lambda: f.evaluate('() => window.__pics')
+        answer = lambda cid, frm: wait_for(lambda: next((x for x in pics() if x['cid'] == cid and x['from'] == frm), None), 8)
+        maze_rec = records[(P, TILE, '3myyjuyr2ja2s')][1]['tile']['resources']['/']['src']['ref']['$link']
+        blob_calls = lambda cid: [c for c in calls if 'getBlob' in c and cid in c]
+        a = answer(maze_rec, FOREST_TILE) if up({'picture': maze_rec, 'from': FOREST_TILE}) is None else None
+        check('a picture the record doesn\'t list: refused (not-allowed)', a and a['error'] == 'not-allowed', str(a))
+        a = answer(maze_rec, MAZE_TILE) if up({'picture': maze_rec, 'from': MAZE_TILE}) is None else None
+        check('...from a record not handed to this renderer: refused', a and a['error'] == 'not-allowed', str(a))
+        a = answer(BANNER_CID, f'at://{A}/{PLACE}/winter-forest') if up({'picture': BANNER_CID, 'from': f'at://{A}/{PLACE}/winter-forest'}) is None else None
+        check('...from a record handed over that doesn\'t list it (the place): refused', a and a['error'] == 'not-allowed', str(a))
+        check('...and nothing was fetched for them', not blob_calls(maze_rec))
+        a = answer(BIG_CID, FOREST_TILE) if up({'picture': BIG_CID, 'from': FOREST_TILE}) is None else None
+        check('a picture over 1 MB: too-big', a and a['error'] == 'too-big', str(a))
+        a = answer(SVG_CID, FOREST_TILE) if up({'picture': SVG_CID, 'from': FOREST_TILE}) is None else None
+        check('an SVG (it can carry script): not-a-picture', a and a['error'] == 'not-a-picture', str(a))
+        a = answer(HTML_CID, FOREST_TILE) if up({'picture': HTML_CID, 'from': FOREST_TILE}) is None else None
+        check('a file that isn\'t a picture: not-a-picture', a and a['error'] == 'not-a-picture', str(a))
+        before_pics = len(pics())
+        for _ in range(25): up({'picture': BANNER_CID, 'from': FOREST_TILE})
+        check('pictures share the 20 per load with reads: the rest refused as too many', wait_for(lambda: len(pics()) >= before_pics + 25, 15) and sum(1 for x in pics()[before_pics:] if x['error'] == 'too-many') >= 5, str([x['error'] for x in pics()[before_pics:]][-6:]))
+        sent = [x for x in pics()[before_pics:] if not x['error']]
+        # the budget: the tile's own get and banner (2), then too-big, the SVG and the HTML file (3): 15 left
+        check('...the allowed ones answered with the JPEG\'s bytes', len(sent) == 15 and all(x['type'] == 'image/jpeg' and x['n'] == len(blobs[BANNER_CID]) for x in sent), f'{len(sent)} {sent[:1]}')
+
+        # 1c. a place whose tile is gone: "Raku couldn't find this tile.", Step into kept (PC5)
+        page.click('.newtab')
+        page.fill('.addr', f'at://{A_HANDLE}/{PLACE}/gone'); page.press('.addr', 'Enter')
+        check('a place whose tile is gone: "Raku couldn\'t find this tile…"', wait_for(lambda: tile_text('.card .cant') == "Raku couldn't find this tile. It may have been deleted, or its author's server may not be answering right now.", 20), str(tile_text('.card .cant')))
+        check('...Step into kept, the address under it', inner().locator('button.go').count() == 1 and tile_text('.card code') == f'at://{A}/{TILE}/3mzgonegonegon')
+        page.screenshot(path=str(OUT / 'renderer-place-gone.png'))
+        page.locator('.tab.on .tab-x').click()
+        page.locator('.tab').nth(0).click()            # back to the place's tab (the first)
+        wait_for(lambda: page.inner_text('.tab.on .tab-title') == 'Winter Forest' and inner() is not None, 5)
 
         # 2. Open in (RT3)
         check('"Open in" shows beside the address box', page.is_visible('.openin-btn'))

@@ -33,7 +33,7 @@ import { drawYourShelf, drawAccountTiles, drawShelfTeaser } from './shelf-pages.
 import { attachTypeahead } from './typeahead.js';
 import { drawTable, createPanel } from './tables/table-page.js';
 import { createPinnedLoader, TileChanged } from './tables/pinned.js';
-import { READY, UP, DOWN, recordPayload, recordTitle, readOpenRequest, openDecision, createOpenGate, readGetRequest, getTarget, createGetBudget } from './renderers.js';
+import { READY, UP, DOWN, recordPayload, recordTitle, readOpenRequest, openDecision, createOpenGate, readGetRequest, getTarget, createGetBudget, readPictureRequest, pictureSource, PICTURE_TYPES } from './renderers.js';
 import { createAccountMenu } from './account-menu.js';
 import { createLinkMessage } from './link-message.js';
 import { createDiscover, drawDiscover } from './discover.js';
@@ -561,7 +561,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     // The record goes out with the handle once it checks out, or without one after a moment (the tile shows the DID).
     const handleSoon = Promise.race([handle, new Promise((r) => setTimeout(() => r(null), RENDER.handleMs))]);
     const record = { did, collection: target.collection, rkey: target.rkey, cid: rec.cid, value: rec.value };
-    startRenderer(p, tab, renderer, async () => recordPayload({ ...record, handle: await handleSoon }), { did, value: rec.value, handle: handleSoon });
+    startRenderer(p, tab, renderer, async () => recordPayload({ ...record, handle: await handleSoon }), { uri: didForm, did, value: rec.value, handle: handleSoon });
   }
 
   async function startRenderer(p, tab, renderer, payload, given) {
@@ -594,7 +594,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (!TILE_POPUPS) frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-downloads');
     p.frame = frame;
     p.el.prepend(frame);
-    p.renderer = { payload, given, gate: createOpenGate(), gets: createGetBudget() };
+    // seen: every record handed to this renderer in this load, by the address it was sent with (PC6: the pictures it
+    // may ask for are the ones these records list).
+    p.renderer = { payload, given, gate: createOpenGate(), gets: createGetBudget(), seen: new Map([[given.uri, { did: given.did, value: given.value }]]) };
     // RT12: the record's tab shows its renderer's own icon (the carved door, the trail signpost), read from the
     // renderer's record as a tile's tab reads its tile's; the dot until then, and if it has none.
     const rdid = (/^at:\/\/([^/]+)\//.exec(renderer.uri) || [])[1];
@@ -604,8 +606,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   // A renderer's messages (RT1, RT5, SR6): "ready" is answered with the record (every time: a reloaded tile asks again);
   // { open: "at://…" } opens that address as if it had been typed, a tile or a record with a renderer in a new tab;
   // { get: "at://…" } is answered with that record when it's named in the record the renderer was given, or is in
-  // that record's own account (at most RENDER.getMax per load; hidden accounts and tiles refused). Nothing else is
-  // answered, and nothing a renderer sends can write anywhere.
+  // that record's own account (at most RENDER.getMax per load; hidden accounts and tiles refused); { picture, from }
+  // with that picture's bytes when one of the records it was handed lists it (PC6, the same allowance). Nothing else
+  // is answered, and nothing a renderer sends can write anywhere.
   async function fromRenderer(pane, d) {
     const r = pane.renderer;
     if (d.action === READY) {
@@ -619,6 +622,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (d.action !== UP) return;
     const wanted = readGetRequest(d.payload);
     if (wanted) { answerGet(pane, wanted); return; }
+    const pic = readPictureRequest(d.payload);
+    if (pic) { answerPicture(pane, pic); return; }
     const address = readOpenRequest(d.payload);
     if (!address || !r.gate.take()) return;
     const decision = openDecision(address);
@@ -643,9 +648,35 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       if (await moderation.isAccountHidden(did) || (t.collection === 'ing.dasl.masl' && await moderation.isHidden(did, t.rkey))) return send({ got: address, error: 'hidden' });
       const rec = await resolver.record(did, t.collection, t.rkey);
       const hd = await Promise.race([resolver.checkedHandle(did).catch(() => null), new Promise((ok) => setTimeout(() => ok(null), RENDER.handleMs))]);
-      send({ got: address, record: recordPayload({ did, handle: hd, collection: t.collection, rkey: t.rkey, cid: rec.cid, value: rec.value }) });
+      const record = recordPayload({ did, handle: hd, collection: t.collection, rkey: t.rkey, cid: rec.cid, value: rec.value });
+      if (mine === pane.attempt) r.seen.set(record.uri, { did, value: rec.value });
+      send({ got: address, record });
     } catch {
       send({ got: address, error: 'not-found' });
+    }
+  }
+
+  // A renderer's { picture, from } (PC6): one blob listed in a record already handed to it in this load, fetched from
+  // that record's account's own server as a tab's icon is, a PNG, JPEG, WebP or GIF (by its bytes) of at most
+  // RENDER.pictureMaxBytes; answered { gotPicture, from, type, bytes } or { gotPicture, from, error } with error one of
+  // not-allowed, too-many, too-big, not-a-picture, not-found. It counts against the same allowance as { get }.
+  async function answerPicture(pane, req) {
+    const mine = pane.attempt;
+    const r = pane.renderer;
+    const send = (payload) => { if (mine === pane.attempt && pane.frame) pane.frame.contentWindow.postMessage({ action: DOWN, payload: { gotPicture: req.cid, from: req.from, ...payload } }, '*'); };
+    const source = pictureSource(req, r.seen);
+    if (!source) return send({ error: 'not-allowed' });
+    if (!r.gets.take()) return send({ error: 'too-many' });
+    try {
+      const { pds } = await resolver.account(source.did);
+      const buf = await files.get(pds, source.did, req.cid, { left: RENDER.pictureMaxBytes });
+      if (!buf) return send({ error: 'not-found' });
+      if (buf.byteLength > RENDER.pictureMaxBytes) return send({ error: 'too-big' });
+      const type = sniffPicture(new Uint8Array(buf));
+      if (!PICTURE_TYPES.includes(type)) return send({ error: 'not-a-picture' });
+      send({ type, bytes: buf });
+    } catch (err) {
+      send({ error: err instanceof NetError && err.code === 'too-large' ? 'too-big' : 'not-found' });
     }
   }
 

@@ -7,10 +7,13 @@
 //   tile → Raku   tiles-protocol-up-data-payload    { open: "at://…" }                                  (RT5)
 //   tile → Raku   tiles-protocol-up-data-payload    { get: "at://…" }                                   (SR2, SR6)
 //   Raku → tile   tiles-protocol-down-data-payload  { got: "at://…", record: { …RT4's shape… } }  or  { got, error }
+//   tile → Raku   tiles-protocol-up-data-payload    { picture: "<blob cid>", from: "at://…" }                (PC6)
+//   Raku → tile   tiles-protocol-down-data-payload  { gotPicture, from, type, bytes }  or  { gotPicture, from, error }
 // Raku answers every "ready" (a reloaded tile asks again) and each allowed get, and never sends anything else. Nothing
 // a renderer sends can write to any account: it can ask to open an address, as if it had been typed, or to read a
 // record named in the one it was given (or in that record's own account), so it can show names (the signpost
-// renderer: claude/raku-renderer-tiles-plan.md, "The signpost renderer").
+// renderer: claude/raku-renderer-tiles-plan.md, "The signpost renderer"), or to fetch a picture one of the records it
+// was handed lists as a file, so it can show it (Places' tile card: claude/raku-places-card-plan.md, PC1 to PC6).
 
 import { parseTarget } from './address.js';
 import { RENDERERS, rendererFor, RENDER } from './config.js';
@@ -94,4 +97,37 @@ export function createGetBudget({ max = RENDER.getMax } = {}) {
 export function createOpenGate({ gapMs = RENDER.gapMs, now = () => Date.now() } = {}) {
   let last = -Infinity;
   return { take() { const t = now(); if (t - last < gapMs) return false; last = t; return true; } };
+}
+
+// ---------- pictures (claude/raku-places-card-plan.md, PC6) ----------
+
+/** The pictures Raku hands a renderer: no SVG (it can carry script), only these, checked from the bytes. */
+export const PICTURE_TYPES = Object.freeze(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+
+/** The picture a renderer asks for, { cid, from }, or null when the request isn't one (a blob cid, an at:// record). */
+export function readPictureRequest(payload, limits = RENDER) {
+  if (!payload || typeof payload !== 'object') return null;
+  const { picture: cid, from } = payload;
+  if (typeof cid !== 'string' || !/^b[a-z2-7]{20,120}$/.test(cid)) return null;
+  if (typeof from !== 'string' || from.length > limits.openMaxChars || !/^at:\/\/[^\s]+$/i.test(from)) return null;
+  return { cid, from };
+}
+
+// Every blob a record lists ({ $type: "blob", ref: { $link } }, as records come from getRecord), a few levels deep.
+function blobsIn(value, out = new Set(), depth = 0) {
+  if (out.size >= 500 || depth > 8 || !value || typeof value !== 'object') return out;
+  if (Array.isArray(value)) { for (const v of value) blobsIn(v, out, depth + 1); return out; }
+  if (value.$type === 'blob' && value.ref && typeof value.ref.$link === 'string') out.add(value.ref.$link);
+  for (const v of Object.values(value)) blobsIn(v, out, depth + 1);
+  return out;
+}
+
+/**
+ * May a renderer have Raku fetch this picture? (PC6) `seen` maps each record address Raku has handed this renderer in
+ * this load (the record it was given, and each record a { get } sent back, by the address sent) to { did, value }.
+ * → that record's { did } when `from` is one of them and it lists `cid` as a blob, else null.
+ */
+export function pictureSource(req, seen) {
+  const rec = req && seen && typeof seen.get === 'function' ? seen.get(req.from) : null;
+  return rec && blobsIn(rec.value).has(req.cid) ? { did: rec.did } : null;
 }
