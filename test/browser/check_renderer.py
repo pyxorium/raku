@@ -59,6 +59,18 @@ records = {   # (repo, collection, rkey) -> (cid, value)
     (B, PLACE, 'hidden'): ('bafyreiplacehidden', {'$type': PLACE, 'tile': FOREST_TILE, 'cid': 'x', 'name': 'Should not show', 'updatedAt': '2026-10-28T00:00:00Z'}),
     (A, 'app.bsky.feed.like', '3mzlike'): ('bafyreilike', {'$type': 'app.bsky.feed.like', 'subject': {}}),
 }
+# ---- the signpost renderer (claude/raku-renderer-tiles-plan.md, "The signpost renderer"), from maze-tiles, test-pinned ----
+SIGNPOST = 'cafe.thunderbird.way.signpost'
+SIGN_RKEY = '3mzsignstest'
+SIGN_CID = 'bafyreisignpostsrenderertestpinaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+sign_dir = MAZE / 'signpost' / 'tile'
+sign_res = {}
+for f in ['index.html', 'signpost.css', 'signpost.js', 'view.js', 'icon.png', 'banner.png']:
+    sign_res['/' if f == 'index.html' else f'/{f}'] = res((sign_dir / f).read_bytes(), TYPES[Path(f).suffix])
+records[(A, TILE, SIGN_RKEY)] = (SIGN_CID, {'$type': TILE, 'cid': 'bafyreimanifest2', 'tile': {'name': 'Signposts', 'description': 'Shows a signpost.', 'resources': sign_res,
+    'icons': [{'src': '/icon.png'}], 'screenshots': [{'src': '/banner.png'}]}, 'createdAt': '2026-11-06T12:00:00Z'})
+MAZE_PLACE = f'at://{P}/{PLACE}/maze'
+records[(A, SIGNPOST, 'winter-forest.slide')] = ('bafyreisignslide', {'$type': SIGNPOST, 'to': [{'place': MAZE_PLACE, 'entrance': 'obelisk'}], 'updatedAt': '2026-10-29T05:40:00.000Z'})
 state = {'renderer_cid': RENDERER_CID}
 calls = []
 
@@ -71,7 +83,10 @@ cfg = (COPY / 'src' / 'config.js').read_text()
 pin = f"'{PLACE}': Object.freeze({{ name: 'Places', uri: 'at://{A}/{TILE}/{RENDERER_RKEY}', cid: '{RENDERER_CID}' }}),"
 cfg2 = re.sub(r"'cafe\.thunderbird\.way\.place': Object\.freeze\(\{[^}]*\}\),", pin, cfg, count=1)
 assert cfg2 != cfg or "uri: 'at://" in cfg, 'the RENDERERS entry was not found'
-(COPY / 'src' / 'config.js').write_text(cfg2)
+sign_pin = f"'{SIGNPOST}': Object.freeze({{ name: 'Signposts', uri: 'at://{A}/{TILE}/{SIGN_RKEY}', cid: '{SIGN_CID}' }}),"
+cfg3 = re.sub(r"'cafe\.thunderbird\.way\.signpost': Object\.freeze\(\{[^}]*\}\),", sign_pin, cfg2, count=1)
+assert cfg3 != cfg2 or SIGN_CID in cfg2, 'the signpost RENDERERS entry was not found'
+(COPY / 'src' / 'config.js').write_text(cfg3)
 site = W / 'site' / 'assets'; site.mkdir(parents=True, exist_ok=True)
 esbuild = shutil.which('esbuild') or '/opt/npm-tools/node_modules/.bin/esbuild'
 env = {**os.environ, 'NODE_PATH': f"{RAKU_SRC / 'node_modules'}:/opt/npm-tools/node_modules"}
@@ -253,6 +268,33 @@ try:
         check('...and the renderer isn\'t started', page.query_selector('.pane.front iframe.tile-frame') is None)
         page.fill('.addr', f'at://{A_HANDLE}/{PLACE}/nowhere'); page.press('.addr', 'Enter')
         check('a place that doesn\'t exist: says so', wait_for(lambda: "There's no record at that address" in page.inner_text('.pane.front .tile-status'), 10))
+
+        # 6b. the signpost renderer: the record handed over, then the names it asks Raku for (SR2, SR6)
+        page.click('.newtab')
+        page.fill('.addr', f'at://{A_HANDLE}/{SIGNPOST}/winter-forest.slide'); page.press('.addr', 'Enter')
+        check('a signpost address opens in a tab, shown by the Signposts renderer', wait_for(lambda: tile_text('.out') == 'A way out of [place: winter-forest] [leave/exit: slide]', 20), str(tile_text('.out')))
+        check('...the names Raku read for it: the heading from Winter Forest\'s place', wait_for(lambda: tile_text('h1') == 'Slide, in Winter Forest', 10), str(tile_text('h1')))
+        check('...the button from the maze\'s place', wait_for(lambda: tile_text('button.go') == 'Go to Escher maze', 5), str(tile_text('button.go')))
+        check('...the destination\'s account with its checked handle', wait_for(lambda: tile_text('.dest .sub') == f'by @{P_HANDLE} [{P}]', 5), str(tile_text('.dest .sub')))
+        maze_reads = [c for c in calls if 'getRecord' in c and 'rkey=maze' in c and f'repo={P.replace(":", "%3A")}' in c]
+        check('...the maze\'s place read from its author\'s own server', maze_reads, str(maze_reads[:1]))
+        f = inner()
+        f.evaluate('''() => { window.__got = []; addEventListener('message', (e) => { const p = e.data && e.data.payload; if (p && typeof p.got === 'string') window.__got.push(p); }); }''')
+        up = lambda payload: f.evaluate('(p) => parent.postMessage({ action: "tiles-protocol-up-data-payload", payload: p }, "*")', payload)
+        got = lambda: f.evaluate('() => window.__got')
+        other = f'at://{P}/{PLACE}/somewhere-else'
+        up({'get': other})
+        check('a record the signpost doesn\'t name, in another account: refused', wait_for(lambda: any(g.get('got') == other and g.get('error') == 'not-allowed' for g in got()), 5), str(got()))
+        up({'get': f'at://{P}/{PLACE}'})
+        check('...a whole collection: refused', wait_for(lambda: any(g.get('error') == 'not-allowed' and g.get('got') == f'at://{P}/{PLACE}' for g in got()), 5))
+        check('...and nothing was read for them', not any('somewhere-else' in c for c in calls))
+        for _ in range(25): up({'get': MAZE_PLACE})
+        check('at most 20 reads per load: the rest refused as too many', wait_for(lambda: sum(1 for g in got() if g.get('error') == 'too-many') >= 5, 10), str([g.get('error') or 'record' for g in got()][-8:]))
+        check('...the allowed ones answered with the record', sum(1 for g in got() if g.get('record')) == 18, str(sum(1 for g in got() if g.get('record'))))
+        n = tab_count()
+        f.locator('button.go').click()
+        check('"Go to Escher maze" opens the maze\'s place in a new tab (its postcard)', wait_for(lambda: tab_count() == n + 1 and tile_text('h1') == 'Escher maze', 15), str(tile_text('h1')))
+        page.screenshot(path=str(OUT / 'renderer-signpost-go.png'))
 
         # 7. a renderer that changed since it was pinned is refused
         state['renderer_cid'] = 'bafyreisomethingelseentirelyaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'

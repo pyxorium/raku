@@ -661,17 +661,17 @@ with sync_playwright() as pw:
     page.keyboard.press('Escape')
 
     # ---------- open links (claude/raku-open-links-plan.md, OL1 to OL6) ----------
-    PLACE = f'at://{A}/cafe.thunderbird.way.signpost/winter-forest.slide'   # a kind with no renderer (places have one since renderer tiles: check_renderer.py)
+    PLACE = f'at://{A}/app.bsky.feed.like/3mzlike'   # a kind with no renderer (places and signposts have one since renderer tiles: check_renderer.py)
     def typed(s):
         page.fill('.addr', s); page.press('.addr', 'Enter')
         return wait_for(lambda: page.query_selector('.link-msg'), page=page)
-    typed(f'at://{A_H}/cafe.thunderbird.way.signpost/winter-forest.slide')
+    typed(f'at://{A_H}/app.bsky.feed.like/3mzlike')
     check('a record that isn\'t a tile (typed with a handle): the link message, not an error', page.query_selector('.link-msg') is not None and not page.is_visible('.note'), page.inner_text('.note') if page.query_selector('.note') else '')
     check('...the explorer gets the account\'s DID, PDSls by default', page.inner_text('.link-msg-site') == 'pdsls.dev' and page.inner_text('.link-msg-url') == f'https://pdsls.dev/{PLACE}', page.inner_text('.link-msg-url'))
-    check('...says why (OL6)', page.inner_text('.link-msg-from') == "Raku doesn't show cafe.thunderbird.way.signpost records yet.", page.inner_text('.link-msg-from'))
+    check('...says why (OL6)', page.inner_text('.link-msg-from') == "Raku doesn't show app.bsky.feed.like records yet.", page.inner_text('.link-msg-from'))
     check('...offers "Open in": PDSls, Taproot', page.eval_on_selector_all('.link-msg-app option', 'os => os.map(o => o.textContent)') == ['PDSls', 'Taproot'] and page.input_value('.link-msg-app') == 'pdsls'
           and 'Remembered for records in this browser.' in page.inner_text('.link-msg-choice'))
-    check('...the tab stays where it was, the box shows its own address', page.evaluate('location.hash') == tabs_before and 'cafe.thunderbird.way.signpost' not in page.input_value('.addr'), page.input_value('.addr'))
+    check('...the tab stays where it was, the box shows its own address', page.evaluate('location.hash') == tabs_before and 'app.bsky.feed.like' not in page.input_value('.addr'), page.input_value('.addr'))
     page.select_option('.link-msg-app', 'taproot')
     check('...Taproot: its address for the same record', page.inner_text('.link-msg-site') == 'atproto.at' and page.inner_text('.link-msg-url') == f'https://atproto.at/uri/{PLACE}')
     page.screenshot(path=str(OUT / 'd7c-record-open-in.png'))
@@ -707,7 +707,7 @@ with sync_playwright() as pw:
     check('an unknown web page is still refused, with the hint', wait_for(lambda: 'not other web pages' in page.inner_text('.note'), page=page) and page.query_selector('.link-msg') is None)
     page.goto(RAKU + '?loader=' + LOADER + '#t=' + quote(PLACE, safe='') + ',raku%3Aabout&a=0')
     page.wait_for_selector('.tab')
-    check('a record that isn\'t a tile never becomes a tab from a link (a first screen instead)', len(page.query_selector_all('.tab')) == 2 and 'cafe.thunderbird.way.signpost' not in page.evaluate('location.hash'), page.evaluate('location.hash'))
+    check('a record that isn\'t a tile never becomes a tab from a link (a first screen instead)', len(page.query_selector_all('.tab')) == 2 and 'app.bsky.feed.like' not in page.evaluate('location.hash'), page.evaluate('location.hash'))
 
     check("Raku's own policy refused nothing", not policy, str(policy[:3]))
 

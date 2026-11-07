@@ -437,6 +437,10 @@ export const explorerLink = (app, uri) => `https://${app.host}${app.prefix}${uri
 export const RENDERERS = Object.freeze({
   'cafe.thunderbird.way.place': Object.freeze({ name: 'Places', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3mznn4ogtza2s',
     cid: 'bafyreibw7fq7qy677hy2sxh3hxw724xv2pnyxotxddie5m26cy2hntfaqu' }),   // published Nov 6 2026
+  // The signpost renderer (claude/raku-renderer-tiles-plan.md, "The signpost renderer"): node scripts/publish.mjs
+  // --signpost in C:\thunderbird-cafe\maze-tiles prints these two values (its published.json: "signpost-renderer").
+  'cafe.thunderbird.way.signpost': Object.freeze({ name: 'Signposts', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3mzoty54cln2u',
+    cid: 'bafyreifeyejtny7l7dc6kv33yiyasihzfvgd2mjdvyr5ubxlkt2lj7b4fa' }),   // published Nov 6 2026
 });
 /** The pinned renderer for records of this kind, or null (none, or not pinned yet). */
 export function rendererFor(collection, renderers = RENDERERS) {
@@ -447,8 +451,9 @@ export function rendererFor(collection, renderers = RENDERERS) {
 export const pinnedRenderers = (renderers = RENDERERS) => Object.keys(renderers).map((c) => rendererFor(c, renderers)).filter(Boolean);
 // A renderer asking Raku to open an address (RT5): at:// addresses only, at most this long, and requests closer than
 // gapMs to the last one from the same tab are ignored. handleMs: how long the record waits for its author's handle
-// to check out before it's sent without one (the tile shows the DID then).
-export const RENDER = Object.freeze({ openMaxChars: 600, gapMs: 1000, handleMs: 1500 });
+// to check out before it's sent without one (the tile shows the DID then). getMax: how many records a renderer may
+// have Raku read for it, per load (SR6: only records named in the one it was given, or in that record's account).
+export const RENDER = Object.freeze({ openMaxChars: 600, gapMs: 1000, handleMs: 1500, getMax: 20 });
 // On this computer only: ?feed=at://…/app.bsky.feed.generator/… shows Tile news from another feed (the checks'
 // stand-in feed, say).
 export function feedUri(loc = globalThis.location) {

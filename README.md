@@ -475,6 +475,14 @@ for `RENDERERS`). Until its `uri` and `cid` are filled in, places keep opening t
   the address box shows the record in an explorer (PDSls, Taproot), sharing the link message's remembered choice.
   A `#t=` link or a reload brings the tab back (`opensHere` in `src/address.js`). Accounts hidden by Raku's moderation
   aren't shown ("This account's records aren't shown in Raku."). A whole collection still opens the link message.
+- **Signposts (Nov 6)**, the second renderer, for `cafe.thunderbird.way.signpost` (where one exit of a tile leads; e.g.
+  `at://thunderbird.cafe/cafe.thunderbird.way.signpost/winter-forest.slide`), published with `node scripts/publish.mjs
+  --signpost` in `C:\thunderbird-cafe\maze-tiles`. Until its pin is filled in, signposts keep opening the link message.
+  It also asks Raku to **read records for it** (the plan's "The signpost renderer", SR2 and SR6), so it can show names:
+  `{ get: "at://…" }`, answered with `{ got, record }` (the same shape) or `{ got, error }` (`not-allowed`, `too-many`,
+  `hidden`, `not-found`). Only a single record **named in the record the renderer was given, exactly as written there,
+  or in that record's own account**; at most 20 per load (`RENDER.getMax`); hidden accounts and tiles refused
+  (`getTarget`, `createGetBudget` in `src/renderers.js`; `answerGet` in `src/app.js`). Read-only, like the rest.
 - Unit tests: `test/renderers.test.mjs`. Browser: `test/browser/check_renderer.py` (below).
 
 ## Try it

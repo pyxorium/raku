@@ -33,7 +33,7 @@ import { drawYourShelf, drawAccountTiles, drawShelfTeaser } from './shelf-pages.
 import { attachTypeahead } from './typeahead.js';
 import { drawTable, createPanel } from './tables/table-page.js';
 import { createPinnedLoader, TileChanged } from './tables/pinned.js';
-import { READY, UP, DOWN, recordPayload, recordTitle, readOpenRequest, openDecision, createOpenGate } from './renderers.js';
+import { READY, UP, DOWN, recordPayload, recordTitle, readOpenRequest, openDecision, createOpenGate, readGetRequest, getTarget, createGetBudget } from './renderers.js';
 import { createAccountMenu } from './account-menu.js';
 import { createLinkMessage } from './link-message.js';
 import { createDiscover, drawDiscover } from './discover.js';
@@ -561,10 +561,10 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     // The record goes out with the handle once it checks out, or without one after a moment (the tile shows the DID).
     const handleSoon = Promise.race([handle, new Promise((r) => setTimeout(() => r(null), RENDER.handleMs))]);
     const record = { did, collection: target.collection, rkey: target.rkey, cid: rec.cid, value: rec.value };
-    startRenderer(p, tab, renderer, async () => recordPayload({ ...record, handle: await handleSoon }));
+    startRenderer(p, tab, renderer, async () => recordPayload({ ...record, handle: await handleSoon }), { did, value: rec.value, handle: handleSoon });
   }
 
-  async function startRenderer(p, tab, renderer, payload) {
+  async function startRenderer(p, tab, renderer, payload, given) {
     const mine = p.attempt;
     const alive = () => mine === p.attempt;
     p.state = 'loading';
@@ -594,12 +594,14 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (!TILE_POPUPS) frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-downloads');
     p.frame = frame;
     p.el.prepend(frame);
-    p.renderer = { payload, gate: createOpenGate() };
+    p.renderer = { payload, given, gate: createOpenGate(), gets: createGetBudget() };
   }
 
-  // A renderer's messages (RT1, RT5): "ready" is answered with the record (every time: a reloaded tile asks again);
-  // { open: "at://…" } opens that address as if it had been typed, a tile or a record with a renderer in a new tab.
-  // Nothing else is answered, and nothing a renderer sends can write anywhere.
+  // A renderer's messages (RT1, RT5, SR6): "ready" is answered with the record (every time: a reloaded tile asks again);
+  // { open: "at://…" } opens that address as if it had been typed, a tile or a record with a renderer in a new tab;
+  // { get: "at://…" } is answered with that record when it's named in the record the renderer was given, or is in
+  // that record's own account (at most RENDER.getMax per load; hidden accounts and tiles refused). Nothing else is
+  // answered, and nothing a renderer sends can write anywhere.
   async function fromRenderer(pane, d) {
     const r = pane.renderer;
     if (d.action === READY) {
@@ -611,6 +613,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       return;
     }
     if (d.action !== UP) return;
+    const wanted = readGetRequest(d.payload);
+    if (wanted) { answerGet(pane, wanted); return; }
     const address = readOpenRequest(d.payload);
     if (!address || !r.gate.take()) return;
     const decision = openDecision(address);
@@ -618,6 +622,27 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     else if (decision.action === 'record') showRecord(decision.target);
     else if (decision.action === 'post') linkMessage.show({ post: { actor: decision.target.actor, rkey: decision.target.rkey }, from: `"${pane.title}" asked to open a post. Raku shows tiles, so posts open in their app.` });
     else say(decision.reason);
+  }
+
+  // A renderer's { get } (SR6): read the record from its author's own server, as for the record itself, and send it back
+  // in the same shape (RT4), or { got, error } with error one of not-allowed, too-many, hidden, not-found.
+  async function answerGet(pane, address) {
+    const mine = pane.attempt;
+    const send = (payload) => { if (mine === pane.attempt && pane.frame) pane.frame.contentWindow.postMessage({ action: DOWN, payload }, '*'); };
+    const r = pane.renderer;
+    const handle = await r.given.handle;
+    const t = getTarget(address, { ...r.given, handle });
+    if (!t) return send({ got: address, error: 'not-allowed' });
+    if (!r.gets.take()) return send({ got: address, error: 'too-many' });
+    try {
+      const did = await resolver.didFor(t.actor);
+      if (await moderation.isAccountHidden(did) || (t.collection === 'ing.dasl.masl' && await moderation.isHidden(did, t.rkey))) return send({ got: address, error: 'hidden' });
+      const rec = await resolver.record(did, t.collection, t.rkey);
+      const hd = await Promise.race([resolver.checkedHandle(did).catch(() => null), new Promise((ok) => setTimeout(() => ok(null), RENDER.handleMs))]);
+      send({ got: address, record: recordPayload({ did, handle: hd, collection: t.collection, rkey: t.rkey, cid: rec.cid, value: rec.value }) });
+    } catch {
+      send({ got: address, error: 'not-found' });
+    }
   }
 
   // "Open in ▾" (RT3): the explorers, the remembered one ticked; choosing one opens the record in a new window (no

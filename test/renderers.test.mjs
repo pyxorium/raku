@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { RENDERERS, rendererFor, pinnedRenderers, RENDER } from '../src/config.js';
 import { parseTarget, opensHere } from '../src/address.js';
 import { createTabs, current } from '../src/tabs.js';
-import { READY, UP, DOWN, recordPayload, recordTitle, readOpenRequest, openDecision, createOpenGate } from '../src/renderers.js';
+import { READY, UP, DOWN, recordPayload, recordTitle, readOpenRequest, openDecision, createOpenGate, readGetRequest, getTarget, createGetBudget } from '../src/renderers.js';
 
 const PLACE = 'cafe.thunderbird.way.place';
 const PINNED = { [PLACE]: { name: 'Places', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3mzplacesxxxx', cid: 'bafyreiplaces' } };
@@ -102,4 +102,51 @@ test('one request at a time: none within a second of the last', () => {
 
 test('the wire names are the tiles spec\'s data protocol (tp-data)', () => {
   assert.deepEqual([READY, UP, DOWN], ['tiles-protocol-up-data-ready', 'tiles-protocol-up-data-payload', 'tiles-protocol-down-data-payload']);
+});
+
+// ---- The signpost renderer and the read request (claude/raku-renderer-tiles-plan.md, "The signpost renderer", SR6) ----
+const SIGNPOST = 'cafe.thunderbird.way.signpost';
+const TC = 'did:plc:6vxjigxrqizmbo56gojxico3', PX = 'did:plc:rqbqpaaluty5v47jwciowpik';
+const MAZE = `at://${PX}/cafe.thunderbird.way.place/maze`;
+const slide = { did: TC, handle: 'thunderbird.cafe', value: { $type: SIGNPOST, to: [{ place: MAZE, entrance: 'obelisk' }], updatedAt: '2026-10-29T05:40:00Z' } };
+
+test('the signpost renderer is on the list; until it is pinned, signposts keep opening the message', () => {
+  assert.ok(RENDERERS[SIGNPOST], 'signposts have a renderer entry');
+  assert.equal(RENDERERS[SIGNPOST].name, 'Signposts');
+  if (RENDERERS[SIGNPOST].uri) {
+    assert.match(RENDERERS[SIGNPOST].uri, /^at:\/\/did:plc:6vxjigxrqizmbo56gojxico3\/ing\.dasl\.masl\/[a-z2-7]{13}$/, 'published from thunderbird.cafe');
+    assert.match(RENDERERS[SIGNPOST].cid, /^bafyrei[a-z2-7]{52}$/, 'pinned by its record CID');
+    assert.equal(rendererFor(SIGNPOST), RENDERERS[SIGNPOST]);
+  } else {
+    assert.equal(rendererFor(SIGNPOST), null);
+    assert.equal(openDecision(`at://${TC}/${SIGNPOST}/winter-forest.slide`).action, 'record', 'the link message, as before');
+  }
+});
+
+test('a read request: an at:// address in { get }, nothing else', () => {
+  assert.equal(readGetRequest({ get: MAZE }), MAZE);
+  for (const p of [{ get: 'https://pdsls.dev/at://x' }, { get: 42 }, { open: MAZE }, { get: `at://${'x'.repeat(700)}` }, { get: 'at://has space/x/y' }, null, 'get']) {
+    assert.equal(readGetRequest(p), null, JSON.stringify(p));
+  }
+});
+
+test('what a renderer may have Raku read (SR6): addresses named in its record, or records in its record\'s account', () => {
+  assert.equal(getTarget(MAZE, slide).rkey, 'maze', 'named in the signpost\'s to list');
+  assert.equal(getTarget(`at://${TC}/cafe.thunderbird.way.place/winter-forest`, slide).rkey, 'winter-forest', 'the same account (the heading\'s place)');
+  assert.equal(getTarget('at://thunderbird.cafe/cafe.thunderbird.way.place/winter-forest', slide).actor, 'thunderbird.cafe', 'the same account by its checked handle');
+  assert.equal(getTarget(`at://${PX}/cafe.thunderbird.way.place/somewhere-else`, slide), null, 'another account\'s record the signpost doesn\'t name');
+  assert.equal(getTarget('at://pyxorium.com/cafe.thunderbird.way.place/maze', slide), null, 'only as written in the record');
+  assert.equal(getTarget(`at://${PX}/cafe.thunderbird.way.place`, slide), null, 'not a collection');
+  assert.equal(getTarget(`at://${PX}`, slide), null, 'not an account');
+  assert.equal(getTarget(MAZE, null), null);
+  const tile = getTarget(`at://${PX}/ing.dasl.masl/3myyjuyr2ja2s`, { ...slide, value: { to: [{ tile: `at://${PX}/ing.dasl.masl/3myyjuyr2ja2s` }] } });
+  assert.deepEqual([tile.collection, tile.rkey], ['ing.dasl.masl', '3myyjuyr2ja2s'], 'a tile named in the record');
+  const deep = { ...slide, value: { a: { b: [{ c: MAZE }] } } };
+  assert.ok(getTarget(MAZE, deep), 'anywhere in the record');
+});
+
+test('at most RENDER.getMax reads per load', () => {
+  assert.equal(RENDER.getMax, 20);
+  const b = createGetBudget({ max: 3 });
+  assert.deepEqual([b.take(), b.take(), b.take(), b.take()], [true, true, true, false]);
 });
