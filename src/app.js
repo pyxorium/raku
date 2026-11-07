@@ -595,6 +595,10 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     p.frame = frame;
     p.el.prepend(frame);
     p.renderer = { payload, given, gate: createOpenGate(), gets: createGetBudget() };
+    // RT12: the record's tab shows its renderer's own icon (the carved door, the trail signpost), read from the
+    // renderer's record as a tile's tab reads its tile's; the dot until then, and if it has none.
+    const rdid = (/^at:\/\/([^/]+)\//.exec(renderer.uri) || [])[1];
+    if (rdid && tile.manifest) resolver.account(rdid).then(({ pds }) => loadIcon(p, rdid, pds, tile.manifest, alive)).catch(() => { /* the dot stays */ });
   }
 
   // A renderer's messages (RT1, RT5, SR6): "ready" is answered with the record (every time: a reloaded tile asks again);

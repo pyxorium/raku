@@ -180,6 +180,11 @@ try:
             f = inner()
             return f.locator(sel).first.inner_text() if f else None
         def tab_count(): return page.eval_on_selector_all('.tab', 'ts => ts.length')
+        # RT12: the front tab's icon, as [width, height, its pixels' fingerprint] once drawn, else None
+        def tab_icon():
+            return page.evaluate('''() => { const i = document.querySelector('.tab.on img.tab-icon'); if (!i || !i.complete || !i.naturalWidth) return null;
+              const c = document.createElement('canvas'); c.width = 32; c.height = 32; const g = c.getContext('2d'); g.drawImage(i, 0, 0, 32, 32);
+              const d = g.getImageData(0, 0, 32, 32).data; let h = 0; for (let k = 0; k < d.length; k += 7) h = (h * 31 + d[k]) >>> 0; return [i.naturalWidth, i.naturalHeight, h]; }''')
 
         # 1. a place typed in the box opens in this tab, shown by the renderer
         page.fill('.addr', f'at://{A_HANDLE}/{PLACE}/winter-forest'); page.press('.addr', 'Enter')
@@ -190,6 +195,8 @@ try:
         check('...the tile behind it', tile_text('.card code') == FOREST_TILE)
         check('the status box is gone once the renderer has the record', wait_for(lambda: page.eval_on_selector('.pane.front .tile-status', 'b => b.hidden'), 5))
         check('the tab is titled with the place\'s name', page.inner_text('.tab.on .tab-title') == 'Winter Forest')
+        place_icon = wait_for(tab_icon, 5)
+        check('RT12: the place\'s tab shows its renderer\'s icon (the carved door, 256 px)', place_icon and place_icon[:2] == [256, 256], str(place_icon))
         check('the address box shows the place\'s address with the checked handle', wait_for(lambda: page.input_value('.addr') == f'at://{A_HANDLE}/{PLACE}/winter-forest', 5), page.input_value('.addr'))
         check('no star (the shelf keeps tiles and accounts); no Messages button', page.eval_on_selector('.star-btn', 'b => b.hidden') and not page.is_visible('.pane.front .panel-pill'))
         check('the tab is kept in the page address (#t=)', 'winter-forest' in page.url and '#t=' in page.url)
@@ -266,6 +273,7 @@ try:
         page.fill('.addr', f'at://{B_HANDLE}/{PLACE}/hidden'); page.press('.addr', 'Enter')
         check('a place from a hidden account isn\'t shown', wait_for(lambda: "This account's records aren't shown in Raku." in page.inner_text('.pane.front .tile-status'), 10))
         check('...and the renderer isn\'t started', page.query_selector('.pane.front iframe.tile-frame') is None)
+        check('...its tab keeps the plain dot (no renderer, no icon)', page.query_selector('.tab.on img.tab-icon') is None and page.query_selector('.tab.on .tab-dot') is not None)
         page.fill('.addr', f'at://{A_HANDLE}/{PLACE}/nowhere'); page.press('.addr', 'Enter')
         check('a place that doesn\'t exist: says so', wait_for(lambda: "There's no record at that address" in page.inner_text('.pane.front .tile-status'), 10))
 
@@ -276,6 +284,8 @@ try:
         check('...the names Raku read for it: the heading from Winter Forest\'s place', wait_for(lambda: tile_text('h1') == 'Slide, in Winter Forest', 10), str(tile_text('h1')))
         check('...the button from the maze\'s place', wait_for(lambda: tile_text('button.go') == 'Go to Escher maze', 5), str(tile_text('button.go')))
         check('...the destination\'s account with its checked handle', wait_for(lambda: tile_text('.dest .sub') == f'by @{P_HANDLE} [{P}]', 5), str(tile_text('.dest .sub')))
+        sign_icon = wait_for(tab_icon, 5)
+        check('RT12: the signpost\'s tab shows its renderer\'s icon (the trail signpost), not the door', sign_icon and sign_icon[:2] == [256, 256] and sign_icon != place_icon, str(sign_icon))
         maze_reads = [c for c in calls if 'getRecord' in c and 'rkey=maze' in c and f'repo={P.replace(":", "%3A")}' in c]
         check('...the maze\'s place read from its author\'s own server', maze_reads, str(maze_reads[:1]))
         f = inner()
