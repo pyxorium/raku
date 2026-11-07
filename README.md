@@ -493,6 +493,44 @@ for `RENDERERS`). Until its `uri` and `cid` are filled in, places keep opening t
   (`readPictureRequest`, `pictureSource`, `PICTURE_TYPES` in `src/renderers.js`; `answerPicture` in `src/app.js`).
 - Unit tests: `test/renderers.test.mjs`. Browser: `test/browser/check_renderer.py` (below).
 
+## Ways (Nov 2026): carrying travellers between tiles
+
+Decisions: `claude/raku-ways-plan.md` (RW1 to RW8). Read-only; the sign-in promise is unchanged. Raku is now a **host**
+for tiles with ways (a `/ways.json` among their files: the Escher maze, Winter Forest; the format is
+`claude/escher-maze-ways-plan.md`, M21 to M24), as the travel pages at `https://thunderbird.cafe/way/<tile>/<exit>`
+are. Rules in `src/ways.js`; the host in `src/app.js` (`hostWays`, `fromWayTile`, `leaveBy`, `openWay`).
+
+- **The messages** (`tiles-protocol-up-way-payload` / `tiles-protocol-down-way-payload`, v 1): a tile's `hello` is
+  answered with `status` (each exit `open` or `dormant`, from its signpost, read while the tile loads); `arrive` is
+  sent when the tile was reached by a way (the signpost's entrance) or by Back (the portal you left by); on `leave`
+  Raku reads that exit's signpost. A tile opened by its own address gets a host but no arrival (the maze starts in its
+  Courtyard with the obelisk glowing; Winter Forest, ways-only, keeps its postcard).
+- **The same tab follows the traveller** (RW1): one place runs at a time. The tab's address becomes **the way just
+  taken** (RW2), `raku:way/<account>/<signpost>`, e.g. `raku:way/thunderbird.cafe/winter-forest.slide`; a reload or a
+  `#t=` link replays that leg (reads the signpost now). Its title is the place's name.
+- **Anyone's ways** (RW3): any account's signposts, places and tiles, read from their authors' own servers; a hidden
+  account or tile is a way that's blocked; a place opens exactly the version it points at (its `cid`), else blocked.
+- **The screen between places** (RW4): the destination's banner, dimmed, behind its name and "by @handle" (a calm
+  colour without one); it fades once the place says hello, but stays at least about 1.5 s from the moment you step
+  through (RW9, `WAYS.minScreenMs` in config.js), and the place gets the keys again once it has gone. **Pick a door** on it when a way leads
+  to several places, with **Stay here** on the way out of a place (Back on a way opened by its address).
+  **The way is blocked.** (a dormant or unreadable signpost, a hidden or changed destination): back at that portal.
+- **Back and Forward** step along the trail: each leg keeps its door beside its address in the tab's history
+  (`stateAt` in `src/tabs.js`, this visit only), so Back lands at the portal you left by, Forward arrives as you did.
+  Reload on a way reads its signpost again.
+- **A signpost's "Go to"** (the Signposts renderer, RW5) takes that way in a new tab, to the destination chosen,
+  arriving at its entrance (`signpostGoTo`). A place's own address still shows only its postcard.
+- **Rooms** are left out (RW6): a tile on a room's stage gets no host.
+- **The keys** (RW10, for every tile, not only ways): a tile or renderer that opens in the tab in front gets the keys
+  once its page is in (`KEYS_AFTER_MS` in config.js; `focusIfFront` in app.js), however it got there: the address box,
+  a card, Back and Forward, a reload; never one in a background tab, and never taken from someone typing in Raku's own
+  boxes or using its menus and dialogs meanwhile.
+- **Test signposts** (RW8), on 127.0.0.1 only, as the travel page's: `?sign=<signpost key>:<place key>[@<account>]/<entrance>`
+  (several destinations with commas; nothing after the colon is dormant) treats that signpost as filled; a dashed
+  "test signposts" mark shows beside the address box. E.g. `http://127.0.0.1:5180/?sign=winter-forest.wardrobe:maze@pyxorium.com/obelisk`.
+  The live Raku ignores it.
+- Unit tests: `test/ways.test.mjs`. Browser: `test/browser/check_ways.py` (below).
+
 ## Try it
 
 ```
@@ -521,7 +559,7 @@ and open http://127.0.0.1:5181/.
 | `src/resolve.js` | handle → account → server → a tile's record (and any record, for renderer tiles) |
 | `src/tiles.js` | a tile's files (adapted copy of the site's `src/lib/at-tile-loader.js`), its declared size |
 | `src/moderation.js` | the coded hide list and Bluesky's moderation |
-| `src/tabs.js` | the tabs as data (history, the cap, the page address) |
+| `src/tabs.js` | the tabs as data (history with a state beside each place, the cap, the page address) |
 | `src/app.js` | the page: tab strip, address bar, panes, the first screen |
 | `src/frame-guard.js` | refusing to run inside another site's frame |
 | `src/icons.js` | Raku's own icons, drawn (back, forward, reload, new tab, close, shelf, star, person; stage 6: compass, search, news, people; stage 6c: clock, brush) |
@@ -543,6 +581,7 @@ and open http://127.0.0.1:5181/.
 | `src/bluesky.js` | public reads of feeds and posts (one server, `APPVIEW` in config) |
 | `src/link-message.js` | the link message: where a link goes, Open / Cancel |
 | `src/renderers.js` | renderer tiles: what a renderer is handed, what it may ask for (tp-data) |
+| `src/ways.js` | ways: reading a tile's `/ways.json`, signposts, places and doors; the way messages; test signposts |
 | `src/about-page.js` | the About page: what Raku keeps, who it talks to, how tiles are kept in their box, installing Raku |
 | `src/app-shell.js` | stage 9: installed or not, the service worker's registration, the update rule, the install offer, the tabs in the title bar |
 | `src/room-tab.js`, `src/room-words.js` | rooms step 1: the room tab hosting rooms-lab's room (the join screen, invites, one room at a time, the rejoin after a reload); the words and links, tested in Node |
@@ -598,7 +637,7 @@ for a guest's request and Allow from it, Pop out with the floating window showin
 policy, Back to the room from the window, and on a phone the bar above the toolbar, its chip and the tabs sheet's
 marker.
 
-`check_renderer.py` (75 checks, renderer tiles) sets everything up itself, like `check_daisy.py`: a copy of this folder
+`check_renderer.py` (76 checks, renderer tiles; since ways, a signpost's "Go to" taking that way to the maze's tile) sets everything up itself, like `check_daisy.py`: a copy of this folder
 with a test pin in `RENDERERS`, bundled, Raku's page and the loader replica, and the real place renderer from a
 maze-tiles folder. Usage: `python3 test/browser/check_renderer.py <work folder> <tiles-loading-server folder> <maze-tiles
 folder>`. A place typed in the box opens in its tab through the real loader; the record handed over (name, checked
@@ -620,3 +659,12 @@ from signed out (one window) and from signed in (Continue, one short window), th
 else is mingling, Invite / Not now / No answer, Play to one table at the right seats, "here" only while the
 start screen is the tab in front and Raku is seen, one lounge with the Daisy page, the same account in two
 places, mingling off (the record deleted), a reload while mingling, the phone width.
+
+`check_ways.py` (58 checks, ways) bundles and starts everything itself, as `check_renderer.py` does (usage at the top:
+a work folder, a tiles-loading-server folder, a maze-tiles folder for the forest's banner): stand-in tiles that speak
+the way messages through the loader replica; a tile opened directly answered with no arrival; stepping through with
+the screen and its banner (up at least 1.5 s however fast the place loads), the same tab, the way's address and title; a dormant way, a hidden account's place and a
+changed place (blocked, back at the portal); Pick a door with Stay here and a door chosen; Back and Forward along the
+trail; a reload replaying the last leg; a ways-only place opened directly; a dormant way and several doors typed; a
+tile without `/ways.json` not answered; the keys going to a tile opened from the address box or by Back, but not from
+someone typing in the address box (RW10); test signposts; the phone.

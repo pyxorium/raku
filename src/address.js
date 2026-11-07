@@ -140,6 +140,23 @@ function account(actor) {
   return { ok: true, kind: 'account', actor, uri: accountPageUri(actor) };
 }
 
+// ---- ways (claude/raku-ways-plan.md, RW2) ----
+// A tab that has travelled through a portal shows the way just taken: the exit's signpost, by its account and key.
+//   raku:way/<did or handle>/<signpost's record key>     e.g. raku:way/thunderbird.cafe/winter-forest.slide
+// A reload or a shared link replays that one leg: Raku reads the signpost now and you arrive where it leads.
+export const WAY_PREFIX = 'raku:way/';
+export const wayUri = (actor, rkey) => `${WAY_PREFIX}${actor}/${rkey}`;
+function way(s) {
+  const m = s.match(/^raku:way\/([^/\s]+)\/([^/\s]+)$/);
+  if (!m) return fail("That way's address isn't one Raku can read: raku:way/<account>/<signpost>.");
+  let actor, rkey;
+  try { actor = decodeURIComponent(m[1]); rkey = decodeURIComponent(m[2]); } catch { return fail("That way's address can't be read."); }
+  const a = account(actor);
+  if (!a.ok) return a;
+  if (!isRkey(rkey)) return fail("That way's signpost name isn't valid.");
+  return { ok: true, kind: 'way', actor: a.actor, rkey, uri: wayUri(a.actor, rkey) };
+}
+
 // ---- stage 6: Discover, search and posts ----
 //   raku:discover              the Discover page (its first source)
 //   raku:discover/<source>     one source in the centre: news, recent (stage 6c), following, make (stage 6c:
@@ -259,8 +276,8 @@ function looksLikeWords(s) {
  * (a handle or DID on its own: @thunderbird.cafe, thunderbird.cafe, did:plc:…, at://handle, or a
  * lexicographer.space / appmosphe.re link to an account), Discover, a post (stage 6), or words to search
  * for; since the open-links round, a record or collection that isn't tiles, and links from PDSls, Taproot and
- * profile pages. → { ok, kind: 'tile' | 'shelf' | 'account' | 'table' | 'discover' | 'search' | 'post' | 'record'
- * | 'collection', uri, … }. 'post', 'record' and 'collection' open outside Raku (opensOutside), never in a tab.
+ * profile pages; since ways, a way taken (raku:way/…). → { ok, kind: 'tile' | 'shelf' | 'account' | 'table' |
+ * 'discover' | 'search' | 'post' | 'record' | 'collection' | 'way', uri, … }. 'post', 'record' and 'collection' open outside Raku (opensOutside), never in a tab.
  */
 export function parseTarget(input, { inner = false } = {}) {
   const s = String(input || '').trim();
@@ -268,6 +285,7 @@ export function parseTarget(input, { inner = false } = {}) {
   if (s === ABOUT_URI) return { ok: true, kind: 'about', uri: ABOUT_URI };
   if (s === ROOM_URI) return { ok: true, kind: 'room', uri: ROOM_URI };
   if (s === DISCOVER_URI) return { ok: true, kind: 'discover', source: null, uri: DISCOVER_URI };
+  if (s.startsWith(WAY_PREFIX)) return way(s);
   const disc = s.match(/^raku:discover\/([a-z]{1,20})$/);
   if (disc) {
     if (!DISCOVER_SOURCES.includes(disc[1])) return fail("That Discover address isn't one Raku knows.");

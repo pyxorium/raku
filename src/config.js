@@ -456,6 +456,17 @@ export const pinnedRenderers = (renderers = RENDERERS) => Object.keys(renderers)
 // its picture requests count against the same allowance. pictureMaxBytes: the largest picture Raku hands a renderer
 // (claude/raku-places-card-plan.md, PC6: a tile's banner).
 export const RENDER = Object.freeze({ openMaxChars: 600, gapMs: 1000, handleMs: 1500, getMax: 20, pictureMaxBytes: 1024 * 1024 });
+// Ways (claude/raku-ways-plan.md, RW1 to RW8): Raku carries travellers between tiles with ways, as the travel pages do
+// (maze-tiles site/travel.js). After a place says hello and Raku sends its arrival, the screen between places stays
+// revealMs (the tile plays its own arrival under it), then fades over fadeMs; a destination without ways shows plainMs
+// after its page loads; a tile with ways that never says hello lets the screen go helloMs after its page loads.
+// minScreenMs (RW9): however fast the place loads, the screen stays at least this long from the moment you step
+// through, so its name and banner can be read. waysBytes: the most a tile's /ways.json may be. bannerBytes: the largest
+// banner shown on the screen (RW4).
+// RW10 (claude/raku-ways-plan.md): a tile opened in the tab in front gets the keys this long after its page is served
+// (twice, as its page settles).
+export const KEYS_AFTER_MS = Object.freeze([300, 1200]);
+export const WAYS = Object.freeze({ revealMs: 450, fadeMs: 400, plainMs: 1200, helloMs: 8000, minScreenMs: 1500, waysBytes: 64 * 1024, bannerBytes: 2 * 1024 * 1024 });
 // On this computer only: ?feed=at://…/app.bsky.feed.generator/… shows Tile news from another feed (the checks'
 // stand-in feed, say).
 export function feedUri(loc = globalThis.location) {

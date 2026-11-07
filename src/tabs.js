@@ -3,8 +3,10 @@
 // A tab shows a tile (its at:// address), your shelf (raku:shelf), an account's tiles (raku:tiles/<actor>),
 // a table (raku:table/…), Discover or search results (raku:discover…, raku:search/…, stage 6), a record shown by its
 // renderer (at://…/<collection>/<rkey>, renderer tiles) or the first
-// screen (address null). Back and forward
-// move through the addresses that tab has shown. The open tabs are kept in the page's own address
+// screen (address null), or a way taken through a portal (raku:way/…, ways). Back and forward
+// move through the addresses that tab has shown. Each place in a tab's history can keep a little state beside its
+// address (ways: the door a portal led through, and which exit you left by), for this visit only: a reload keeps the
+// addresses, not the state. The open tabs are kept in the page's own address
 // (the part after #), so a reload or a copied link reopens the same set:
 //   #t=<at:// address, encoded>,<…>&a=<the tab in front, from 0>       (an empty slot = a first screen)
 
@@ -12,8 +14,10 @@ import { TABS, RENDERERS } from './config.js';
 import { parseTarget, opensHere } from './address.js';
 
 let nextId = 1;
-const newTab = (uri = null) => ({ id: `t${nextId++}`, history: [uri], at: 0 });
+const newTab = (uri = null, state = null) => ({ id: `t${nextId++}`, history: [uri], states: [state], at: 0, moved: 'open' });
 export const current = (tab) => tab.history[tab.at];
+/** The state kept beside a place in a tab's history (the one shown, by default), or null. */
+export const stateAt = (tab, i = tab.at) => (tab.states && i >= 0 && i < tab.states.length ? tab.states[i] || null : null);
 
 export function createTabs({ max = TABS.max, renderers = RENDERERS } = {}) {
   let tabs = [newTab()];
@@ -30,9 +34,9 @@ export function createTabs({ max = TABS.max, renderers = RENDERERS } = {}) {
     onChange(f) { listeners.add(f); return () => listeners.delete(f); },
 
     /** Opens a new tab (a tile, or the first screen). → the tab, or null when the cap is reached. */
-    open(uri = null, { front = true } = {}) {
+    open(uri = null, { front = true, state = null } = {}) {
       if (tabs.length >= max) return null;
-      const t = newTab(uri);
+      const t = newTab(uri, state);
       tabs.push(t);
       if (front) active = t.id;
       changed({ type: 'open', id: t.id });
@@ -40,20 +44,23 @@ export function createTabs({ max = TABS.max, renderers = RENDERERS } = {}) {
     },
 
     /** Shows another address in a tab (the address box, a pick); drops any forward history. */
-    go(id, uri) {
+    go(id, uri, state = null) {
       const t = find(id);
       if (!t) return;
-      if (current(t) === uri) { changed({ type: 'reload', id }); return; }
+      if (current(t) === uri) { t.states[t.at] = state; t.moved = 'go'; changed({ type: 'reload', id }); return; }
       t.history = t.history.slice(0, t.at + 1);
+      t.states = t.states.slice(0, t.at + 1);
       t.history.push(uri);
+      t.states.push(state);
       t.at = t.history.length - 1;
+      t.moved = 'go';
       changed({ type: 'go', id });
     },
 
     canBack(id) { const t = find(id); return !!t && t.at > 0; },
     canForward(id) { const t = find(id); return !!t && t.at < t.history.length - 1; },
-    back(id) { const t = find(id); if (t && t.at > 0) { t.at--; changed({ type: 'go', id }); } },
-    forward(id) { const t = find(id); if (t && t.at < t.history.length - 1) { t.at++; changed({ type: 'go', id }); } },
+    back(id) { const t = find(id); if (t && t.at > 0) { t.at--; t.moved = 'back'; changed({ type: 'go', id }); } },
+    forward(id) { const t = find(id); if (t && t.at < t.history.length - 1) { t.at++; t.moved = 'forward'; changed({ type: 'go', id }); } },
 
     activate(id) { if (find(id) && active !== id) { active = id; changed({ type: 'activate', id }); } },
 

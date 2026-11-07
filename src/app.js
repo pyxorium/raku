@@ -18,12 +18,19 @@
 // renderer (config.js RENDERERS: places), opens in a tab: Raku reads the record, runs the renderer tile, hands it the
 // record over the tiles spec's data protocol (renderers.js), opens what it asks for in a new tab (at:// only), and puts
 // "Open in ▾" (PDSls, Taproot) beside the address box. Other records still open the link message.
+// Ways (claude/raku-ways-plan.md, RW1 to RW8): Raku is a host for tiles with ways (a /ways.json: the maze, Winter
+// Forest). It answers a tile's hello with which of its exits lead somewhere; when someone steps through one, Raku reads
+// that exit's signpost and takes them on in the same tab (the tab's address becomes the way taken, raku:way/…), with a
+// screen between places showing where they're going, "Pick a door" when a way leads to several places, and Back along
+// the trail landing at the portal they left by. The rules are in ways.js.
 
 import { Tile } from '@dasl/tile-loader';
 import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS, TABLES, ROOMS, tableForTile, isRoomHouse, appmosphereCopy,
-  rendererFor, pinnedRenderers, RENDER, RECORD_APPS, RECORD_APP_KEY, recordApp, explorerLink } from './config.js';
-import { parseAddress, parseTarget, atUri, SHELF_URI, ABOUT_URI, ROOM_URI, roomInHash, tableUri, DISCOVER_URI, discoverUri } from './address.js';
-import { createTabs, current } from './tabs.js';
+  rendererFor, pinnedRenderers, RENDER, RECORD_APPS, RECORD_APP_KEY, recordApp, explorerLink, WAYS, KEYS_AFTER_MS } from './config.js';
+import { parseAddress, parseTarget, atUri, SHELF_URI, ABOUT_URI, ROOM_URI, roomInHash, tableUri, DISCOVER_URI, discoverUri, wayUri, WAY_PREFIX } from './address.js';
+import { createTabs, current, stateAt } from './tabs.js';
+import { WAY_UP, readWays, entranceFor, readWayMessage, statusMessage, arriveMessage, testSignposts, createWayReader, chosenDoor, keepDoor,
+  signpostGoTo, parseAtUri } from './ways.js';
 import { describeTile, sizeVerdict, createPathLoader, blobCidOf } from './tiles.js';
 import { formatBytes, NetError } from './net.js';
 import { sniffPicture } from './moderation.js';
@@ -51,6 +58,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   // Renderer tiles too (RT2): the same pinned loading, for the renderers on Raku's list.
   mothership.addLoader(createPinnedLoader({ Tile, pins: [...Object.values(TABLES).flatMap((t) => [t.house, t.player]), ...pinnedRenderers()], resolver }));
   const tabs = createTabs();
+  // Ways (RW8): on this computer, ?sign=… in Raku's address can fill a signpost for testing; the live Raku ignores it.
+  const wayOverrides = testSignposts(loc);
+  const ways = createWayReader({ resolver, moderation, overrides: wayOverrides });
   const panes = new Map();          // tab id -> pane state
   const largeOk = new Set();        // tiles the visitor said "Open anyway" to, this visit
   let notice = null;
@@ -79,6 +89,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     title: 'Open this record in an explorer', onclick: () => toggleOpenIn() }, 'Open in', h('span', { class: 'openin-caret', 'aria-hidden': 'true' }, '▾'));
   const openInMenu = h('div', { class: 'openin-menu', role: 'menu', 'aria-label': 'Open this record in', hidden: true });
   const openIn = h('span', { class: 'openin', hidden: true }, openInBtn, openInMenu);
+  // Ways (RW8): a quiet mark while some signposts come from the address (this computer only).
+  const testMark = h('span', { class: 'testmark', hidden: !wayOverrides.size, title: 'This computer only: some signposts come from the address (?sign=…)' }, 'test signposts');
   // Handle suggestions under the box (typeahead.js): choosing one opens that account's tiles.
   attachTypeahead(input, form, { onChoose: (handle) => { input.value = handle; submitAddress(); } });
   const shelfBtn = h('button', { class: 'nav-btn', type: 'button', title: 'Your shelf', 'aria-label': 'Your shelf', onclick: () => goShelf() }, icon('shelf', 18));
@@ -130,7 +142,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       // moves by the Raku label, the free space beside the tabs and this grip, which tabs never cover.
       h('div', { class: 'strip-row' }, brand, strip, newTabBtn, h('span', { class: 'wco-grip', 'aria-hidden': 'true' })),
       h('div', { class: 'bar' }, h('span', { class: 'brand brand-small' }, pot(), SITE.name),
-        h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn, shelfBtn, discoverBtn), form, openIn, menu.button),
+        h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn, shelfBtn, discoverBtn), form, openIn, testMark, menu.button),
       updateLine, noteLine, menu.panel),
     callSlot, stage, toolbar, sheet);
   // Links out of Raku (a post, a link in a post): Raku says where they go and opens them on a click.
@@ -177,10 +189,10 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   const rawGo = tabs.go, rawBack = tabs.back, rawForward = tabs.forward;
   const inRoomHere = (id) => rooms.isLive(id);
   const leaveFirst = () => say('You’re in a room in this tab. Leave the room first, or use another tab.');
-  tabs.go = (id, uri) => {
-    if (inRoomHere(id) && uri !== ROOM_URI) { openNew(uri); return; }
+  tabs.go = (id, uri, state = null) => {
+    if (inRoomHere(id) && uri !== ROOM_URI) { openNew(uri, state); return; }
     if (inRoomHere(id)) { tabs.activate(id); return; }
-    rawGo(id, uri);
+    rawGo(id, uri, state);
   };
   tabs.back = (id) => (inRoomHere(id) ? leaveFirst() : rawBack(id));
   tabs.forward = (id) => (inRoomHere(id) ? leaveFirst() : rawForward(id));
@@ -197,8 +209,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (text) notice = setTimeout(() => { noteLine.hidden = true; }, 6000);
   }
 
-  function openNew(uri = null) {
-    const t = tabs.open(uri);
+  function openNew(uri = null, state = null) {
+    const t = tabs.open(uri, { state });
     if (!t) { say(`Raku keeps up to ${tabs.max} tabs open. Close one to open another.`); return null; }
     if (!uri) setTimeout(() => input.focus(), 0);
     return t;
@@ -295,7 +307,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     let p = panes.get(tab.id);
     if (!p) {
       const el = h('section', { class: 'pane', 'data-tab': tab.id });
-      p = { el, uri: undefined, attempt: 0, timers: [], frame: null, title: 'New tab', icon: null, shownAddress: '', state: 'new', keep: null, dispose: null, panel: null, table: null, mark: null, record: null, renderer: null };
+      p = { el, uri: undefined, attempt: 0, timers: [], frame: null, title: 'New tab', icon: null, shownAddress: '', state: 'new', keep: null, dispose: null, panel: null, table: null, mark: null, record: null, renderer: null,
+        ways: null, screen: null, arrival: null, freshWay: false, tripStarted: null };
       panes.set(tab.id, p);
       // Step 5b-2: a page can put a quiet mark on its tab (Daisy's lounge: someone arrived while it was behind).
       const pane = p;
@@ -318,6 +331,10 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     p.mark = null;
     p.record = null;
     p.renderer = null;
+    p.ways = null;
+    if (p.screen?.url) URL.revokeObjectURL(p.screen.url);
+    p.screen = null;
+    p.arrival = null;
     p.el.replaceChildren();
   }
 
@@ -327,6 +344,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (p.uri === uri) return;
     p.uri = uri;
     clearPane(p);
+    const arrival = arrivalFor(tab);
     if (!uri) { p.title = 'New tab'; p.shownAddress = ''; p.state = 'new'; drawFirstScreen(p, tab); return; }
     const target = parseTarget(uri);
     if (target.ok && target.kind === 'shelf') { drawYourShelf(pageContext(p, tab)); drawChrome(); return; }
@@ -337,7 +355,15 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (target.ok && target.kind === 'discover') { drawDiscover(pageContext(p, tab), { source: target.source }); return; }
     if (target.ok && target.kind === 'search') { drawDiscover(pageContext(p, tab), { source: 'search', query: target.query }); return; }
     if (target.ok && target.kind === 'record' && rendererFor(target.collection)) { openRecord(p, tab, target); return; }
-    openTile(p, tab, uri);
+    if (target.ok && target.kind === 'way') { openWay(p, tab, target, arrival); return; }
+    openTile(p, tab, uri, { arrival });
+  }
+  // Back along a trail (ways): the place you go back to puts you at the portal you left it by (the next leg's exit),
+  // when that place has an entrance of that name (else its first entrance).
+  function arrivalFor(tab) {
+    if (tab.moved !== 'back') return null;
+    const after = stateAt(tab, tab.at + 1);
+    return after && after.from && after.from.exit ? { entrance: after.from.exit, back: true } : null;
   }
 
   // A table (stage 3): the game's driver on the shared table core (src/tables/). Daisy's addresses can name
@@ -377,10 +403,17 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (rooms.isLive(id)) { leaveFirst(); return; }
     const p = paneFor(tab);
     p.uri = undefined;
+    // Reload on a way taken reads its signpost again (RW2), as a page reload does.
+    p.freshWay = String(current(tab) || '').startsWith(WAY_PREFIX);
     show(tab);
   }
 
   function status(p, kind, text, ...actions) {
+    // While the screen between places shows (ways), loading lines go on it; anything else takes its place.
+    if (p.screen) {
+      if (kind === 'loading') { p.screen.say(text, actions.filter(Boolean)); return; }
+      removeScreen(p);
+    }
     let box = p.el.querySelector('.tile-status');
     if (!box) { box = h('div', { class: 'tile-status' }); p.el.append(box); }
     box.dataset.kind = kind;
@@ -391,13 +424,20 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   function hideStatus(p) { const b = p.el.querySelector('.tile-status'); if (b) b.hidden = true; }
   const button = (label, onclick, cls = '') => h('button', { type: 'button', class: cls, onclick }, label);
 
-  async function openTile(p, tab, uri) {
+  // opts.arrival: { entrance } to send once the tile says hello, if it has ways (Back along a trail). opts.way: the tile
+  // is a door a way led to ({ door, entrance }): the tab keeps the way's address and the place's name, and the tile must
+  // be the version the place was pointed at (its pinned CID), as on the travel page.
+  async function openTile(p, tab, uri, opts = {}) {
     const mine = p.attempt;
     const alive = () => mine === p.attempt;
     const parsed = parseAddress(uri);
+    const way = opts.way || null;
+    p.arrival = way ? { entrance: way.entrance } : opts.arrival || null;
     p.state = 'finding';
-    p.title = parsed.ok ? parsed.rkey : 'Tile';
-    p.shownAddress = uri;
+    if (!way) {
+      p.title = parsed.ok ? parsed.rkey : 'Tile';
+      p.shownAddress = uri;
+    }
     drawChrome();
     status(p, 'loading', 'Finding this tile…');
     if (!parsed.ok) { p.state = 'error'; status(p, 'error', parsed.reason); return; }
@@ -406,8 +446,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     try {
       did = await resolver.didFor(parsed.actor);
       if (!alive()) return;
-      if (await moderation.isHidden(did, parsed.rkey)) {
+      if (await moderation.isHidden(did, parsed.rkey) || (way && await moderation.isAccountHidden(did))) {
         if (!alive()) return;
+        if (way) { wayBlocked(p, tab, "Where it leads isn't shown in Raku."); return; }
         p.state = 'hidden';
         p.title = 'Not shown';
         drawChrome();
@@ -419,8 +460,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       if (!alive()) return;
     } catch (err) {
       if (!alive()) return;
-      p.state = 'error';
       const msg = err instanceof NetError ? err.message : "Couldn't find this tile.";
+      if (way) { wayBlocked(p, tab, msg); return; }
+      p.state = 'error';
       // Try again only when trying again could help (not for a missing tile or a refused address).
       const retry = !(err instanceof NetError) || ['network', 'timeout', 'upstream'].includes(err.code);
       status(p, 'error', msg, retry ? button('Try again', () => reload(tab.id)) : null);
@@ -428,17 +470,25 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     }
 
     const d = describeTile(record);
-    if (!d.ok) { p.state = 'error'; status(p, 'error', d.reason); return; }
-    p.title = d.name;
-    p.shownAddress = atUri(did, parsed.rkey);
+    if (!d.ok) { if (way) { wayBlocked(p, tab, d.reason); return; } p.state = 'error'; status(p, 'error', d.reason); return; }
+    // A door through a place opens exactly the version the place points at (as the travel page, and the tables' pins).
+    if (way && way.door.pinned && record.cid !== way.door.pinned) { wayBlocked(p, tab, 'The tile there has changed since its place was pointed at it.'); return; }
     const keep = { kind: 'tile', did, rkey: parsed.rkey, name: d.name, by: '' };
     p.keep = keep;
-    drawChrome();
-    const didForm = p.shownAddress;
-    resolver.checkedHandle(did).then((handle) => {
-      // (the tile may have started meanwhile, so check the address rather than the attempt)
-      if (handle && p.uri === uri && p.shownAddress === didForm) { p.shownAddress = atUri(handle, parsed.rkey); keep.by = handle; drawChrome(); }
-    });
+    if (way) {
+      if (p.screen) screenPicture(p, did, account.pds, d.manifest);
+      resolver.checkedHandle(did).then((handle) => { if (handle) keep.by = handle; });
+      drawChrome();
+    } else {
+      p.title = d.name;
+      p.shownAddress = atUri(did, parsed.rkey);
+      drawChrome();
+      const didForm = p.shownAddress;
+      resolver.checkedHandle(did).then((handle) => {
+        // (the tile may have started meanwhile, so check the address rather than the attempt)
+        if (handle && p.uri === uri && p.shownAddress === didForm) { p.shownAddress = atUri(handle, parsed.rkey); keep.by = handle; drawChrome(); }
+      });
+    }
 
     const verdict = sizeVerdict(d.declaredBytes);
     if (verdict === 'refuse') {
@@ -446,10 +496,11 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       status(p, 'refused', `This tile is too large to open here (${formatBytes(d.declaredBytes)}). Raku opens tiles up to ${formatBytes(LIMITS.maxBytes)}.`);
       return;
     }
-    if (verdict === 'ask' && !largeOk.has(p.shownAddress)) {
+    const sizeKey = atUri(did, parsed.rkey);
+    if (verdict === 'ask' && !largeOk.has(sizeKey)) {
       p.state = 'asking';
       status(p, 'ask', `This tile is large (${formatBytes(d.declaredBytes)}). Open anyway?`,
-        button('Open anyway', () => { largeOk.add(p.shownAddress); startTile(p, tab, uri, did, account.pds, d); }, 'primary'),
+        button('Open anyway', () => { largeOk.add(sizeKey); startTile(p, tab, uri, did, account.pds, d); }, 'primary'),
         button('Not now', () => (tabs.canBack(tab.id) ? tabs.back(tab.id) : tabs.go(tab.id, null))));
       return;
     }
@@ -457,9 +508,12 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   }
 
   function startTile(p, tab, uri, did, pds, d) {
-    const keep = p.keep;
+    const keep = p.keep, screen = p.screen, arrival = p.arrival;
+    p.screen = null;                                   // (kept: clearPane would let go of its picture)
     clearPane(p);
     p.keep = keep;
+    p.arrival = arrival;
+    if (screen) { p.screen = screen; p.el.append(screen.el); }
     const mine = p.attempt;
     const alive = () => mine === p.attempt;
     p.state = 'loading';
@@ -474,7 +528,15 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
         if (!alive()) return;
         if (path === '/' || path === '/index.html') {
           p.timers.forEach(clearTimeout);
-          if (ok) { p.state = 'ready'; hideStatus(p); drawChrome(); }
+          if (ok) {
+            p.state = 'ready'; hideStatus(p); drawChrome();
+            // The screen between places (ways): a destination without ways shows after a moment; one with ways when it
+            // says hello (fromWayTile), or after a while if it never does.
+            if (p.screen) { const s = p.screen; p.timers.push(setTimeout(() => { if (alive() && p.screen === s) revealScreen(p, 0); }, p.ways ? WAYS.helloMs : WAYS.plainMs)); }
+            // RW10: a tile opened in the tab in front gets the keys once its page is in (twice, as its page settles); with
+            // the screen between places up, revealScreen hands them over when it goes.
+            else for (const ms of KEYS_AFTER_MS) p.timers.push(setTimeout(() => { if (alive() && !p.screen) focusIfFront(p); }, ms));
+          }
           else { p.state = 'error'; status(p, 'error', err?.message || "Couldn't load this tile.", button('Try again', () => startTile(p, tab, uri, did, pds, d))); }
         } else if (!ok && err?.code === 'too-large') {
           say(`"${d.name}" asked for more than ${formatBytes(LIMITS.maxBytes)} of files; Raku stopped there.`);
@@ -492,6 +554,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     p.frame = frame;
     p.el.prepend(frame);
     loadIcon(p, did, pds, d.manifest, alive);
+    // A tile with ways (a /ways.json): Raku is its host (ways.js).
+    if (d.manifest.resources?.['/ways.json']) hostWays(p, did, pds, d.manifest);
     // What this tile asks of Raku (decision 12): a small Messages button appears with its first message.
     p.panel = createPanel({ label: `What "${d.name}" asks of Raku` });
     p.panel.button.classList.add('panel-pill');
@@ -511,6 +575,262 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
         h('button', { type: 'button', class: 'table-hint-x', 'aria-label': 'Hide this note', onclick: () => hint.remove() }, icon('close', 14)));
       p.el.append(hint);
     }
+  }
+
+  // ---------- ways (claude/raku-ways-plan.md, RW1 to RW8) ----------
+  // A way taken (raku:way/<account>/<signpost>, RW2): read the signpost (or take the door this tab's history kept, for
+  // Back and Forward), then open where it leads in this tab, arriving at the signpost's entrance (or, going back, at
+  // the portal you left by). Dormant: "This doesn't lead anywhere yet."; several places: "Pick a door"; anything in the
+  // way (hidden, unreadable, changed since its place was pointed at it): "The way is blocked."
+  async function openWay(p, tab, target, arrival) {
+    const mine = p.attempt;
+    const alive = () => mine === p.attempt;
+    const st = stateAt(tab) || {};
+    const fresh = p.freshWay;
+    p.freshWay = false;
+    p.state = 'finding';
+    p.title = 'On the way…';
+    p.shownAddress = target.uri;
+    drawChrome();
+    showScreen(p);
+    let did;
+    try {
+      did = await resolver.didFor(target.actor);
+      if (!alive()) return;
+      if (await moderation.isAccountHidden(did)) { if (alive()) wayBlocked(p, tab, "This signpost isn't shown in Raku."); return; }
+    } catch (err) {
+      if (alive()) wayBlocked(p, tab, err instanceof NetError ? err.message : "Couldn't find this signpost's account.");
+      return;
+    }
+    if (!alive()) return;
+    const didForm = wayUri(did, target.rkey);
+    p.shownAddress = didForm;
+    drawChrome();
+    // (the place's tile may have started meanwhile, which begins a new load on the pane: so check the address shown, as
+    // openTile does, rather than the load; on Back and Forward the door is kept, and the tile starts at once)
+    const shownFor = p.uri;
+    resolver.checkedHandle(did).then((hd) => { if (hd && p.uri === shownFor && p.shownAddress === didForm) { p.shownAddress = wayUri(hd, target.rkey); drawChrome(); } });
+    let door = !fresh && st.door ? st.door : null;
+    if (!door) {
+      const view = await ways.lookUp(did, target.rkey).catch(() => ({ state: 'error', doors: [] }));
+      if (!alive()) return;
+      if (view.state === 'dormant') {
+        removeScreen(p);
+        p.state = 'error';
+        p.title = 'Leads nowhere yet';
+        drawChrome();
+        status(p, 'dormant', `This doesn't lead anywhere yet.${view.note ? ` (${view.note})` : ''}`, tabs.canBack(tab.id) ? button('Back', () => tabs.back(tab.id)) : null);
+        return;
+      }
+      if (view.state !== 'open') { wayBlocked(p, tab, "The signpost couldn't be read just now."); return; }
+      const usable = view.doors.filter((d) => !d.broken);
+      const one = chosenDoor(view, st.pick) || (view.doors.length === 1 ? usable[0] : null);
+      if (!one && !usable.length) { wayBlocked(p, tab, (view.doors[0] && view.doors[0].broken) || "Where it leads couldn't be opened."); return; }
+      if (!one) {
+        // Several places and none chosen yet (a reload, or a link): pick one here.
+        p.state = 'ready';
+        p.title = 'Pick a door';
+        drawChrome();
+        pickDoors(p, view, {
+          onGo: (d) => { const kept = keepDoor(d); setWayState(tab, { ...st, door: kept }); enterDoor(p, tab, kept, arrival); },
+          onBack: tabs.canBack(tab.id) ? () => tabs.back(tab.id) : null,
+        });
+        return;
+      }
+      door = keepDoor(one);
+      setWayState(tab, { ...st, door });
+    }
+    enterDoor(p, tab, door, arrival);
+  }
+  // Keep the door with this place in the tab's history (Back and Forward come back to it without reading again).
+  function setWayState(tab, state) { if (tab.states) tab.states[tab.at] = state; }
+
+  function enterDoor(p, tab, door, arrival) {
+    p.title = door.name;
+    drawChrome();
+    showScreen(p, { name: door.name, by: door.by });
+    openTile(p, tab, door.tile, { way: { door, entrance: (arrival && arrival.entrance) || door.entrance } });
+  }
+
+  function wayBlocked(p, tab, why) {
+    removeScreen(p);
+    p.state = 'error';
+    p.title = 'The way is blocked';
+    drawChrome();
+    status(p, 'error', `The way is blocked. ${why || ''}`.trim(),
+      button('Try again', () => reload(tab.id)),
+      tabs.canBack(tab.id) ? button('Back', () => tabs.back(tab.id)) : null);
+  }
+
+  // Raku as a host (RW3): read the tile's /ways.json and each exit's signpost (open or dormant) while the tile loads, so
+  // its hello can be answered at once. A /ways.json that can't be read leaves Raku a plain viewer for that tile.
+  function hostWays(p, did, pds, manifest) {
+    const host = { ways: null, statuses: null, arrived: false, helloed: false, busy: false };
+    p.ways = host;
+    host.ready = (async () => {
+      const cid = blobCidOf(manifest.resources['/ways.json']);
+      if (!cid) return false;
+      const buf = await files.get(pds, did, cid, { left: WAYS.waysBytes });
+      const w = buf ? readWays(JSON.parse(new TextDecoder().decode(buf))) : null;
+      if (!w) return false;
+      const statuses = {};
+      await Promise.all(w.exits.map(async (x) => { statuses[x.id] = await ways.state(x.signpost); }));
+      host.ways = w;
+      host.statuses = statuses;
+      return true;
+    })().catch(() => false);
+  }
+
+  const postTo = (pane, msg) => { try { pane.frame?.contentWindow?.postMessage(msg, '*'); } catch { /* the tile has gone */ } };
+  // The keys to the tile (as the travel page's W40): its own window is inside the loader's frame, and a page may call
+  // focus() on another site's window, so arrow keys reach the place without a click.
+  function focusTile(pane) {
+    try { pane.frame?.focus(); } catch { /* fine */ }
+    try { const inner = pane.frame?.contentWindow?.frames[0]; if (inner) inner.focus(); } catch { /* fine */ }
+  }
+
+  // RW10: a tile that opens in the tab in front gets the keys, as a page does in an ordinary browser, however it got
+  // there (the address box, a card, Back and Forward, a reload); one in a background tab never does. Never taken from
+  // someone typing in one of Raku's own boxes or using one of its menus or dialogs meanwhile.
+  function focusIfFront(pane) {
+    if (!pane.frame || !tabs.active || panes.get(tabs.active.id) !== pane) return;
+    const a = document.activeElement;
+    if (a && a !== document.body && a !== pane.frame
+      && (a.matches?.('input, textarea, select, [contenteditable=""], [contenteditable="true"]') || a.closest?.('[role="dialog"], [role="menu"]'))) return;
+    focusTile(pane);
+  }
+
+  // A tile's way messages: hello (answered with its exits' status, and the arrival when it was reached by a way or
+  // by Back), leave (take the traveller on).
+  async function fromWayTile(pane, tabId, d) {
+    const m = readWayMessage(d);
+    const host = pane.ways;
+    if (!m || !host) return;
+    const mine = pane.attempt;
+    if (!(await host.ready) || mine !== pane.attempt || pane.ways !== host) return;
+    if (m.kind === 'hello') {
+      postTo(pane, statusMessage(host.statuses));
+      if (pane.arrival && !host.arrived) {
+        host.arrived = true;
+        const e = entranceFor(host.ways, pane.arrival.entrance);
+        if (e) postTo(pane, arriveMessage(e));
+      }
+      if (!host.helloed) { host.helloed = true; if (pane.screen) revealScreen(pane); if (tabs.active.id === tabId) focusTile(pane); }
+      return;
+    }
+    if (m.kind === 'leave') leaveBy(pane, tabId, m.exit);
+  }
+
+  // Someone stepped through an exit: read its signpost; nowhere to go → back at that portal, "The way is blocked.";
+  // one place → on, in this tab; several → "Pick a door" over the place, with "Stay here".
+  async function leaveBy(pane, tabId, exitId) {
+    const host = pane.ways;
+    const exit = host && host.ways ? host.ways.exits.find((x) => x.id === exitId) : null;
+    const tab = tabs.list.find((t) => t.id === tabId);
+    if (!exit || !tab || host.busy) return;
+    host.busy = true;
+    const mine = pane.attempt;
+    const sc = showScreen(pane);
+    const at = parseAtUri(exit.signpost);
+    const view = await ways.lookUp(at.did, at.rkey).catch(() => ({ state: 'error', doors: [] }));
+    if (mine !== pane.attempt) return;
+    const usable = view.state === 'open' ? view.doors.filter((d) => !d.broken) : [];
+    const stay = (blocked) => {
+      removeScreen(pane);
+      host.busy = false;
+      const e = entranceFor(host.ways, exit.id);
+      if (e) postTo(pane, arriveMessage(e));
+      if (blocked) say('The way is blocked.');
+      focusTile(pane);
+    };
+    if (!usable.length) { stay(true); return; }
+    const from = { exit: exit.id };
+    // (the next place's screen counts its minimum time from this moment, RW9)
+    const go = (door) => { host.busy = false; pane.tripStarted = sc.since; tabs.go(tab.id, wayUri(at.did, at.rkey), { door: keepDoor(door), from }); };
+    if (view.doors.length === 1) { go(usable[0]); return; }
+    pickDoors(pane, view, { onGo: go, onStay: () => stay(false) });
+  }
+
+  // The screen between places (RW4): the destination's banner, dimmed, behind its name and "by @handle"; a calm colour
+  // until (or without) a banner. Loading lines go on it (status); it fades once the place has said hello.
+  function showScreen(p, { name = '', by = '' } = {}) {
+    let sc = p.screen;
+    if (!sc) {
+      const pic = h('img', { class: 'way-pic', alt: '', hidden: true });
+      const nameEl = h('p', { class: 'way-name' });
+      const byEl = h('p', { class: 'way-by' });
+      const msgEl = h('p', { class: 'way-msg', role: 'status' });
+      const acts = h('div', { class: 'way-actions' });
+      const doorsEl = h('div', { class: 'way-doors', hidden: true });
+      const el = h('div', { class: 'way-screen' }, pic, h('div', { class: 'way-inner' }, nameEl, byEl, msgEl, doorsEl, acts));
+      // since: when the trip began (stepping through, carried over from the place left; else now), for RW9's minimum
+      sc = { el, pic, nameEl, byEl, msgEl, acts, doorsEl, url: null, since: p.tripStarted || Date.now(),
+        say(text, actions = []) { msgEl.textContent = text || ''; acts.replaceChildren(...actions); } };
+      p.tripStarted = null;
+      p.screen = sc;
+      p.el.append(el);
+    }
+    sc.el.classList.remove('going');
+    sc.nameEl.textContent = name;
+    sc.byEl.textContent = by ? `by @${by}` : '';
+    sc.msgEl.textContent = '';
+    sc.acts.replaceChildren();
+    sc.doorsEl.hidden = true;
+    sc.doorsEl.replaceChildren();
+    return sc;
+  }
+  function removeScreen(p) {
+    const sc = p.screen;
+    if (!sc) return;
+    if (sc.url) URL.revokeObjectURL(sc.url);
+    sc.el.remove();
+    p.screen = null;
+  }
+  // The screen goes `after` ms from now, but never before WAYS.minScreenMs since the trip began (RW9); once it has gone,
+  // the place gets the keys again (as the travel page: the first time, at its hello, the screen still covered it).
+  function revealScreen(p, after = WAYS.revealMs) {
+    const sc = p.screen;
+    if (!sc) return;
+    const wait = Math.max(after, WAYS.minScreenMs - (Date.now() - sc.since));
+    setTimeout(() => {
+      if (p.screen !== sc) return;
+      sc.el.classList.add('going');
+      setTimeout(() => {
+        if (p.screen !== sc) return;
+        removeScreen(p);
+        if (tabs.active && panes.get(tabs.active.id) === p) focusTile(p);
+      }, WAYS.fadeMs);
+    }, wait);
+  }
+  // (Only the screen itself decides whether the picture still belongs: starting the tile begins a new attempt on the
+  // pane, but the screen stays up through it.)
+  async function screenPicture(p, did, pds, manifest) {
+    const sc = p.screen;
+    const cid = bannerCid(manifest);
+    if (!sc || !cid) return;
+    try {
+      const buf = await files.get(pds, did, cid, { left: WAYS.bannerBytes });
+      const type = buf && sniffPicture(new Uint8Array(buf));
+      if (!type || p.screen !== sc) return;
+      sc.url = URL.createObjectURL(new Blob([buf], { type }));
+      sc.pic.src = sc.url;
+      sc.pic.hidden = false;
+    } catch { /* the calm colour stays */ }
+  }
+  // "Pick a door": the places a way leads to, on the screen; "Stay here" on the way out of a place, Back on a way
+  // opened by its address.
+  function pickDoors(p, view, { onGo, onStay = null, onBack = null }) {
+    const sc = showScreen(p, { name: 'Pick a door' });
+    if (view.note) sc.msgEl.textContent = view.note;
+    sc.doorsEl.hidden = false;
+    sc.doorsEl.replaceChildren(h('ul', { class: 'way-door-list' }, ...view.doors.map((d) => h('li', {},
+      d.broken
+        ? h('div', { class: 'way-door broken' }, d.label ? h('span', { class: 'way-door-label' }, d.label) : null, h('span', { class: 'way-door-by' }, d.broken))
+        : h('button', { type: 'button', class: 'way-door', onclick: () => onGo(d) },
+          d.label ? h('span', { class: 'way-door-label' }, d.label) : null,
+          h('span', { class: 'way-door-name' }, d.name),
+          d.by ? h('span', { class: 'way-door-by' }, `by @${d.by}`) : null)))));
+    sc.acts.replaceChildren(...[onStay ? button('Stay here', onStay) : null, onBack ? button('Back', onBack) : null].filter(Boolean));
   }
 
   // A record shown by its renderer (renderer tiles, RT1 to RT8): find the record (its account, moderation, the record
@@ -616,7 +936,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       const payload = await r.payload();
       if (mine !== pane.attempt || !pane.frame) return;
       pane.frame.contentWindow.postMessage({ action: DOWN, payload }, '*');
-      if (pane.state !== 'ready') { pane.timers.forEach(clearTimeout); pane.state = 'ready'; hideStatus(pane); drawChrome(); }
+      if (pane.state !== 'ready') { pane.timers.forEach(clearTimeout); pane.state = 'ready'; hideStatus(pane); drawChrome(); focusIfFront(pane); }
       return;
     }
     if (d.action !== UP) return;
@@ -626,6 +946,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (pic) { answerPicture(pane, pic); return; }
     const address = readOpenRequest(d.payload);
     if (!address || !r.gate.take()) return;
+    // A signpost's "Go to" (RW5): that way, in a new tab, to the place chosen, arriving at the signpost's entrance.
+    const goTo = signpostGoTo(r.given, address);
+    if (goTo) { openNew(wayUri(goTo.did, goTo.rkey), { pick: goTo.pick }); return; }
     const decision = openDecision(address);
     if (decision.action === 'tab') openNew(decision.uri);
     else if (decision.action === 'record') showRecord(decision.target);
@@ -703,13 +1026,15 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !openInMenu.hidden) { toggleOpenIn(false); openInBtn.focus(); } });
 
   // Messages from ordinary tiles (tiles-protocol-up-…): logged on their tab's panel. Raku doesn't answer
-  // any protocol yet; the panel just shows what was asked. (A renderer's are answered: fromRenderer.)
+  // other protocols yet; the panel just shows what was asked. (A renderer's are answered: fromRenderer; a tile with
+  // ways has its way messages answered: fromWayTile.)
   addEventListener('message', (e) => {
     const d = e.data;
     if (!d || typeof d.action !== 'string' || !d.action.startsWith('tiles-protocol-up-')) return;
-    for (const pane of panes.values()) {
+    for (const [id, pane] of panes) {
       if (!pane.frame || pane.frame.contentWindow !== e.source) continue;
       if (pane.renderer) { fromRenderer(pane, d); return; }
+      if (pane.ways && d.action === WAY_UP) { fromWayTile(pane, id, d); return; }
       if (!pane.panel) continue;
       const what = d.action.slice('tiles-protocol-up-'.length);
       const kind = d.payload && typeof d.payload === 'object' && typeof d.payload.kind === 'string' ? `${what} · ${d.payload.kind}` : what;

@@ -4,7 +4,7 @@
 # the place's tile in a new tab; "Open in" shows the record in an explorer; the refusals and the limits. Places' tile
 # card (claude/raku-places-card-plan.md, PC1 to PC6): the tile record Raku reads for it, and the banner's bytes Raku
 # fetches for it ({ picture, from }) only when a record it was handed lists that file, of the four picture kinds, at most
-# 1 MB, within the same 20 per load.
+# 1 MB, within the same 20 per load. Since ways (claude/raku-ways-plan.md, RW5): a signpost's "Go to" takes that way.
 #
 # It sets everything up itself: a copy of this Raku folder with a test pin in RENDERERS (the real pin is filled in
 # after publishing), bundled with esbuild and the stand-in sign-in, then servers.mjs and loader-replica.mjs.
@@ -357,7 +357,11 @@ try:
         check('...the allowed ones answered with the record', sum(1 for g in got() if g.get('record')) == 18, str(sum(1 for g in got() if g.get('record'))))
         n = tab_count()
         f.locator('button.go').click()
-        check('"Go to Escher maze" opens the maze\'s place in a new tab (its postcard)', wait_for(lambda: tab_count() == n + 1 and tile_text('h1') == 'Escher maze', 15), str(tile_text('h1')))
+        # Ways (claude/raku-ways-plan.md, RW5): "Go to" takes that way, in a new tab, to the maze's tile itself (it was the
+        # maze's place, as a postcard, before Raku learnt ways)
+        check('"Go to Escher maze" takes that way in a new tab: the way\'s address, the place\'s name', wait_for(lambda: tab_count() == n + 1 and page.inner_text('.tab.on .tab-title') == 'Escher maze'
+              and page.input_value('.addr') == f'raku:way/{A_HANDLE}/winter-forest.slide', 15), f'{tab_count()} {page.input_value(".addr")}')
+        check('...and arrives at the maze\'s tile (the version its place points at), not its postcard', wait_for(lambda: tile_text('#h') == 'Escher maze tile', 15), str(tile_text('#h')))
         page.screenshot(path=str(OUT / 'renderer-signpost-go.png'))
 
         # 7. a renderer that changed since it was pinned is refused
