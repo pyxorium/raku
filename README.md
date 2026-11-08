@@ -572,14 +572,44 @@ frame and sandbox as a tab (`playInPost` in `src/app.js`, beside `startTile`). N
   (once per visit, shared with tabs' "Open anyway"); over 500 MB, "This tile is too large to open", no Play.
 - **The keys** (PH4, PH8): the tile gets them at once (as RW10), with a turquoise ring while it has them and "Keys go
   to the tile" for `PLAY_HERE.hintMs` (2.5 s); a click elsewhere gives them back to the page.
-- **Ways** (PH5): a tile with ways is answered (its exits' status); stepping through opens the way taken
-  (`raku:way/…`) in a new tab and the post's tile stops; a way that leads nowhere keeps the traveller at that portal,
-  "The way is blocked." (Travel inside the post is planned for the expand round.) A tile in a post sends Raku nothing
-  else that's answered or shown.
+- **Ways** (PH5): a tile with ways is answered (its exits' status); a way that leads nowhere keeps the traveller at
+  that portal, "The way is blocked." Stepping through a portal that leads somewhere travels inside the post (round C,
+  below; until then it opened the way in a new tab). A tile in a post sends Raku nothing else that's answered or shown.
 - **The phone** (PH6): the card stays a column, the tile 16:9 at the post's full width; touches on it go to the tile.
 - **Tile posts only** (PH7). Discover's right column and the About page say when a tile runs.
 - The rules: `src/play-here.js` (no DOM); config `PLAY_HERE`. Unit tests: `test/play-here.test.mjs`. Browser:
   `test/browser/check_posts.py` (below).
+
+### Round C (Nov 2026): expand a tile post's tile, and travel inside the post
+
+Decisions: `claude/raku-expand-plan.md` (EX1 to EX8, and D; mockup `claude/raku-expand-mockup.html`).
+
+- **Expand** (EX1, EX2): a playing tile has an expand button in its corner (left of the × and the new-tab button). It
+  opens the tile **in place** to fill Raku's window, over Raku's own bars, on a dark backdrop: the slot holding the tile
+  is pinned (`position: fixed`) and moved, never moved in the page (which would reload the tile), so what you were
+  doing carries on, bigger. The bar: the tile's name and author, New tab, **Full screen** (the browser's own, where it
+  allows it: not an iPhone), ×. The tile gets the keys (with the ring); while expanded it never stops for being out of
+  view; another Raku tab coming to the front shrinks it back (and it stops a few seconds later, as before).
+- **Getting back out** (EX5): ×; Escape (when the keys are Raku's: keys pressed in a tile never reach Raku); **Back**
+  (the phone's gesture, the browser's button): expanding adds one step to the browser's history, so Back closes it
+  rather than leaving Raku. Raku's own address is kept as it is.
+- **How it moves** (EX4, EX8): `PLAY_HERE.expand` (window), `expandMs` (400), `expandEase` (linear): the live tile is
+  pinned at the stage at once and shown through a clip that opens from the post's box (closing, the reverse), so it
+  isn't redrawn at every size. Chosen by the owner with the real maze (Nov 8), after trying grow (a little stutter),
+  window and banner with a test switch that has since been removed. With reduced motion (the system's setting), a
+  plain fade.
+- **Travel inside the post** (D, EX6): stepping through a portal reads its signpost as a tab does; a small tile expands
+  first, and the trip happens in the expanded view: the screen between places, **Pick a door** with Stay here, a large
+  place's question ("Go anyway?"), the next place started in the same slot, arriving at the door's entrance. The bar
+  then says "Now in · by @…" with **Back to …** (arriving at the portal left by). Anything in the way (hidden, changed
+  since its place was pointed at it, too large, won't load): back at that portal, "The way is blocked."
+- **Shrunk back after a trip** (EX7): it stays where it went, with a line on the card, "Now in: Winter Forest, by @…",
+  and Back to …; the new-tab buttons open the way taken (`raku:way/…`); stopping it brings the post's own banner back,
+  ready from the start.
+- Code: `src/expand-view.js` (the expanded view and how it moves), `playCard` in `src/discover.js`, `playInPost`,
+  `runInPost`, `leavePost`, `travelTo`, `backInPost` and the history step in `src/app.js`; the rules (`expandMotion`,
+  `clipInset`, `wayPlan`, `createTrail`, `tabFor`) in `src/play-here.js`. Unit tests: `test/play-here.test.mjs`.
+  Browser: `test/browser/check_posts.py`.
 
 ## Try it
 
@@ -624,7 +654,8 @@ and open http://127.0.0.1:5181/.
 | `src/discover.js` | stage 6: the Discover page (sources, Tile news, Tile posts, Recent tiles, Following, search results, previews; Make a tile) |
 | `src/following.js` | the newest tiles of the accounts on your shelf, and "New since your last visit" |
 | `src/tile-posts.js` | tile posts (Nov 2026): finding the accounts (the relay, and its fallback), reading and checking `cafe.thunderbird.tile.post` records, newest first |
-| `src/play-here.js` | Play here (Nov 2026): the size rule, one tile at a time, the out-of-view timer, where a portal leads (the frame itself is `playInPost` in `app.js`) |
+| `src/play-here.js` | Play here (Nov 2026): the size rule, one tile at a time, the out-of-view timer; round C: how expanding moves, where a portal leads, the trail of places in a post (the frame itself is `playInPost` in `app.js`) |
+| `src/expand-view.js` | round C: a tile post's tile expanded to Raku's window (the bar, the tile pinned and moved, never reloaded) |
 | `src/recent.js` | stage 6c: Recent tiles, appmosphe.re's list read carefully and moderated |
 | `src/marks.js` | stage 6c: when you last visited Following and Recent tiles (this device only) |
 | `src/search.js` | search: matches here in the browser, then appmosphe.re (only the tile addresses are read) |
@@ -666,7 +697,7 @@ Following (order, hidden ones, "New"), search from the box and from Discover (no
 with only the words), a word with a dot as a handle first, Tile news from a stand-in feed with a post linking a tile,
 hand-picked posts mixed in by date, loading the next batch on scroll (and More without IntersectionObserver), labels, replies with their thread, the link message (Cancel, Escape, Open with no opener), a post's address in the box, the phone.
 
-`check_posts.py` (65 checks, tile posts and Play here) runs the same way as `check_discover.py`, with the loader replica
+`check_posts.py` (124 checks, tile posts, Play here and round C) runs the same way as `check_discover.py`, with the loader replica
 running too (`node test/browser/loader-replica.mjs <tiles-loading-server folder>`, port 80): posts from several accounts in order
 (the relay's, the owner's, the shelf's), the author and time, the tile's card with its banner described by the post's
 `alt` (or the tile's description), a hidden account (its server not asked) and a hidden tile, a deleted and a changed
@@ -674,9 +705,17 @@ tile ("This tile can't be shown."), over-long text cut, the right column's previ
 new tab, Back, Refresh, the relay failing and unreachable (the note, the accounts Raku knows), the empty page, the phone;
 Play here with stand-in tiles that really run: nothing running until Play, the tile in place of the banner in this tab,
 the keys (focus, the ring, the label fading, a click elsewhere), a tile with ways (its exits' status, a dormant way
-blocked at the portal, a way taken opening in a new tab and the post's tile stopping), one at a time, the ×, a large
-tile's question (Cancel, Play anyway, not asked again) and a too-large one, a brief scroll vs out of view, leaving Tile
-posts, the card's words, the About page, the phone (a tap, 16:9 at full width, a card under the sticky chips).
+blocked at the portal), one at a time, the ×, a large tile's question (Cancel, Play anyway, not asked again) and a
+too-large one, a brief scroll vs out of view, leaving Tile posts, the card's words, the About page, the phone (a tap,
+16:9 at full width, a card under the sticky chips); round C: the expand button, the expanded view (over Raku's bars,
+the tile opened to the stage and never reloaded, the bar, the keys, the history step, not stopping, a resized window,
+Full screen), closing by ×, Escape and Back (and Escape pressed in the tile staying the tile's), stepping through while
+small expanding first, travel inside the post (the screen, the place in the same slot, "Now in", Back to … arriving at
+the portal, Pick a door and Stay here, a large place's question, a dormant way's note), shrunk back after a trip (the
+card's line, its new-tab button opening the way taken, its Back to), the expanded view's New tab, stopping resetting
+it, another tab coming to the front, the window opening and closing (400 ms, linear; an old test switch ignored) and
+reduced motion's fade, the
+phone (the bar in two rows, the tile edge to edge).
 
 `check_daisy.py` (63 checks, stage 5) bundles and starts everything itself (Raku's page with the stand-in
 sign-in, the loader replica, daisy-tiles' stand-in relay, and the site's Daisy page bundled with a stand-in

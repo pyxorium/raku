@@ -76,3 +76,70 @@ test('the play icon, the timings and the About page line', () => {
   assert.ok(PLAY_HERE.hintMs >= 1000 && PLAY_HERE.hintMs <= 6000);
   assert.match(PLAY_LINE, /Play here/);
 });
+
+// ---------- round C (claude/raku-expand-plan.md): expanding, and travel inside the post ----------
+import { expandMotion, clipInset, wayPlan, createTrail, tabFor } from '../src/play-here.js';
+import { wayUri } from '../src/address.js';
+
+test('EX4, EX8: expanding opens as a window, 400 ms, linear (chosen with the real maze); with reduced motion, a plain fade', () => {
+  assert.equal(PLAY_HERE.expand, 'window');
+  assert.deepEqual(expandMotion(), { technique: 'window', ms: 400, ease: 'linear' });
+  assert.deepEqual(expandMotion({ reduce: true }), { technique: 'fade', ms: 400, ease: 'linear' });
+});
+
+test('EX4: the test switch is gone (the choice is made): an address asking for another way is ignored', async () => {
+  const src = (await import('node:fs')).readFileSync(new URL('../src/play-here.js', import.meta.url), 'utf8');
+  assert.ok(!/searchParams|URLSearchParams|[?&]expand=/.test(src), 'no reading of the address for expanding');
+});
+
+test('EX4 (window): the clip that shows only the post\'s box of the tile pinned at the stage', () => {
+  const stage = { top: 66, left: 14, right: 1386, bottom: 886 };
+  assert.equal(clipInset({ top: 300, left: 400, right: 800, bottom: 525 }, stage, 10), 'inset(234px 586px 361px 386px round 10px)');
+  assert.equal(clipInset(stage, stage), 'inset(0px 0px 0px 0px)');
+});
+
+test('D: where a portal leads, read as a tab reads it: blocked, one place, or Pick a door', () => {
+  const door = (name, broken = null) => (broken ? { label: '', broken } : { name, tile: `at://x/ing.dasl.masl/${name}` });
+  assert.deepEqual(wayPlan({ state: 'dormant', doors: [] }), { kind: 'blocked' });
+  assert.deepEqual(wayPlan({ state: 'error', doors: [] }), { kind: 'blocked' });
+  assert.deepEqual(wayPlan({ state: 'open', doors: [door('a', 'gone')] }), { kind: 'blocked' });
+  assert.deepEqual(wayPlan({ state: 'open', doors: [door('a')] }), { kind: 'go', door: door('a') });
+  assert.deepEqual(wayPlan({ state: 'open', doors: [door('a'), door('b')] }), { kind: 'pick' });
+  assert.deepEqual(wayPlan({ state: 'open', doors: [door('a'), door('b', 'gone')] }), { kind: 'pick' }, 'several listed: the broken one shows on Pick a door');
+  assert.deepEqual(wayPlan(null), { kind: 'blocked' });
+});
+
+test('D, EX7: the trail: places passed through in a post, "Back to" arriving at the portal left by', () => {
+  const t = createTrail({ uri: 'at://maze', name: 'Escher maze' });
+  assert.equal(t.travelled, false);
+  assert.equal(t.before, null);
+  assert.equal(t.back(), null, 'nowhere to go back to from the post\'s own tile');
+  t.go({ uri: 'at://forest', name: 'Winter Forest' }, { exit: 'slide', way: { did: 'did:plc:a', rkey: 'maze.slide' } });
+  assert.equal(t.here.name, 'Winter Forest');
+  assert.equal(t.before.name, 'Escher maze');
+  assert.equal(t.travelled, true);
+  t.go({ uri: 'at://lamp', name: 'Lamp post' }, { exit: 'wardrobe', way: { did: 'did:plc:a', rkey: 'forest.wardrobe' } });
+  assert.equal(t.length, 3);
+  let b = t.back();
+  assert.deepEqual([b.place.name, b.entrance], ['Winter Forest', 'wardrobe']);
+  b = t.back();
+  assert.deepEqual([b.place.name, b.entrance], ['Escher maze', 'slide']);
+  assert.equal(t.travelled, false);
+  assert.equal(t.here.leftBy, null, 'the exit is forgotten once used to come back');
+});
+
+test('EX7: a new tab opens the way taken to the place now, or the post\'s own tile', () => {
+  const door = { tile: 'at://did:plc:a/ing.dasl.masl/forest', name: 'Winter Forest' };
+  const t = createTrail({ uri: 'at://did:plc:b/ing.dasl.masl/maze', name: 'Escher maze' });
+  assert.deepEqual(tabFor(t, wayUri), { uri: 'at://did:plc:b/ing.dasl.masl/maze', state: null });
+  t.go({ uri: door.tile, name: door.name }, { exit: 'slide', way: { did: 'did:plc:a', rkey: 'maze.slide', door } });
+  assert.deepEqual(tabFor(t, wayUri), { uri: wayUri('did:plc:a', 'maze.slide'), state: { door } });
+  assert.ok(tabFor(t, wayUri).uri.startsWith('raku:way/'));
+});
+
+test('round C: the expand and full-screen icons, the timings', () => {
+  for (const n of ['expand', 'fullscreen', 'newtab', 'close', 'back']) assert.ok(ICON_NAMES.includes(n), n);
+  assert.equal(PLAY_HERE.expandMs, 400);
+  assert.equal(PLAY_HERE.expandEase, 'linear');
+  assert.ok(PLAY_HERE.noteMs >= 3000);
+});

@@ -360,8 +360,11 @@ export const TILE_POSTS = Object.freeze({
   repo: 'https://github.com/pyxorium/tile-posts',
 });
 // "Play here" (claude/raku-play-here-plan.md): a tile post's tile running in its post. awayMs: how long fully out of view
-// before it stops (PH2); hintMs: how long "Keys go to the tile" shows after Play (PH8).
-export const PLAY_HERE = Object.freeze({ awayMs: 3000, hintMs: 2500 });
+// before it stops (PH2); hintMs: how long "Keys go to the tile" shows after Play (PH8). Round C
+// (claude/raku-expand-plan.md): expanding opens the tile to Raku's window in expandMs, expandEase (EX4: window, 400 ms,
+// linear, chosen with the real maze; a plain fade with reduced motion, EX8); noteMs: how long a note ("The way is blocked.") shows in the
+// expanded view.
+export const PLAY_HERE = Object.freeze({ awayMs: 3000, hintMs: 2500, expand: 'window', expandMs: 400, expandEase: 'linear', noteMs: 5000 });
 // Recent tiles (stage 6c, Q106 to Q110): appmosphe.re's list of every tile it has seen, newest first by each
 // tile's createdAt, 30 a page (?page=N), shown in appmosphe.re's own order. Cards only; pictures are
 // appmosphe.re's copies (/img/), drawn as ordinary pictures straight from appmosphe.re (Q122: its /img/ answers

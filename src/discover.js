@@ -26,6 +26,8 @@ import { readPost, threadContext, whenText, groupThreads, ago } from './posts.js
 import { postCard, threadCard } from './post-card.js';
 import { searchAppmosphere, localMatches } from './search.js';
 import { createTilePosts, tileState } from './tile-posts.js';
+import { expandMotion } from './play-here.js';
+import { createExpanded } from './expand-view.js';
 
 const SEARCH_KEEP_MS = 5 * 60 * 1000;
 
@@ -573,9 +575,12 @@ function tilePostCard(ctx, post) {
  * A tile post's tile card with "Play here" (claude/raku-play-here-plan.md): the slot (the banner, then the tile running
  * in its place) above the card's words. The words open the tile in this tab and the corner button in a new tab, as any
  * card; Play runs it here (ctx.player, app.js). ready() once the tile record is checked: until then there is no Play.
+ * Round C (claude/raku-expand-plan.md): a playing tile's expand button grows it to Raku's window (expand-view.js);
+ * ×, Escape or Back shrink it back. After a trip inside the post (D), a "Now in" line with "Back to …" (EX7), and the
+ * new-tab buttons open the way taken.
  */
 function playCard(ctx, t) {
-  const { kit, tabs, tab, openNew, player } = ctx;
+  const { kit, tabs, tab, openNew, player, say } = ctx;
   const slot = h('div', { class: 'tp-slot' });
   const title = h('span', { class: 'card-title' }, '…');
   const desc = h('span', { class: 'card-desc' });
@@ -584,19 +589,29 @@ function playCard(ctx, t) {
   const main = h('button', { type: 'button', class: 'card-main', onclick: () => tabs.go(tab.id, t.uri),
     onauxclick: (ev) => { if (ev.button === 1) { ev.preventDefault(); openNew(t.uri); } } },
   h('span', { class: 'card-text' }, title, desc, byLine, noteLine));
+  // The new-tab buttons open the place now: the post's own tile, or after a trip the way taken (EX7).
+  const tabNow = () => (player.current === slot && player.place(slot)) ? player.place(slot).tab : { uri: t.uri, state: null };
+  const openTabNow = () => { const x = tabNow(); openNew(x.uri, x.state); };
   const corner = h('div', { class: 'card-corner' },
-    h('button', { type: 'button', class: 'card-btn', title: 'Open in a new tab', 'aria-label': 'Open this tile in a new tab', onclick: () => openNew(t.uri) }, icon('newtab', 16)));
-  const el = h('article', { class: 'card post-tile tp-card', 'data-tile': t.uri }, slot, main, corner);
+    h('button', { type: 'button', class: 'card-btn', title: 'Open in a new tab', 'aria-label': 'Open this tile in a new tab', onclick: () => openTabNow() }, icon('newtab', 16)));
+  // EX7: after a trip, where the post's tile is now, and the way back.
+  const nowWhere = h('span', {});
+  const nowBack = h('button', { type: 'button', onclick: () => player.back(slot) });
+  const nowLine = h('div', { class: 'tp-now', hidden: true }, nowWhere, nowBack);
+  const el = h('article', { class: 'card post-tile tp-card', 'data-tile': t.uri }, slot, nowLine, main, corner);
   let tile = null;           // { d, pds }
-  let over = null, play = null, stopBtn = null, hint = null, hintTimer = null;
+  let over = null, play = null, stopBtn = null, expandBtn = null, hint = null, hintTimer = null;
+  let view = null;           // the expanded view, while open (expand-view.js)
+  let place = null;          // the place now, after a trip ({ name, by, travelled, backTo, tab })
   const clear = () => {
-    for (const x of [over, play, stopBtn, hint]) if (x) x.remove();
-    over = play = stopBtn = hint = null;
+    for (const x of [over, play, stopBtn, expandBtn, hint]) if (x) x.remove();
+    over = play = stopBtn = expandBtn = hint = null;
     clearTimeout(hintTimer);
     slot.classList.remove('playing', 'keys');
   };
   const panel = (...kids) => { over = h('div', { class: 'tp-over' }, ...kids); slot.append(over); };
   const name = () => (tile ? tile.d.name : 'this tile');
+  const by = () => (byLine.textContent || '').replace(/^by @/, '') || null;
   function banner() {
     clear();
     if (!tile) return;
@@ -617,10 +632,63 @@ function playCard(ctx, t) {
     start();
   }
   function start() {
-    player.play({ slot, uri: t.uri, did: t.did, pds: tile.pds, d: tile.d, onState });
+    showPlace(null);
+    player.play({ slot, uri: t.uri, did: t.did, pds: tile.pds, d: tile.d, onState, expand: () => expand(), expanded: () => !!view });
   }
+  function showPlace(info) {
+    place = info && info.travelled ? info : null;
+    nowLine.hidden = !place;
+    if (place) {
+      nowWhere.replaceChildren(h('b', {}, 'Now in:'), ` ${place.name}${place.by ? `, by @${place.by}` : ''}`);
+      nowBack.textContent = `Back to ${place.backTo}`;
+    }
+    if (view) view.setPlace(info || { name: name(), by: by(), travelled: false, backTo: null });
+  }
+
+  // ---- the expanded view (EX1 to EX5, EX8) ----
+  const onKey = (e) => { if (e.key === 'Escape' && view && !document.fullscreenElement) { e.preventDefault(); collapse(); } };
+  const onFront = (e) => { if (e.detail === false && view) collapse({ instant: true }); };   // another Raku tab in front
+  async function expand() {
+    if (view || player.current !== slot) return;
+    const reduce = !!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const v = createExpanded({ host: ctx.p.el, card: el, slot, motion: expandMotion({ reduce }),
+      onClose: () => collapse(), onNewTab: () => newTabFromView(), onBack: () => player.back(slot) });
+    view = v;
+    v.setPlace(place || { name: name(), by: by(), travelled: false, backTo: null });
+    player.pushStep(() => collapse({ fromBack: true }));
+    document.addEventListener('keydown', onKey);
+    ctx.p.el.addEventListener('raku:front', onFront);
+    player.big(slot, true);
+    await v.open();
+    if (view === v) player.focus(slot);
+  }
+  async function collapse({ instant = false, fromBack = false } = {}) {
+    const v = view;
+    if (!v) return;
+    view = null;
+    document.removeEventListener('keydown', onKey);
+    ctx.p.el.removeEventListener('raku:front', onFront);
+    const dropping = fromBack ? null : player.dropStep();
+    await v.close({ instant });
+    player.big(slot, false);
+    if (dropping) await dropping;
+    // (the keys back to the tile after ×, Escape or Back; not when another tab came to the front, or a new one opens)
+    if (!instant && player.current === slot) player.focus(slot);
+  }
+  async function newTabFromView() {
+    const x = tabNow();
+    await collapse({ instant: true });
+    openNew(x.uri, x.state);
+  }
+
   function onState(kind, detail) {
     if (kind === 'keys') { if (slot.classList.contains('playing')) slot.classList.toggle('keys', !!detail); return; }
+    if (kind === 'place') { showPlace(detail); return; }
+    if (kind === 'note') { if (view) view.note(detail); else say(detail); return; }
+    if (kind === 'stopped' || kind === 'error') {
+      if (view) collapse({ instant: true });
+      showPlace(null);
+    }
     if (kind === 'stopped') { banner(); return; }
     if (kind === 'error') {
       clear();
@@ -636,16 +704,18 @@ function playCard(ctx, t) {
     if (kind === 'playing') {
       clear();
       slot.classList.add('playing');
+      // EX2: expand in the corner of the playing tile, left of the × and the card's new-tab button
+      expandBtn = h('button', { type: 'button', class: 'card-btn tp-expand', title: 'Expand', 'aria-label': `Expand ${name()}`, onclick: () => expand() }, icon('expand', 16));
       stopBtn = h('button', { type: 'button', class: 'card-btn tp-stop', title: 'Stop', 'aria-label': `Stop ${name()}`, onclick: () => player.stop(slot) }, icon('close', 16));
       hint = h('span', { class: 'tp-keys-hint', 'aria-hidden': 'true' }, 'Keys go to the tile');
-      slot.append(stopBtn, hint);
+      slot.append(expandBtn, stopBtn, hint);
       hintTimer = setTimeout(() => { if (hint) hint.classList.add('gone'); }, PLAY_HERE.hintMs);
     }
   }
   return {
     el,
-    set({ by, note }) {
-      if (by !== undefined) byLine.textContent = by ? `by @${by}` : '';
+    set({ by: who, note }) {
+      if (who !== undefined) byLine.textContent = who ? `by @${who}` : '';
       if (note !== undefined) noteLine.textContent = note;
     },
     ready({ d, pds, alt }) {

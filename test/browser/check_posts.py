@@ -9,6 +9,12 @@
 # one at a time; the ×; out of view (a brief scroll doesn't stop it); leaving Discover; a large tile's question and a
 # too-large one; a tile with ways (its exits' status; a dormant way blocked at the portal; a way taken opening in a new
 # tab and the post's tile stopping); the new wording on Discover and the About page; the phone.
+# Round C (claude/raku-expand-plan.md, EX1 to EX8, and D: travel inside the post): the expand button; the expanded view
+# (the bar, the tile opened in place and never reloaded, the keys, Full screen); closing by ×, Escape and Back; the
+# window opening (400 ms, linear) and reduced motion's fade; stepping through a portal while small expanding first and
+# travelling inside the post (the screen, the arrival, "Now in", "Back to …" arriving at the portal, Pick a door with
+# Stay here, a large place's question, a dormant way); shrinking back after a trip ("Now in" on the card, the new-tab
+# button opening the way taken); stopping resetting it; the phone (the bar in two rows, the tile edge to edge).
 # Everything outside is a Playwright route (the account directory, the relay, account servers, Bluesky's public API
 # and its picture server, the hide list). Tiles aren't run here (check_page.py does that).
 # Usage: python3 test/browser/check_posts.py <work folder>   (servers.mjs and the loader replica already running, as for
@@ -97,7 +103,7 @@ KEYS_JS = b"let n = 0; addEventListener('keydown', (e) => { n++; document.getEle
 def blob(data, ctype, size=None):
     c = cid_for(data)
     return {'src': {'$type': 'blob', 'ref': {'$link': c}, 'mimeType': ctype, 'size': size or len(data)}, 'content-type': ctype}
-def play_tile(name, color, ways=None, size=None):
+def play_tile(name, color, ways=None, size=None, key='waytile'):
     page = (f'<!doctype html><meta charset=utf-8><body style="font:18px sans-serif;background:#eef4ff;padding:16px;margin:0">'
             f'<h1 id=h>{name}</h1><p>keys <span id=k>0</span></p><p>status <span id=st>none</span> arrived <span id=arr>none</span></p>'
             f'<script src="/keys.js"></script>{"<script src=/way.js></script>" if ways else ""}').encode()
@@ -105,14 +111,15 @@ def play_tile(name, color, ways=None, size=None):
     if ways:
         res['/way.js'] = blob(WAY_JS, 'text/javascript')
         res['/ways.json'] = blob(json.dumps({'v': 1, 'tile': 'waytile', 'place': f'at://{A}/cafe.thunderbird.way.place/waytile',
-            'exits': [{'id': e, 'signpost': f'at://{A}/{SIGN}/waytile.{e}', 'fallback': f'https://thunderbird.cafe/way/waytile/{e}'} for e in ways],
+            'exits': [{'id': e, 'signpost': f'at://{A}/{SIGN}/{key}.{e}', 'fallback': f'https://thunderbird.cafe/way/waytile/{e}'} for e in ways],
             'entrances': [{'id': e} for e in ways]}).encode(), 'application/json')
     banner = png(color)
     res['/banner.png'] = blob(banner, 'image/png')
     return {'$type': 'ing.dasl.masl', 'cid': 'bafyreimanifest', 'tile': {'name': name, 'description': f'{name}, a stand-in', 'resources': res, 'screenshots': [{'src': '/banner.png'}]}, 'createdAt': '2026-11-01T10:00:00Z'}
 MB = 1024 * 1024
 PLAY_TILES = {
-    (A, 'waytile'): play_tile('Way tile', (60, 120, 160), ways=['door', 'shut']),
+    (A, 'waytile'): play_tile('Way tile', (60, 120, 160), ways=['door', 'shut', 'many', 'big']),
+    (A, 'forest'): play_tile('Forest', (200, 230, 240), ways=['back'], key='forest'),
     (A, 'second'): play_tile('Second tile', (160, 120, 60)),
     (A, 'large'): play_tile('Large tile', (120, 60, 160), size=60 * MB),
     (A, 'huge'): play_tile('Huge tile', (60, 60, 60), size=620 * MB),
@@ -121,6 +128,10 @@ PLAY_TILES = {
 SIGNPOSTS = {
     (A, 'waytile.door'): {'$type': SIGN, 'to': [{'tile': f'at://{A}/ing.dasl.masl/plain'}], 'updatedAt': '2026-11-01T00:00:00Z'},
     (A, 'waytile.shut'): {'$type': SIGN, 'to': [], 'updatedAt': '2026-11-01T00:00:00Z'},
+    (A, 'waytile.many'): {'$type': SIGN, 'to': [{'tile': f'at://{A}/ing.dasl.masl/plain', 'label': 'The plain door'},
+                                                {'tile': f'at://{A}/ing.dasl.masl/forest', 'entrance': 'back', 'label': 'The forest door'}], 'updatedAt': '2026-11-01T00:00:00Z'},
+    (A, 'waytile.big'): {'$type': SIGN, 'to': [{'tile': f'at://{A}/ing.dasl.masl/large'}], 'updatedAt': '2026-11-01T00:00:00Z'},
+    (A, 'forest.back'): {'$type': SIGN, 'to': [{'tile': f'at://{A}/ing.dasl.masl/waytile', 'entrance': 'many'}], 'updatedAt': '2026-11-01T00:00:00Z'},
 }
 PLAY_POSTS = {A: [tpost(A, '3mzq1', 'A tile with ways', 1, A, 'waytile'), tpost(A, '3mzq2', 'A second tile', 2, A, 'second'),
                   tpost(A, '3mzq3', 'A large tile', 3, A, 'large'), tpost(A, '3mzq4', 'A huge tile', 4, A, 'huge')]
@@ -364,15 +375,18 @@ with sync_playwright() as pw:
     check('...and the keys no longer reach the tile', itext('#k', 'A tile with ways') == '3', str(itext('#k', 'A tile with ways')))
     # PH5: ways
     st = wait_for(lambda: (lambda v: v if v and v != 'none' else None)(itext('#st', 'A tile with ways')), page=page)
-    check('PH5: a tile with ways is answered: its exits\' status', st and json.loads(st) == {'door': 'open', 'shut': 'dormant'}, str(st))
+    check('PH5: a tile with ways is answered: its exits\' status', st and json.loads(st) == {'door': 'open', 'shut': 'dormant', 'many': 'open', 'big': 'open'}, str(st))
     inner('A tile with ways').evaluate('() => leave("shut")')
     check('...a way that leads nowhere: back at that portal, "The way is blocked."', wait_for(lambda: itext('#arr', 'A tile with ways') == 'shut', page=page)
           and wait_for(lambda: 'The way is blocked.' in page.inner_text('body'), page=page) and frames() == 1)
+    check('...the tile stays small for a way that leads nowhere', page.query_selector('.tp-x') is None)
+    # (round C replaced PH5's new tab: a way taken now travels inside the post; the full checks are below)
     inner('A tile with ways').evaluate('() => leave("door")')
-    newtab = wait_for(lambda: len(page.query_selector_all('.tab')) == n_tabs + 1 and 'raku:way/' in page.input_value('.addr') and page.input_value('.addr'), page=page)
-    check('...a way taken opens in a new tab (raku:way/…)', newtab and newtab.endswith('/waytile.door'), str(newtab))
-    check('...and the post\'s tile stops: its banner and Play back', frames() == 0 and page.query_selector(f'{W1} .tp-play') is not None, str(frames()))
-    page.click('.tab:nth-child(1)')
+    travelled = wait_for(lambda: itext('#h', 'A tile with ways') == 'Somewhere plain', 20, page=page)
+    check('...a way taken travels inside the post now (round C): no new tab, the place in the same slot', travelled and len(page.query_selector_all('.tab')) == n_tabs and frames() == 1, str(itext('#h')))
+    check('...expanded first (EX6)', page.query_selector('.tp-x') is not None)
+    if page.query_selector('.tp-x'): page.click('.tp-x-close'); wait_for(lambda: page.query_selector('.tp-x') is None, page=page)
+    if page.query_selector(f'{W1} .tp-stop'): page.click(f'{W1} .tp-stop')
     wait_for(lambda: page.is_visible(f'{W1} .tp-play'), page=page)
     # PH1: one at a time; the ×
     page.click(f'{W1} .tp-play'); wait_for(lambda: itext('#h', 'A tile with ways') == 'Way tile', 20, page=page)
@@ -433,6 +447,245 @@ with sync_playwright() as pw:
     check("...a card scrolled under the sticky source chips stays under them", under)
     page.screenshot(path=str(OUT / 'play-phone.png'))
     ctx6.close()
+
+    # ================= Round C: expand (EX1 to EX8) and travel inside the post (D) =================
+    ctx7 = new_ctx()
+    page = ctx7.new_page()
+    cerrors = []
+    page.on('pageerror', lambda e: cerrors.append(str(e)))
+    page.goto(PLAY_URL); page.wait_for_selector('.discover')
+    W1 = post_sel('A tile with ways'); J1 = '[data-ck="w1"]'
+    wait_for(lambda: page.is_visible(f'{W1} .tp-play'), page=page)
+    page.eval_on_selector(W1, 'e => e.setAttribute("data-ck", "w1")')
+    check('EX2: the banner keeps its single "Play here" (no expand before playing)', page.query_selector(f'{W1} .tp-expand') is None and len(page.query_selector_all(f'{W1} .tp-slot button')) == 1)
+    page.click(f'{W1} .tp-play')
+    wait_for(lambda: itext('#h', 'A tile with ways') == 'Way tile', 20, page=page)
+    wait_for(lambda: page.is_visible(f'{W1} .tp-expand'), page=page)
+    pos = page.evaluate(f"""() => {{ const c = document.querySelector('{J1}'); const r = (s) => c.querySelector(s).getBoundingClientRect();
+      return {{ ex: r('.tp-expand').right, x: r('.tp-stop').left, xr: r('.tp-stop').right, nt: r('.card-corner .card-btn').left, top: Math.abs(r('.tp-expand').top - r('.tp-stop').top) }}; }}""")
+    check('EX2: a playing tile has an expand button in its corner, left of the × and the new-tab button', page.is_visible(f'{W1} .tp-expand') and pos['ex'] <= pos['x'] and pos['xr'] <= pos['nt'] and pos['top'] < 2
+          and page.get_attribute(f'{W1} .tp-expand', 'aria-label') == 'Expand Way tile', str(pos))
+    wait_for(lambda: page.evaluate('() => document.activeElement && document.activeElement.classList.contains("tp-frame")'), page=page)
+    page.keyboard.press('ArrowUp'); page.keyboard.press('ArrowUp')
+    wait_for(lambda: itext('#k', 'A tile with ways') == '2', page=page)
+    small = page.eval_on_selector(f'{W1} .tp-slot', 's => { const r = s.getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; }')
+    hist0 = page.evaluate('history.length')
+    page.click(f'{W1} .tp-expand')
+    opened = wait_for(lambda: page.is_visible('.tp-x') and page.eval_on_selector(f'{W1} .tp-slot', 's => s.classList.contains("expanded") && getComputedStyle(s).position === "fixed"'), page=page)
+    page.wait_for_timeout(500)
+    geo = page.evaluate(f"""() => {{ const s = document.querySelector('{J1} .tp-slot').getBoundingClientRect(), h = document.querySelector('.tp-x-hole').getBoundingClientRect(),
+      bar = document.querySelector('.tp-x-bar').getBoundingClientRect(), chrome = document.querySelector('.chrome').getBoundingClientRect();
+      const hit = document.elementFromPoint(s.left + s.width / 2, s.top + s.height / 2);
+      const top = document.elementFromPoint(chrome.left + 200, chrome.top + 10);
+      return {{ s: [s.left, s.top, s.width, s.height], h: [h.left, h.top, h.width, h.height], barTop: bar.top, overChrome: !!top && !!top.closest('.tp-x'), hitFrame: !!hit && hit.classList.contains('tp-frame'),
+        w: innerWidth, hh: innerHeight }}; }}""")
+    check('EX1: expand fills Raku\'s window: the bar at the top, over Raku\'s own bars, on a dark backdrop', opened and geo['barTop'] == 0 and geo['overChrome'], str(geo))
+    check('...the tile grown in place to the stage (14 px margin on a computer), in front of the backdrop', all(abs(a - b) < 2 for a, b in zip(geo['s'], geo['h'])) and abs(geo['h'][0] - 14) < 1
+          and geo['s'][2] > small[2] * 1.5 and geo['hitFrame'], str([geo, small]))
+    check('...the same frame, never reloaded (the keys counted before expanding are still there)', itext('#k', 'A tile with ways') == '2' and frames() == 1)
+    check('EX1: the bar: the tile\'s name and author, New tab, Full screen (allowed here), ×; no "Back to" before a trip',
+          page.inner_text('.tp-x-name') == 'Way tile' and wait_for(lambda: page.inner_text('.tp-x-by') == f'by @{A_H}', page=page) and page.is_visible('.tp-x-new') and page.is_visible('.tp-x-full')
+          and page.is_visible('.tp-x-close') and page.is_hidden('.tp-x-btn.back'), page.inner_text('.tp-x-bar'))
+    page.screenshot(path=str(OUT / 'expand-wide.png'))
+    check('...the card\'s own buttons hidden under it (expand, × and the corner)', not page.is_visible(f'{W1} .tp-expand') and not page.is_visible(f'{W1} .tp-stop') and not page.is_visible(f'{W1} .card-corner .card-btn'))
+    check('EX5: expanding adds one step to the browser\'s history', page.evaluate('history.length') == hist0 + 1)
+    keys = wait_for(lambda: page.evaluate('() => document.activeElement && document.activeElement.classList.contains("tp-frame")'), page=page)
+    page.keyboard.press('ArrowLeft')
+    check('...expanding gives the tile the keys, with the ring', keys and wait_for(lambda: itext('#k', 'A tile with ways') == '3', page=page) and page.eval_on_selector(f'{W1} .tp-slot', 's => s.classList.contains("keys")'))
+    page.wait_for_timeout(3500)
+    check('...while expanded it never stops (more than the out-of-view time)', frames() == 1 and page.is_visible('.tp-x'))
+    page.set_viewport_size({'width': 1100, 'height': 760}); page.wait_for_timeout(300)
+    geo2 = page.evaluate(f"""() => {{ const s = document.querySelector('{J1} .tp-slot').getBoundingClientRect(), h = document.querySelector('.tp-x-hole').getBoundingClientRect(); return [s.width - h.width, s.height - h.height]; }}""")
+    check('...a resized window: the tile follows the stage', abs(geo2[0]) < 2 and abs(geo2[1]) < 2, str(geo2))
+    page.set_viewport_size({'width': 1400, 'height': 900}); page.wait_for_timeout(300)
+    page.click('.tp-x-full')
+    full = wait_for(lambda: page.evaluate(f"() => document.fullscreenElement === document.querySelector('{J1} .tp-slot')"), 4, page=page)
+    check('EX1: "Full screen": the browser\'s own full screen for the tile', full)
+    if full: page.evaluate('() => document.exitFullscreen()'); wait_for(lambda: page.evaluate('() => !document.fullscreenElement'), page=page)
+    check('...leaving full screen keeps it expanded', page.is_visible('.tp-x') and frames() == 1)
+    page.click('.tp-x-close')
+    closed = wait_for(lambda: page.query_selector('.tp-x') is None and page.eval_on_selector(f'{W1} .tp-slot', 's => !s.classList.contains("expanded") && getComputedStyle(s).position === "relative" && !s.getAttribute("style")'), page=page)
+    back = page.eval_on_selector(f'{W1} .tp-slot', 's => { const r = s.getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; }')
+    check('EX5: × shrinks it back into the post, where it was', closed and all(abs(a - b) < 2 for a, b in zip(back, small)) and page.query_selector('.tp-slot-spacer') is None, str([back, small]))
+    check('...still playing, the same frame (the keys counted are still there), Raku\'s address unchanged', frames() == 1 and itext('#k', 'A tile with ways') == '3' and 'raku%3Adiscover%2Fposts' in page.evaluate('location.hash'))
+    check('...and the history step taken back off', wait_for(lambda: page.evaluate('history.state') is None, page=page))
+    page.click(f'{W1} .tp-expand'); wait_for(lambda: page.is_visible('.tp-x'), page=page); page.wait_for_timeout(800)
+    page.click('.tp-x-name'); page.keyboard.press('Escape')
+    check('EX5: Escape (the keys with Raku) closes it', wait_for(lambda: page.query_selector('.tp-x') is None, page=page) and frames() == 1)
+    page.wait_for_timeout(300)
+    page.click(f'{W1} .tp-expand'); wait_for(lambda: page.is_visible('.tp-x'), page=page); page.wait_for_timeout(800)
+    page.keyboard.press('Escape')
+    check('...Escape pressed in the tile stays the tile\'s (keys pressed in a tile never reach Raku)', page.is_visible('.tp-x'))
+    page.go_back()
+    check('EX5: Back closes it, and stays in Raku on Tile posts', wait_for(lambda: page.query_selector('.tp-x') is None, page=page) and frames() == 1
+          and texts(page, '.dv-centre h1') == ['Tile posts'] and 'raku%3Adiscover%2Fposts' in page.evaluate('location.hash'))
+    page.wait_for_timeout(300)
+
+    # ---- D: travel inside the post ----
+    page.click(f'{W1} .tp-stop'); wait_for(lambda: page.is_visible(f'{W1} .tp-play'), page=page)
+    page.click(f'{W1} .tp-play'); wait_for(lambda: itext('#h', 'A tile with ways') == 'Way tile', 20, page=page)
+    wait_for(lambda: (itext('#st', 'A tile with ways') or 'none') != 'none', page=page)
+    n_tabs = len(page.query_selector_all('.tab'))
+    inner('A tile with ways').evaluate('() => leave("door")')
+    exp = wait_for(lambda: page.is_visible('.tp-x'), page=page)
+    scr = wait_for(lambda: page.is_visible(f'{W1} .way-screen') and page.inner_text(f'{W1} .way-name'), page=page)
+    check('EX6: stepping through a portal while small expands first, then travels', exp and page.eval_on_selector(f'{W1} .tp-slot', 's => s.classList.contains("expanded")'))
+    check('D: the screen between places, in the expanded tile, names where it leads', scr == 'Somewhere plain', str(scr))
+    arrived = wait_for(lambda: itext('#h', 'A tile with ways') == 'Somewhere plain', 20, page=page)
+    check('D: the place it leads to runs in the same slot (no new tab, Raku\'s address unchanged)', arrived and len(page.query_selector_all('.tab')) == n_tabs and frames() == 1
+          and 'raku%3Adiscover%2Fposts' in page.evaluate('location.hash'))
+    check('...the screen goes once it has arrived', wait_for(lambda: page.query_selector(f'{W1} .way-screen') is None, 6, page=page))
+    check('EX7: the bar: "Somewhere plain", "Now in · by @…", "Back to Way tile"', page.inner_text('.tp-x-name') == 'Somewhere plain' and page.inner_text('.tp-x-by') == f'Now in · by @{A_H}'
+          and page.is_visible('.tp-x-btn.back') and page.inner_text('.tp-x-btn.back') == 'Back to Way tile', page.inner_text('.tp-x-bar'))
+    page.screenshot(path=str(OUT / 'expand-trip-wide.png'))
+    check('...the place gets the keys', wait_for(lambda: page.evaluate('() => document.activeElement && document.activeElement.classList.contains("tp-frame")'), page=page))
+    page.click('.tp-x-btn.back')
+    check('EX7: "Back to Way tile": the screen names it, and it runs again', wait_for(lambda: page.is_visible(f'{W1} .way-screen') and page.inner_text(f'{W1} .way-name') == 'Way tile', page=page)
+          and wait_for(lambda: itext('#h', 'A tile with ways') == 'Way tile', 20, page=page))
+    check('...arriving at the portal it was left by', wait_for(lambda: itext('#arr', 'A tile with ways') == 'door', page=page), str(itext('#arr', 'A tile with ways')))
+    check('...and the bar is the post\'s own again: no "Back to", no "Now in"', wait_for(lambda: page.is_hidden('.tp-x-btn.back') and page.inner_text('.tp-x-by') == f'by @{A_H}', page=page), page.inner_text('.tp-x-bar'))
+    wait_for(lambda: page.query_selector(f'{W1} .way-screen') is None, 6, page=page)
+    # several doors: Pick a door, Stay here
+    inner('A tile with ways').evaluate('() => leave("many")')
+    pick = wait_for(lambda: page.is_visible(f'{W1} .way-door-list') and texts(page, f'{W1} .way-door-name'), page=page)
+    page.screenshot(path=str(OUT / 'expand-pick-wide.png'))
+    check('D: a way to several places: "Pick a door", with Stay here', pick == ['Somewhere plain', 'Forest'] and page.inner_text(f'{W1} .way-name') == 'Pick a door'
+          and page.is_visible(f'{W1} .way-actions button:text-is("Stay here")'), str(pick))
+    page.click(f'{W1} .way-actions button:text-is("Stay here")')
+    check('...Stay here: back at that portal, in the same place', wait_for(lambda: page.query_selector(f'{W1} .way-screen') is None and itext('#arr', 'A tile with ways') == 'door,many', page=page)
+          and itext('#h', 'A tile with ways') == 'Way tile', str(itext('#arr', 'A tile with ways')))
+    inner('A tile with ways').evaluate('() => leave("many")')
+    wait_for(lambda: page.is_visible(f'{W1} .way-door-list'), page=page)
+    page.click(f'{W1} .way-door:has-text("Forest")')
+    check('...a door chosen: that place, at the door\'s entrance', wait_for(lambda: itext('#h', 'A tile with ways') == 'Forest', 20, page=page)
+          and wait_for(lambda: itext('#arr', 'A tile with ways') == 'back', page=page) and page.inner_text('.tp-x-btn.back') == 'Back to Way tile')
+    fst = wait_for(lambda: (lambda v: v if v and v != 'none' else None)(itext('#st', 'A tile with ways')), page=page)
+    check('...and its own exits answered', fst and json.loads(fst) == {'back': 'open'}, str(fst))
+    # a large place asks first
+    page.click('.tp-x-btn.back'); wait_for(lambda: itext('#h', 'A tile with ways') == 'Way tile', 20, page=page)
+    wait_for(lambda: page.query_selector(f'{W1} .way-screen') is None, 6, page=page)
+    inner('A tile with ways').evaluate('() => leave("big")')
+    q = wait_for(lambda: page.is_visible(f'{W1} .way-msg') and page.inner_text(f'{W1} .way-msg'), page=page)
+    check('D: a large place asks first, on the screen: "This tile is large (60 MB). Go anyway?"', q == 'This tile is large (60 MB). Go anyway?' and itext('#h', 'A tile with ways') == 'Way tile', str(q))
+    page.click(f'{W1} .way-actions button:text-is("Stay here")')
+    check('...Stay here: back at that portal', wait_for(lambda: page.query_selector(f'{W1} .way-screen') is None and itext('#arr', 'A tile with ways').endswith(',big'), page=page), str(itext('#arr', 'A tile with ways')))
+    # a dormant way while expanded
+    inner('A tile with ways').evaluate('() => leave("shut")')
+    note = wait_for(lambda: page.is_visible('.tp-x-note') and page.inner_text('.tp-x-note'), page=page)
+    check('D: a way that leads nowhere, expanded: back at that portal, "The way is blocked." in the expanded view', note == 'The way is blocked.' and wait_for(lambda: itext('#arr', 'A tile with ways').endswith(',shut'), page=page), str(note))
+    # shrinking back after a trip (EX7)
+    inner('A tile with ways').evaluate('() => leave("door")')
+    wait_for(lambda: itext('#h', 'A tile with ways') == 'Somewhere plain', 20, page=page)
+    wait_for(lambda: page.query_selector(f'{W1} .way-screen') is None, 6, page=page)
+    page.click('.tp-x-close')
+    wait_for(lambda: page.query_selector('.tp-x') is None, page=page)
+    now = wait_for(lambda: page.is_visible(f'{W1} .tp-now') and page.inner_text(f'{W1} .tp-now'), page=page)
+    page.eval_on_selector(W1, 'e => e.scrollIntoView({ block: "center" })'); page.screenshot(path=str(OUT / 'expand-back-wide.png'))
+    check('EX7: shrunk back after a trip: it stays where it went, with "Now in: Somewhere plain, by @…" and "Back to Way tile" on the card',
+          now and now.replace('\n', ' ').startswith(f'Now in: Somewhere plain, by @{A_H}') and 'Back to Way tile' in now and itext('#h', 'A tile with ways') == 'Somewhere plain', str(now))
+    page.click(f'{W1} .card-corner .card-btn')
+    wt = wait_for(lambda: len(page.query_selector_all('.tab')) == n_tabs + 1 and page.input_value('.addr'), page=page)
+    check("EX7: the card's new-tab button opens the way taken (raku:way/…)", wt and 'raku:way/' in wt and wt.endswith('/waytile.door'), str(wt))
+    page.click('.tab:nth-child(1)'); wait_for(lambda: page.is_visible(f'{W1} .tp-now'), page=page)
+    page.click(f'{W1} .tp-now button')
+    check('...the card\'s "Back to Way tile": back in place, small, at the portal; the line goes', wait_for(lambda: itext('#h', 'A tile with ways') == 'Way tile', 20, page=page)
+          and page.query_selector('.tp-x') is None and wait_for(lambda: page.is_hidden(f'{W1} .tp-now'), page=page) and wait_for(lambda: itext('#arr', 'A tile with ways') == 'door', page=page),
+          str([itext('#h', 'A tile with ways'), itext('#arr', 'A tile with ways'), page.is_hidden(f'{W1} .tp-now'), frames()]))
+    wait_for(lambda: page.query_selector(f'{W1} .way-screen') is None, 6, page=page)
+    # the expanded view's New tab after a trip
+    inner('A tile with ways').evaluate('() => leave("door")')
+    wait_for(lambda: itext('#h', 'A tile with ways') == 'Somewhere plain', 20, page=page)
+    n2 = len(page.query_selector_all('.tab'))
+    page.click('.tp-x-new')
+    wt2 = wait_for(lambda: len(page.query_selector_all('.tab')) == n2 + 1 and page.input_value('.addr'), page=page)
+    check('EX7: the expanded view\'s New tab: it shrinks back and the way taken opens in a new tab', wt2 and wt2.endswith('/waytile.door') and page.query_selector('.tp-x') is None, str(wt2))
+    page.wait_for_timeout(800)
+    check('...and the new tab stays (the history step taken off didn\'t undo it)', len(page.query_selector_all('.tab')) == n2 + 1 and wait_for(lambda: page.evaluate('() => document.querySelector(".tab.on") === document.querySelector(".tab:last-child")'), page=page))
+    page.click('.tab:nth-child(1)'); wait_for(lambda: texts(page, '.dv-centre h1') == ['Tile posts'], page=page)
+    # stopping resets it
+    if not page.is_visible(f'{W1} .tp-stop'): page.click(f'{W1} .tp-play')
+    wait_for(lambda: page.is_visible(f'{W1} .tp-stop'), page=page)
+    page.click(f'{W1} .tp-stop')
+    check('EX7: stopping brings the post\'s own banner back, ready from the start (no "Now in")', wait_for(lambda: page.is_visible(f'{W1} .tp-play') and frames() == 0, page=page) and page.is_hidden(f'{W1} .tp-now'))
+    page.click(f'{W1} .tp-play')
+    check('...Play again: the post\'s own tile', wait_for(lambda: itext('#h', 'A tile with ways') == 'Way tile', 20, page=page))
+    page.click(f'{W1} .tp-expand'); wait_for(lambda: page.is_visible('.tp-x'), page=page); page.wait_for_timeout(800)
+    page.eval_on_selector('.tab:nth-child(2)', 't => t.click()')       # (under the expanded view: as from the keyboard)
+    check('another Raku tab in front while expanded: it shrinks back (and stops after a few seconds, PH2)', wait_for(lambda: page.query_selector('.tp-x') is None, page=page)
+          and wait_for(lambda: len(page.query_selector_all('.tab')) == 3, page=page))
+    page.click('.tab:nth-child(1)'); wait_for(lambda: texts(page, '.dv-centre h1') == ['Tile posts'], page=page)
+    check('no page errors with expand and travel', not cerrors, str(cerrors))
+    ctx7.close()
+
+    # ---- EX4: window, 400 ms, linear (the owner's choice; the test switch removed); EX8: reduced motion fades ----
+    def tag(pg, sel):           # (Playwright's :text-is isn't for the page's own querySelector: mark the post)
+        pg.eval_on_selector(sel, 'e => e.setAttribute("data-ck", "x")'); return '[data-ck="x"]'
+    def motion_of(pg, sel):
+        return pg.evaluate(f"""() => {{ const s = document.querySelector('{tag(pg, sel)} .tp-slot'); document.querySelector('{tag(pg, sel)} .tp-expand').click();
+          const g = document.querySelector('.tp-ghost');
+          return {{ slot: s.getAnimations().map(a => [a.effect.getTiming().duration, a.effect.getTiming().easing, Object.keys(a.effect.getKeyframes()[0]).filter(k => !['offset', 'easing', 'composite', 'computedOffset'].includes(k)).sort().join(',')]),
+                   ghost: g ? g.getAnimations().length : 0, opacity: s.style.opacity }}; }}""")
+    for q, label in [('', 'EX4: expanding opens as a window (a clip from the post\'s box), 400 ms, linear'),
+                     ('?expand=grow&ms=900&ease=ease-out&', '...the old test switch in the address is ignored now (the same window, 400 ms)')]:
+        cx = new_ctx(); pg = cx.new_page()
+        pg.goto(RAKU + (q or '?') + 'loader=' + LOADER + '#t=raku%3Adiscover%2Fposts&a=0'); pg.wait_for_selector('.discover')
+        S2 = post_sel('A second tile')
+        page = pg
+        wait_for(lambda: pg.is_visible(f'{S2} .tp-play'), page=pg); pg.click(f'{S2} .tp-play')
+        wait_for(lambda: pg.is_visible(f'{S2} .tp-expand'), 20, page=pg)
+        small = pg.eval_on_selector(f'{S2} .tp-slot', 's => s.getBoundingClientRect().width')
+        m = motion_of(pg, S2)
+        width_now = pg.eval_on_selector(f'{S2} .tp-slot', 's => s.getBoundingClientRect().width')
+        check(label, any(a[0] == 400 and a[1] == 'linear' and a[2] == 'clipPath' for a in m['slot']) and not any('width' in a[2] for a in m['slot']) and m['ghost'] == 0, str(m))
+        check('...the live tile is at its full size from the start (not redrawn at every size)', width_now > small * 1.5, str([small, width_now]))
+        done = wait_for(lambda: pg.eval_on_selector(f'{S2} .tp-slot', 's => s.getAnimations().length === 0 && !s.style.clipPath'), 5, page=pg)
+        geo = pg.evaluate(f"""() => {{ const s = document.querySelector('{tag(pg, S2)} .tp-slot').getBoundingClientRect(), h = document.querySelector('.tp-x-hole').getBoundingClientRect(); return [s.width - h.width, s.height - h.height]; }}""")
+        check('...and it ends filling the stage, unclipped', done and abs(geo[0]) < 2 and abs(geo[1]) < 2, str(geo))
+        if not q:
+            pg.click('.tp-x-close')
+            closing = pg.evaluate(f"() => document.querySelector('{tag(pg, S2)} .tp-slot').getAnimations().map(a => Object.keys(a.effect.getKeyframes()[0]).join(','))")
+            check('...closing: the clip closes back to the post\'s box', any('clipPath' in k for k in closing), str(closing))
+            back = wait_for(lambda: pg.query_selector('.tp-x') is None and pg.eval_on_selector(f'{S2} .tp-slot', 's => !s.getAttribute("style")'), page=pg)
+            check('...then the tile is back in its post, nothing left pinned or clipped', back)
+        cx.close()
+    cx = new_ctx(reduced_motion='reduce'); pg = cx.new_page(); page = pg
+    pg.goto(PLAY_URL); pg.wait_for_selector('.discover')
+    S2 = post_sel('A second tile')
+    wait_for(lambda: pg.is_visible(f'{S2} .tp-play'), page=pg); pg.click(f'{S2} .tp-play')
+    wait_for(lambda: pg.is_visible(f'{S2} .tp-expand'), 20, page=pg)
+    m = motion_of(pg, S2)
+    check('EX8: with reduced motion, expanding is a plain fade (no clip, no growing)', any(a[2] == 'opacity' for a in m['slot']) and not any(a[2] in ('clipPath',) or 'width' in a[2] for a in m['slot']), str(m))
+    pg.wait_for_timeout(600)
+    pg.click('.tp-x-close')
+    check('...and closing too', pg.evaluate(f"() => document.querySelector('{tag(pg, S2)} .tp-slot').getAnimations().some(a => Object.keys(a.effect.getKeyframes()[0]).includes('opacity'))")
+          and wait_for(lambda: pg.query_selector('.tp-x') is None, page=pg))
+    cx.close()
+
+    # ---- the phone ----
+    ctx9 = new_ctx(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True, device_scale_factor=2)
+    page = ctx9.new_page()
+    page.goto(PLAY_URL); page.wait_for_selector('.discover')
+    W1 = post_sel('A tile with ways')
+    wait_for(lambda: page.is_visible(f'{W1} .tp-play'), page=page)
+    page.eval_on_selector(W1, 'e => { e.setAttribute("data-ck", "w1"); e.scrollIntoView({ block: "center" }); }')
+    page.tap(f'{W1} .tp-play'); wait_for(lambda: itext('#h', 'A tile with ways') == 'Way tile', 20, page=page)
+    wait_for(lambda: page.is_visible(f'{W1} .tp-expand'), page=page)
+    page.tap(f'{W1} .tp-expand'); wait_for(lambda: page.is_visible('.tp-x'), page=page); page.wait_for_timeout(500)
+    lay = page.evaluate(f"""() => {{ const s = document.querySelector('{J1} .tp-slot').getBoundingClientRect(), who = document.querySelector('.tp-x-who').getBoundingClientRect(),
+      x = document.querySelector('.tp-x-close').getBoundingClientRect(), bar = document.querySelector('.tp-x-bar').getBoundingClientRect();
+      return {{ s: [s.left, s.top, s.width, s.bottom], who: [who.width, who.bottom], x: [x.top, x.right], bar: bar.bottom, w: innerWidth, h: innerHeight, wide: document.documentElement.scrollWidth <= innerWidth }}; }}""")
+    check('phone: the expanded bar in two rows (the name, then the buttons on the right)', lay['x'][0] >= lay['who'][1] - 1 and abs(lay['x'][1] - (lay['w'] - 10)) < 2 and lay['who'][0] > 300, str(lay))
+    check('...the tile edge to edge under the bar, to the bottom of the screen', abs(lay['s'][0]) < 1 and abs(lay['s'][2] - lay['w']) < 1 and abs(lay['s'][1] - lay['bar']) < 1 and abs(lay['s'][3] - lay['h']) < 1 and lay['wide'], str(lay))
+    page.screenshot(path=str(OUT / 'expand-phone.png'))
+    inner('A tile with ways').evaluate('() => leave("door")')
+    wait_for(lambda: itext('#h', 'A tile with ways') == 'Somewhere plain', 20, page=page)
+    wait_for(lambda: page.query_selector(f'{W1} .way-screen') is None, 6, page=page)
+    check('...after a trip: "Back to Way tile" in the bar, with its words', page.is_visible('.tp-x-btn.back') and page.inner_text('.tp-x-btn.back') == 'Back to Way tile')
+    page.screenshot(path=str(OUT / 'expand-phone-trip.png'))
+    page.tap('.tp-x-close'); wait_for(lambda: page.query_selector('.tp-x') is None, page=page)
+    check('...shrunk back: the "Now in" line on the card fits the width', page.is_visible(f'{W1} .tp-now') and page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+    page.screenshot(path=str(OUT / 'expand-phone-back.png'))
+    ctx9.close()
     state['play'] = False
     b.close()
 

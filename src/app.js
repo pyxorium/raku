@@ -23,6 +23,9 @@
 // that exit's signpost and takes them on in the same tab (the tab's address becomes the way taken, raku:way/…), with a
 // screen between places showing where they're going, "Pick a door" when a way leads to several places, and Back along
 // the trail landing at the portal they left by. The rules are in ways.js.
+// Play here and round C (claude/raku-play-here-plan.md, claude/raku-expand-plan.md): a tile post's tile runs in its post
+// on Discover (playInPost), can be expanded to Raku's window (discover.js, expand-view.js), and travels by its ways
+// inside the post, with a trail for "Back to …" (leavePost, travelTo, backInPost).
 
 import { Tile } from '@dasl/tile-loader';
 import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS, TABLES, ROOMS, tableForTile, isRoomHouse, appmosphereCopy,
@@ -49,7 +52,7 @@ import { groupThreads } from './posts.js';
 import { createRooms } from './room-tab.js';
 import { setLeaveWarning } from './signin-ui.js';
 import { isInstalled } from './app-shell.js';
-import { playVerdict, leaveVerdict, createOneAtATime } from './play-here.js';
+import { playVerdict, createOneAtATime, wayPlan, createTrail, tabFor } from './play-here.js';
 
 export function mountRaku(root, { mothership, resolver, moderation, files, shelf, auth, storage = null, session = null, returned = null, keepForReturn = () => {}, loc = globalThis.location, hist = globalThis.history, tableDeps = {}, install = null }) {
   const kit = createCardKit({ files });
@@ -705,28 +708,62 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   // A tile post's tile running inside its post on Discover, built as a tab builds one (startTile: the same loader, frame
   // and sandbox, the same size rule) but held by the post's slot. One at a time across Raku (play-here.js); it stops on
   // its ×, when another starts, when its page goes (the pane's dispose), or a few seconds fully out of view.
+  // Round C (claude/raku-expand-plan.md): discover.js can expand the slot to Raku's window (the frame is never moved);
+  // and a tile with ways travels inside the post (D, EX6, EX7): the screen between places and "Pick a door" on the
+  // slot, the next place started in the same slot, a trail of the places passed through for "Back to …".
   const postSlots = createOneAtATime({ awayMs: PLAY_HERE.awayMs });
-  let playing = null;          // the tile playing: { slot, frame, ways, attempt, arrival, timers, observer, state }
+  let playing = null;          // the tile playing: { el (its slot), slot, frame, ways, attempt, arrival, timers, observer, trail, … }
   // onState(kind, detail): 'starting' | 'slow' | 'playing' | 'keys' (detail: true/false) | 'stopped' | 'error' (detail: words)
-  function playInPost({ slot, uri, did, pds, d, onState }) {
-    const pane = { slot, frame: null, ways: null, attempt: 0, arrival: null, timers: [], observer: null, state: 'loading', failed: null, onState };
+  //   | 'place' (detail: { name, by, travelled, backTo, tab }: the place now, after a trip or Back) | 'note' (detail: words)
+  // expand(): the slot expanded to Raku's window (a promise, once it has grown); expanded(): whether it is.
+  function playInPost({ slot, uri, did, pds, d, onState, expand = null, expanded = () => false }) {
+    const pane = { post: true, el: slot, slot, frame: null, ways: null, attempt: 0, arrival: null, timers: [], observer: null, state: 'loading', failed: null,
+      onState, expand, expanded, inView: true, big: false, screen: null, tripStarted: null, trip: 0,
+      trail: createTrail({ uri, did, pds, d, name: d.name, by: null }) };
     postSlots.start(slot, () => endPost(pane));
     playing = pane;
-    const alive = () => playing === pane;
     onState('starting');
-    pane.timers.push(setTimeout(() => { if (alive() && pane.state === 'loading') onState('slow'); }, TIMES.retry));
+    runInPost(pane, pane.trail.here, { first: true });
+    resolver.checkedHandle(did).then((hd) => { if (hd && pane.trail.length && pane.trail.here.did === did && !pane.trail.here.by) pane.trail.here.by = hd; }).catch(() => {});
+    if (typeof IntersectionObserver === 'function') {
+      pane.observer = new IntersectionObserver((entries) => {
+        for (const en of entries) { pane.inView = en.isIntersecting; postSlots.seen(slot, pane.big || en.isIntersecting); }
+      });
+      pane.observer.observe(slot);
+    }
+  }
+  // Start a place's tile in the slot (the post's own, or one reached by a way): a new frame in place of the last one.
+  // first: the post's own tile, as Play starts it (its "Starting…" panel, Try again on failing); a place reached by a
+  // way shows the screen between places until it says hello (or a moment after, without ways), as a tab does.
+  function runInPost(pane, place, { first = false, arrival = null } = {}) {
+    const mine = ++pane.attempt;
+    const alive = () => playing === pane && pane.attempt === mine;
+    pane.timers.forEach(clearTimeout);
+    pane.timers = [];
+    if (pane.frame) { pane.frame.remove(); pane.frame = null; }
+    pane.ways = null;
+    pane.arrival = arrival;
+    pane.state = 'loading';
+    if (first) pane.timers.push(setTimeout(() => { if (alive() && pane.state === 'loading') pane.onState('slow'); }, TIMES.retry));
+    const { did, pds, d } = place;
     const loader = createPathLoader({
       files, pds, did, manifest: d.manifest,
       onFile(path, ok, err) {
         if (!alive() || (path !== '/' && path !== '/index.html')) return;
-        if (!ok) { pane.failed = err?.message || "Couldn't load this tile."; postSlots.stop(slot); return; }
+        if (!ok) {
+          if (first || !pane.trail.travelled) { pane.failed = err?.message || "Couldn't load this tile."; postSlots.stop(pane.slot); return; }
+          // A place reached by a way that won't load: back where you came from, at the portal left by.
+          backInPost(pane, { note: `The way is blocked. ${err?.message || "Couldn't load where it leads."}` });
+          return;
+        }
         pane.state = 'ready';
-        onState('playing');
+        if (first) pane.onState('playing');
+        if (pane.screen) { const s = pane.screen; pane.timers.push(setTimeout(() => { if (alive() && pane.screen === s) revealScreen(pane, 0); }, pane.ways ? WAYS.helloMs : WAYS.plainMs)); }
         // PH4: the keys at once, as a tab gives them (RW10), twice as its page settles
-        for (const ms of KEYS_AFTER_MS) pane.timers.push(setTimeout(() => { if (alive()) focusPost(pane); }, ms));
+        else for (const ms of KEYS_AFTER_MS) pane.timers.push(setTimeout(() => { if (alive() && !pane.screen) focusPost(pane); }, ms));
       },
     });
-    const tile = new Tile(mothership, uri, d.manifest, loader);
+    const tile = new Tile(mothership, place.uri, d.manifest, loader);
     const frame = tile.renderContent(600);
     frame.className = 'tp-frame';
     frame.removeAttribute('style');
@@ -735,18 +772,15 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     frame.setAttribute('referrerpolicy', 'no-referrer');
     if (!TILE_POPUPS) frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-downloads');
     pane.frame = frame;
-    slot.append(frame);
+    pane.slot.prepend(frame);           // (under the screen between places, which stays on top while it shows)
     if (d.manifest.resources?.['/ways.json']) hostWays(pane, did, pds, d.manifest);
-    if (typeof IntersectionObserver === 'function') {
-      pane.observer = new IntersectionObserver((entries) => { for (const en of entries) postSlots.seen(slot, en.isIntersecting); });
-      pane.observer.observe(slot);
-    }
   }
   function endPost(pane) {
     if (playing === pane) playing = null;
     pane.timers.forEach(clearTimeout);
     if (pane.observer) pane.observer.disconnect();
     if (pane.frame) { pane.frame.remove(); pane.frame = null; }
+    removeScreen(pane);
     pane.onState(pane.failed ? 'error' : 'stopped', pane.failed || undefined);
   }
   // PH4: the keys go to the tile unless someone is typing in one of Raku's boxes or using a menu meanwhile (as focusIfFront).
@@ -763,34 +797,163 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   addEventListener('focus', () => setTimeout(keysToPost, 0));
   document.addEventListener('focusin', keysToPost);
   document.addEventListener('pointerdown', (e) => { if (playing && !playing.frame?.contains(e.target)) setTimeout(keysToPost, 0); }, true);
-  // PH5: a tile with ways in a post: its exits' status on hello; stepping through opens the way in a new tab and the
-  // post's tile stops; a way that leads nowhere keeps the traveller at that portal.
+
+  // A tile with ways in a post: its exits' status on hello, and the arrival when it was reached by a way or by Back;
+  // stepping through a portal travels inside the post (leavePost).
   async function fromWayPost(pane, d) {
     const m = readWayMessage(d);
     const host = pane.ways;
-    if (!m || !host || !(await host.ready) || playing !== pane) return;
-    if (m.kind === 'hello') { postTo(pane, statusMessage(host.statuses)); return; }
-    if (m.kind !== 'leave' || host.busy) return;
-    const exit = host.ways.exits.find((x) => x.id === m.exit);
-    if (!exit) return;
+    if (!m || !host) return;
+    const mine = pane.attempt;
+    if (!(await host.ready) || playing !== pane || mine !== pane.attempt || pane.ways !== host) return;
+    if (m.kind === 'hello') {
+      postTo(pane, statusMessage(host.statuses));
+      if (pane.arrival && !host.arrived) {
+        host.arrived = true;
+        const e = entranceFor(host.ways, pane.arrival.entrance);
+        if (e) postTo(pane, arriveMessage(e));
+      }
+      if (!host.helloed) { host.helloed = true; if (pane.screen) revealScreen(pane); }
+      return;
+    }
+    if (m.kind === 'leave') leavePost(pane, m.exit);
+  }
+  const placeInfo = (pane) => {
+    const t = pane.trail;
+    return { name: t.here.name, by: t.here.by || null, travelled: t.travelled, backTo: t.before ? t.before.name : null, tab: tabFor(t, wayUri) };
+  };
+  const postNote = (pane, text) => pane.onState('note', text);
+  // Stepping through a portal (D): the signpost read as a tab reads it: nowhere to go → back at that portal, "The way is
+  // blocked."; one place → there, in this post; several → "Pick a door", with "Stay here". A small tile expands first
+  // (EX6): the trip happens only in the expanded view.
+  async function leavePost(pane, exitId) {
+    const host = pane.ways;
+    const exit = host && host.ways ? host.ways.exits.find((x) => x.id === exitId) : null;
+    if (!exit || host.busy) return;
     host.busy = true;
+    const mine = pane.attempt;
+    const live = () => playing === pane && pane.attempt === mine;
+    // Expanded: the screen at once, as a tab shows it. Small: the signpost first (a way that leads nowhere keeps the
+    // tile where it is), then expand, then the screen.
+    if (pane.expanded()) showScreen(pane);
     const at = parseAtUri(exit.signpost);
     const view = await ways.lookUp(at.did, at.rkey).catch(() => ({ state: 'error', doors: [] }));
-    host.busy = false;
-    if (playing !== pane) return;
-    if (leaveVerdict(view) === 'go') { openNew(wayUri(at.did, at.rkey)); postSlots.stop(pane.slot); return; }
-    const e = entranceFor(host.ways, exit.id);
-    if (e) postTo(pane, arriveMessage(e));
-    say('The way is blocked.');
+    if (!live()) return;
+    const stay = (note) => {
+      removeScreen(pane);
+      host.busy = false;
+      const e = entranceFor(host.ways, exit.id);
+      if (e) postTo(pane, arriveMessage(e));
+      if (note) postNote(pane, note);
+      focusPost(pane);
+    };
+    const plan = wayPlan(view);
+    if (plan.kind === 'blocked') { stay('The way is blocked.'); return; }
+    if (!pane.expanded() && pane.expand) { await pane.expand(); if (!live()) return; }
+    showScreen(pane);
+    // (the screen stays up from here to the next place, so its minimum time counts from stepping through, RW9)
+    const go = (door) => travelTo(pane, door, { exit: exit.id, way: { did: at.did, rkey: at.rkey }, stay });
+    if (plan.kind === 'go') { go(plan.door); return; }
+    pickDoors(pane, view, { onGo: go, onStay: () => stay(null) });
   }
+  // Through a door (D): the screen names the place; its tile is checked as a tab checks a way's door (hidden, the
+  // place's pinned version, the size rule), then started in the same slot, arriving at the door's entrance. Anything
+  // in the way: back at the portal, "The way is blocked." (the tile left keeps running underneath until then).
+  async function travelTo(pane, door, { exit, way, stay }) {
+    const mine = pane.attempt;
+    const live = () => playing === pane && pane.attempt === mine;
+    const sc = showScreen(pane, { name: door.name, by: door.by });
+    const blocked = (why) => { if (live()) stay(`The way is blocked. ${why || ''}`.trim()); };
+    let record, account;
+    try {
+      if (await moderation.isAccountHidden(door.did) || await moderation.isHidden(door.did, door.rkey)) { blocked("Where it leads isn't shown in Raku."); return; }
+      [record, account] = await Promise.all([resolver.tileRecord(door.did, door.rkey), resolver.account(door.did)]);
+    } catch (err) { blocked(err instanceof NetError ? err.message : "Couldn't find where it leads."); return; }
+    if (!live()) return;
+    const d = describeTile(record);
+    if (!d.ok) { blocked(d.reason); return; }
+    if (door.pinned && record.cid !== door.pinned) { blocked('The tile there has changed since its place was pointed at it.'); return; }
+    const key = atUri(door.did, door.rkey);
+    const arrive = () => {
+      if (!live()) return;
+      screenPicture(pane, door.did, account.pds, d.manifest);
+      const place = pane.trail.go({ uri: door.tile, did: door.did, pds: account.pds, d, name: door.name, by: door.by || null },
+        { exit, way: { ...way, door: keepDoor(door) } });
+      if (pane.ways) pane.ways.busy = false;
+      runInPost(pane, place, { arrival: { entrance: door.entrance } });
+      pane.onState('place', placeInfo(pane));
+    };
+    const v = player.verdict(d.declaredBytes, key);
+    if (v === 'refuse') { blocked(`This tile is too large to open here (${formatBytes(d.declaredBytes)}).`); return; }
+    if (v === 'ask') {
+      sc.say(`This tile is large (${formatBytes(d.declaredBytes)}). Go anyway?`, [
+        button('Go anyway', () => { player.allow(key); arrive(); }, 'primary'),
+        button('Stay here', () => stay(null))]);
+      return;
+    }
+    arrive();
+  }
+  // "Back to …" (EX7): the place before, started again in the slot, arriving at the portal it was left by.
+  function backInPost(pane, { note = null } = {}) {
+    if (playing !== pane || !pane.trail.travelled) return;
+    const before = pane.trail.before;
+    pane.tripStarted = null;
+    showScreen(pane, { name: before.name, by: before.by });
+    screenPicture(pane, before.did, before.pds, before.d.manifest);
+    const { place, entrance } = pane.trail.back();
+    runInPost(pane, place, { arrival: entrance ? { entrance, back: true } : null });
+    pane.onState('place', placeInfo(pane));
+    if (note) postNote(pane, note);
+  }
+
+  // Expanding adds one step to the browser's history (EX5), so Back (the phone's gesture, the browser's button) closes
+  // the expanded view rather than leaving Raku. Closing it another way (×, Escape) takes the step back off. Raku's own
+  // address (the tabs, #t=…) is kept as it is now, whichever entry the browser lands on.
+  let step = null;             // { onBack, leaving, done }
+  function pushStep(onBack) {
+    if (step) return;
+    try { hist.pushState({ raku: 'expanded' }, ''); step = { onBack, leaving: false, done: null }; } catch { step = null; }
+  }
+  function dropStep() {
+    return new Promise((resolve) => {
+      if (!step) { resolve(); return; }
+      step.leaving = true;
+      step.done = resolve;
+      const s = step;
+      setTimeout(() => { if (step === s) { step = null; resolve(); } }, 700);
+      try { hist.back(); } catch { step = null; resolve(); }
+    });
+  }
+  globalThis.addEventListener?.('popstate', () => {
+    if (!step) return;
+    const s = step;
+    step = null;
+    const hash = tabs.toHash();
+    if (loc.hash !== hash) { try { hist.replaceState(null, '', hash); } catch { /* fine */ } }
+    if (s.leaving) { s.done(); return; }
+    s.onBack();
+  });
+
   // What Discover's tile posts use (discover.js tilePostCard).
   const playOk = new Set();      // tiles the visitor said "Play anyway" to, this visit (as largeOk for tabs)
+  const playingIn = (slot) => (playing && playing.slot === slot ? playing : null);
   const player = {
     verdict: (bytes, key) => playVerdict(bytes, key, new Set([...largeOk, ...playOk])),
     allow: (key) => { playOk.add(key); largeOk.add(key); },
     play: playInPost,
     stop: (slot) => (slot ? postSlots.stop(slot) : postSlots.stop()),
     get current() { return postSlots.current; },
+    // round C
+    big(slot, on) {            // expanded or not: while expanded it never stops for being out of view
+      const pane = playingIn(slot);
+      if (!pane) return;
+      pane.big = !!on;
+      postSlots.seen(slot, pane.big || pane.inView);
+    },
+    focus(slot) { const pane = playingIn(slot); if (pane) focusPost(pane); },
+    back(slot) { const pane = playingIn(slot); if (pane) backInPost(pane); },
+    place(slot) { const pane = playingIn(slot); return pane ? placeInfo(pane) : null; },
+    pushStep, dropStep,
   };
 
   // A tile's way messages: hello (answered with its exits' status, and the arrival when it was reached by a way or
@@ -891,7 +1054,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       setTimeout(() => {
         if (p.screen !== sc) return;
         removeScreen(p);
-        if (tabs.active && panes.get(tabs.active.id) === p) focusTile(p);
+        if (p.post) { if (playing === p) focusPost(p); }
+        else if (tabs.active && panes.get(tabs.active.id) === p) focusTile(p);
       }, WAYS.fadeMs);
     }, wait);
   }

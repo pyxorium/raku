@@ -757,6 +757,53 @@ a { color: var(--glaze-light); }
   .tp-card .card-text { padding-right: 12px; }
   .tile-post .tp-card { max-width: none; }
 }
+/* Round C (claude/raku-expand-plan.md, EX1 to EX8; from claude/raku-expand-mockup.html): a playing tile's expand button,
+   the expanded view over Raku's whole window, the "Now in" line after a trip. The slot is pinned (position: fixed) over
+   the stage by expand-view.js; it never leaves its card in the page, so the card is lifted over the backdrop and only the
+   slot shows. */
+.tp-expand { position: absolute; top: 6px; right: 78px; z-index: 4; }
+.tp-now { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 7px 12px; border-top: 1px solid #3a322b; font-size: 13px; color: var(--muted); }
+.tp-now[hidden] { display: none; }
+.tp-now b { color: var(--glaze-light); font-weight: 600; }
+.tp-now button { padding: 2px 10px; min-height: 30px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.05); color: var(--text); cursor: pointer; font-size: 12.5px; }
+.tp-now button:hover { border-color: var(--glaze); color: var(--glaze-light); }
+.pane.tp-x-on { z-index: 50; overflow: hidden; }          /* over Raku's own bars while a tile is expanded; no scrolling underneath */
+.tp-x { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; background: rgba(12,10,8,.92); }
+.tp-card.x-open { z-index: 61; background: transparent; border-color: transparent; }
+.tp-card.x-open > :not(.tp-slot) { visibility: hidden; }
+.tp-slot-spacer { display: block; }
+.tp-slot.expanded { position: fixed; z-index: 1; aspect-ratio: auto; border-radius: 10px; margin: 0; }
+.tp-slot.expanded > .tp-expand, .tp-slot.expanded > .tp-stop, .tp-slot.expanded > .tp-keys-hint { display: none; }
+.tp-slot.expanded:fullscreen { border-radius: 0; }
+.tp-x-bar { flex: none; display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 6px 10px 6px 16px; background: var(--kiln); border-bottom: 1px solid #3a322b; }
+.tp-x-who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tp-x-name { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-x-by { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-x-by:empty { display: none; }
+.tp-x-by b { color: var(--glaze-light); font-weight: 600; }
+.tp-x-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 12px; border-radius: 8px; border: 1px solid var(--line);
+  background: rgba(255,255,255,.05); color: var(--text); cursor: pointer; white-space: nowrap; }
+.tp-x-btn:hover { border-color: var(--glaze); color: var(--glaze-light); }
+.tp-x-btn.icon-only { width: 38px; padding: 0; justify-content: center; }
+.tp-x-btn[hidden] { display: none; }
+.tp-x-stage { flex: 1; min-height: 0; position: relative; }
+.tp-x-hole { position: absolute; inset: 14px; pointer-events: none; }
+.tp-x-note { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 2; margin: 0; max-width: calc(100% - 48px); padding: 8px 16px;
+  border-radius: 999px; background: rgba(38,33,29,.95); border: 1px solid #4a3f35; color: var(--warn); font-size: 13.5px; box-shadow: 0 6px 20px rgba(0,0,0,.4); }
+.tp-x-note[hidden] { display: none; }
+@media (max-width: 640px) {
+  /* a phone: the bar in two rows (the name, then the buttons on the right), the tile edge to edge */
+  .tp-x-btn .lbl { display: none; }
+  .tp-x-btn { width: 40px; padding: 0; justify-content: center; }
+  .tp-x-btn.back { width: auto; padding: 0 10px; }
+  .tp-x-btn.back .lbl { display: inline; }
+  .tp-x-bar { flex-wrap: wrap; row-gap: 6px; padding: calc(8px + env(safe-area-inset-top, 0px)) 10px 8px; }
+  .tp-x-who { flex-basis: 100%; }
+  .tp-x-btn.back { margin-right: auto; }
+  .tp-x-btn.back[hidden] + .tp-x-btn { margin-left: auto; }
+  .tp-x-hole { inset: 0; }
+  .tp-slot.expanded { border-radius: 0; }
+}
 .post-note { margin: 0; color: var(--muted); font-size: 13px; }
 .post-warn { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; border-radius: 10px; background: #2d2722; color: var(--warn); }
 .post-warn p { margin: 0; flex: 1; }

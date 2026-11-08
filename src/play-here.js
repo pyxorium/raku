@@ -5,9 +5,15 @@
 //   PH2  it stops on its ×, when another starts, when you leave Discover, or after PLAY_HERE.awayMs fully out of view
 //   PH3  over LIMITS.askBytes, Play asks first ("Play anyway?"); over LIMITS.maxBytes, it can't be played
 //   PH5  a tile with ways: stepping through a portal opens the way in a new tab (and the post's tile stops); a way that
-//        leads nowhere keeps you at that portal, "The way is blocked."
+//        leads nowhere keeps you at that portal, "The way is blocked." (Round C replaced the new tab: below.)
+//
+// Round C (claude/raku-expand-plan.md, EX1 to EX8), the rules here too:
+//   EX4  expanding opens the playing tile from its post to Raku's window (PLAY_HERE.expand: 'window', 400 ms, linear)
+//   EX8  when the system asks for reduced motion, a plain fade instead
+//   D    travel inside the post (EX6, EX7): a portal's signpost read as a tab reads it (wayPlan); the places passed
+//        through in this post kept in a small trail, so "Back to …" arrives at the portal left by (createTrail)
 
-import { LIMITS } from './config.js';
+import { LIMITS, PLAY_HERE } from './config.js';
 import { sizeVerdict } from './tiles.js';
 
 /** What pressing Play does for a tile of this size: 'start' | 'ask' | 'refuse'. `ok`: tiles already let through. */
@@ -52,4 +58,66 @@ export function createOneAtATime({ awayMs, setTimer = setTimeout, clearTimer = c
     if (!away) away = setTimer(() => { away = null; stop(slot); }, awayMs);
   }
   return { start, stop, seen, get current() { return current ? current.slot : null; } };
+}
+
+// ---------- round C: expanding (EX4, EX8) ----------
+/**
+ * How expanding and closing move: { technique: 'window' | 'fade', ms, ease }. EX4 (owner, Nov 8, after trying grow,
+ * window and banner with the real maze): window, 400 ms, linear: the live tile pinned at the stage, shown through a clip
+ * opening from the post's box. Reduced motion (EX8): a plain fade.
+ */
+export function expandMotion({ reduce = false, defaults = PLAY_HERE } = {}) {
+  return { technique: reduce ? 'fade' : defaults.expand, ms: defaults.expandMs, ease: defaults.expandEase };
+}
+
+/** A clip that shows only `r` of a box pinned at `box` (both { top, left, right, bottom }), as CSS clip-path. */
+export function clipInset(r, box, round = 0) {
+  const px = (n) => `${Math.max(0, Math.round(n))}px`;
+  return `inset(${px(r.top - box.top)} ${px(box.right - r.right)} ${px(box.bottom - r.bottom)} ${px(r.left - box.left)}${round ? ` round ${round}px` : ''})`;
+}
+
+// ---------- round C: travel inside the post (D, EX6, EX7) ----------
+/** Where stepping through a portal goes, from the signpost's view (ways.js lookUp), as a tab does (app.js leaveBy):
+ *  { kind: 'blocked' } (dormant, unreadable, every door broken), { kind: 'go', door } (one place), { kind: 'pick' }. */
+export function wayPlan(view) {
+  const usable = view && view.state === 'open' && Array.isArray(view.doors) ? view.doors.filter((d) => d && !d.broken) : [];
+  if (!usable.length) return { kind: 'blocked' };
+  if (view.doors.length === 1) return { kind: 'go', door: usable[0] };
+  return { kind: 'pick' };
+}
+
+/**
+ * The places passed through in one post (EX7): the post's own tile first. go(place, { exit, way }) records the exit
+ * left by on the place being left, and the way taken to the new one; back() returns to the place before, with the
+ * entrance to arrive at (the portal left by, as Back in a tab). here: the place now; before: the one "Back to" goes to.
+ */
+export function createTrail(home) {
+  const list = [{ ...home, leftBy: null, way: null }];
+  return {
+    get here() { return list[list.length - 1]; },
+    get before() { return list.length > 1 ? list[list.length - 2] : null; },
+    get travelled() { return list.length > 1; },
+    get length() { return list.length; },
+    go(place, { exit = null, way = null } = {}) {
+      list[list.length - 1].leftBy = exit;
+      list.push({ ...place, leftBy: null, way });
+      return list[list.length - 1];
+    },
+    back() {
+      if (list.length < 2) return null;
+      list.pop();
+      const place = list[list.length - 1];
+      const entrance = place.leftBy;
+      place.leftBy = null;
+      return { place, entrance };
+    },
+  };
+}
+
+/** What a new tab opens for the place now (EX7): the way taken to it ({ uri: raku:way/…, state: { door } }), or the
+ *  post's own tile. `wayUri` is address.js's. */
+export function tabFor(trail, wayUri) {
+  const at = trail.here;
+  if (at.way && at.way.did && at.way.rkey) return { uri: wayUri(at.way.did, at.way.rkey), state: at.way.door ? { door: at.way.door } : null };
+  return { uri: at.uri, state: null };
 }
