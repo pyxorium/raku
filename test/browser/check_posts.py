@@ -14,7 +14,8 @@
 # window opening (400 ms, linear) and reduced motion's fade; stepping through a portal while small expanding first and
 # travelling inside the post (the screen, the arrival, "Now in", "Back to …" arriving at the portal, Pick a door with
 # Stay here, a large place's question, a dormant way); shrinking back after a trip ("Now in" on the card, the new-tab
-# button opening the way taken); stopping resetting it; the phone (the bar in two rows, the tile edge to edge).
+# button opening the way taken); stopping resetting it; the phone (the bar in two rows, the tile edge to edge); the
+# installed window with its title bar folded away (the bar's buttons clear of the window's own).
 # Everything outside is a Playwright route (the account directory, the relay, account servers, Bluesky's public API
 # and its picture server, the hide list). Tiles aren't run here (check_page.py does that).
 # Usage: python3 test/browser/check_posts.py <work folder>   (servers.mjs and the loader replica already running, as for
@@ -686,6 +687,31 @@ with sync_playwright() as pw:
     check('...shrunk back: the "Now in" line on the card fits the width', page.is_visible(f'{W1} .tp-now') and page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
     page.screenshot(path=str(OUT / 'expand-phone-back.png'))
     ctx9.close()
+
+    # ---- the installed window with its title bar folded away (stage 9, S7): the bar keeps clear of the window's buttons ----
+    ctx10 = new_ctx(viewport={'width': 1200, 'height': 800})
+    ctx10.add_init_script("""
+      const overlay = new EventTarget(); overlay.visible = true;
+      overlay.getTitlebarAreaRect = () => new DOMRect(0, 0, innerWidth - 140, 33);
+      Object.defineProperty(navigator, 'windowControlsOverlay', { value: overlay });
+    """)
+    page = ctx10.new_page()
+    page.goto(PLAY_URL); page.wait_for_selector('.discover')
+    W1 = post_sel('A tile with ways')
+    wait_for(lambda: page.is_visible(f'{W1} .tp-play'), page=page)
+    page.click(f'{W1} .tp-play'); wait_for(lambda: itext('#h', 'A tile with ways') == 'Way tile', 20, page=page)
+    wait_for(lambda: page.is_visible(f'{W1} .tp-expand'), page=page)
+    page.click(f'{W1} .tp-expand'); wait_for(lambda: page.is_visible('.tp-x'), page=page); page.wait_for_timeout(800)
+    lay = page.evaluate("""() => { const r = (s) => document.querySelector(s).getBoundingClientRect(); const reg = (s) => getComputedStyle(document.querySelector(s)).webkitAppRegion;
+      return { wco: document.documentElement.classList.contains('wco'), x: r('.tp-x-close').right, full: r('.tp-x-full').right, limit: innerWidth - 140,
+               bar: reg('.tp-x-bar'), btn: reg('.tp-x-close'), newtab: reg('.tp-x-new') }; }""")
+    check("installed, title bar folded away: the expanded bar's buttons keep clear of the window's own (…, minimise, maximise, close)",
+          lay['wco'] and lay['x'] <= lay['limit'] - 8 and lay['full'] < lay['x'], str(lay))
+    check('...the bar moves the window; its buttons still click', lay['bar'] == 'drag' and lay['btn'] == 'no-drag' and lay['newtab'] == 'no-drag', str(lay))
+    page.screenshot(path=str(OUT / 'expand-wco.png'), clip={'x': 0, 'y': 0, 'width': 1200, 'height': 120})
+    page.click('.tp-x-close')
+    check('...and × closes it there', wait_for(lambda: page.query_selector('.tp-x') is None, page=page))
+    ctx10.close()
     state['play'] = False
     b.close()
 

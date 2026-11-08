@@ -107,7 +107,14 @@ export function watchTitleBar(win = globalThis) {
   const wco = win.navigator && win.navigator.windowControlsOverlay;
   const root = win.document && win.document.documentElement;
   if (!wco || !root) return false;
-  const apply = () => { root.classList.toggle('wco', !!wco.visible); };
+  // (round C: also how much of the right edge the window's own buttons take, --wco-right, so the expanded view's bar,
+  // at the very top of the window, keeps its buttons clear of them)
+  const apply = () => {
+    root.classList.toggle('wco', !!wco.visible);
+    let right = 0;
+    try { const r = wco.visible && wco.getTitlebarAreaRect ? wco.getTitlebarAreaRect() : null; if (r && r.width) right = Math.max(0, Math.round(win.innerWidth - r.right)); } catch { /* fine */ }
+    root.style?.setProperty?.('--wco-right', `${right}px`);
+  };
   apply();
   if (typeof wco.addEventListener === 'function') wco.addEventListener('geometrychange', apply);
   return true;
