@@ -692,8 +692,10 @@ with sync_playwright() as pw:
     ctx10 = new_ctx(viewport={'width': 1200, 'height': 800})
     ctx10.add_init_script("""
       const overlay = new EventTarget(); overlay.visible = true;
-      overlay.getTitlebarAreaRect = () => new DOMRect(0, 0, innerWidth - 140, 33);
+      overlay.getTitlebarAreaRect = () => new DOMRect(0, 0, (window.__areaW || innerWidth) - 140, 33);
       Object.defineProperty(navigator, 'windowControlsOverlay', { value: overlay });
+      // as the real window did (owner, Nov 8): the new title bar told of before the window's width changes
+      window.__news = (w) => { window.__areaW = w; overlay.dispatchEvent(new Event('geometrychange')); };
     """)
     page = ctx10.new_page()
     page.goto(PLAY_URL); page.wait_for_selector('.discover')
@@ -708,6 +710,16 @@ with sync_playwright() as pw:
     check("installed, title bar folded away: the expanded bar's buttons keep clear of the window's own (…, minimise, maximise, close)",
           lay['wco'] and lay['x'] <= lay['limit'] - 8 and lay['full'] < lay['x'], str(lay))
     check('...the bar moves the window; its buttons still click', lay['bar'] == 'drag' and lay['btn'] == 'no-drag' and lay['newtab'] == 'no-drag', str(lay))
+    def after_resize(w):
+        page.evaluate(f'__news({w})')
+        page.set_viewport_size({'width': w, 'height': 800})
+        page.wait_for_timeout(400)
+        return page.evaluate("""() => ({ x: document.querySelector('.tp-x-close').getBoundingClientRect().right, w: innerWidth,
+          slot: Math.abs(document.querySelector('.tp-slot.expanded').getBoundingClientRect().width - document.querySelector('.tp-x-hole').getBoundingClientRect().width) })""")
+    smaller = after_resize(900)
+    check('...the window made smaller while expanded: the buttons stay just left of the window\'s own (not pushed far left)', smaller['w'] == 900 and smaller['w'] - 160 <= smaller['x'] <= smaller['w'] - 148 and smaller['slot'] < 2, str(smaller))
+    bigger = after_resize(1300)
+    check('...and made bigger again: still clear of them (not back under them)', bigger['w'] == 1300 and bigger['w'] - 160 <= bigger['x'] <= bigger['w'] - 148 and bigger['slot'] < 2, str(bigger))
     page.screenshot(path=str(OUT / 'expand-wco.png'), clip={'x': 0, 'y': 0, 'width': 1200, 'height': 120})
     page.click('.tp-x-close')
     check('...and × closes it there', wait_for(lambda: page.query_selector('.tp-x') is None, page=page))

@@ -591,7 +591,8 @@ Decisions: `claude/raku-expand-plan.md` (EX1 to EX8, and D; mockup `claude/raku-
   allows it: not an iPhone), ×. The tile gets the keys (with the ring); while expanded it never stops for being out of
   view; another Raku tab coming to the front shrinks it back (and it stops a few seconds later, as before). In the
   installed window with its title bar folded away, the bar's buttons keep clear of the window's own (…, minimise,
-  maximise, close: `--wco-right`, from `watchTitleBar` in `src/app-shell.js`), and the bar moves the window.
+  maximise, close: the browser's title-bar area, `env(titlebar-area-*)`, with `--wco-right` from `watchTitleBar` in
+  `src/app-shell.js` where that isn't given, measured again on every resize), and the bar moves the window.
 - **Getting back out** (EX5): ×; Escape (when the keys are Raku's: keys pressed in a tile never reach Raku); **Back**
   (the phone's gesture, the browser's button): expanding adds one step to the browser's history, so Back closes it
   rather than leaving Raku. Raku's own address is kept as it is.
@@ -699,7 +700,7 @@ Following (order, hidden ones, "New"), search from the box and from Discover (no
 with only the words), a word with a dot as a handle first, Tile news from a stand-in feed with a post linking a tile,
 hand-picked posts mixed in by date, loading the next batch on scroll (and More without IntersectionObserver), labels, replies with their thread, the link message (Cancel, Escape, Open with no opener), a post's address in the box, the phone.
 
-`check_posts.py` (127 checks, tile posts, Play here and round C) runs the same way as `check_discover.py`, with the loader replica
+`check_posts.py` (129 checks, tile posts, Play here and round C) runs the same way as `check_discover.py`, with the loader replica
 running too (`node test/browser/loader-replica.mjs <tiles-loading-server folder>`, port 80): posts from several accounts in order
 (the relay's, the owner's, the shelf's), the author and time, the tile's card with its banner described by the post's
 `alt` (or the tile's description), a hidden account (its server not asked) and a hidden tile, a deleted and a changed
@@ -718,7 +719,7 @@ card's line, its new-tab button opening the way taken, its Back to), the expande
 it, another tab coming to the front, the window opening and closing (400 ms, linear; an old test switch ignored) and
 reduced motion's fade, the
 phone (the bar in two rows, the tile edge to edge), the installed window with its title bar folded away (the bar's
-buttons clear of the window's own, the bar moving the window).
+buttons clear of the window's own, also after the window is resized, the bar moving the window).
 
 `check_daisy.py` (63 checks, stage 5) bundles and starts everything itself (Raku's page with the stand-in
 sign-in, the loader replica, daisy-tiles' stand-in relay, and the site's Daisy page bundled with a stand-in

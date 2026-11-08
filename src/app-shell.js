@@ -117,6 +117,8 @@ export function watchTitleBar(win = globalThis) {
   };
   apply();
   if (typeof wco.addEventListener === 'function') wco.addEventListener('geometrychange', apply);
+  // (the browser can tell of a new title bar before the window's own width has changed: measured again once it has)
+  win.addEventListener?.('resize', apply);
   return true;
 }
 

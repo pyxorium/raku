@@ -792,9 +792,12 @@ a { color: var(--glaze-light); }
   border-radius: 999px; background: rgba(38,33,29,.95); border: 1px solid #4a3f35; color: var(--warn); font-size: 13.5px; box-shadow: 0 6px 20px rgba(0,0,0,.4); }
 .tp-x-note[hidden] { display: none; }
 /* The installed window with its title bar folded away (stage 9, S7): the expanded view's bar is at the very top, where
-   the window's own buttons sit, so its buttons keep clear of them (--wco-right, app-shell.js), and the bar moves the
-   window, as the tab row does. */
-:root.wco .tp-x-bar { padding-right: calc(var(--wco-right, 0px) + 10px); app-region: drag; -webkit-app-region: drag; }
+   the window's own buttons sit, so its buttons keep clear of them, and the bar moves the window, as the tab row does.
+   The space they take is the browser's own title-bar area (env(), always measured with the window: measuring in a
+   script on "geometrychange" could read the window's old width, and the buttons jumped left or back under the window's
+   own after a resize); --wco-right (app-shell.js) only where env() isn't given. */
+:root.wco .tp-x-bar { padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - var(--wco-right, 0px))) + 10px);
+  app-region: drag; -webkit-app-region: drag; }
 :root.wco .tp-x-bar button { app-region: no-drag; -webkit-app-region: no-drag; }
 @media (max-width: 640px) {
   /* a phone: the bar in two rows (the name, then the buttons on the right), the tile edge to edge */

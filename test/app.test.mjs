@@ -84,14 +84,21 @@ test('S7: the class follows the browser: on while the title bar is folded away, 
 test('round C: the space the window\'s own buttons take at the right (--wco-right), for the expanded view\'s bar', () => {
   const props = {};
   let listener = null;
-  const overlay = { visible: true, getTitlebarAreaRect: () => ({ x: 0, width: 1260, right: 1260 }), addEventListener: (t, f) => { if (t === 'geometrychange') listener = f; } };
+  let area = { x: 0, width: 1260, right: 1260 }, onResize = null;
+  const overlay = { visible: true, getTitlebarAreaRect: () => area, addEventListener: (t, f) => { if (t === 'geometrychange') listener = f; } };
   const root = { classList: { toggle: () => {} }, style: { setProperty: (k, v) => { props[k] = v; } } };
-  watchTitleBar({ innerWidth: 1400, navigator: { windowControlsOverlay: overlay }, document: { documentElement: root } });
+  const win = { innerWidth: 1400, navigator: { windowControlsOverlay: overlay }, document: { documentElement: root }, addEventListener: (t, f) => { if (t === 'resize') onResize = f; } };
+  watchTitleBar(win);
   assert.equal(props['--wco-right'], '140px');
+  // a smaller window: the title bar's news can come before the window's width has changed; measured again on resize
+  area = { x: 0, width: 860, right: 860 }; listener();
+  assert.equal(props['--wco-right'], '540px', '(the stale reading the owner saw: buttons pushed left)');
+  win.innerWidth = 1000; onResize();
+  assert.equal(props['--wco-right'], '140px', 'measured again once the window has its new width');
   overlay.visible = false; listener();
   assert.equal(props['--wco-right'], '0px', 'the title bar back: nothing to keep clear of');
   const css = file('src/style.css');
-  assert.match(css, /:root\.wco \.tp-x-bar \{[^}]*padding-right: calc\(var\(--wco-right, 0px\) \+ 10px\)[^}]*-webkit-app-region: drag/);
+  assert.match(css, /:root\.wco \.tp-x-bar \{[^}]*padding-right: calc\(100vw - env\(titlebar-area-x, 0px\) - env\(titlebar-area-width, calc\(100vw - var\(--wco-right, 0px\)\)\) \+ 10px\)[^}]*-webkit-app-region: drag/);
   assert.match(css, /:root\.wco \.tp-x-bar button \{[^}]*-webkit-app-region: no-drag/);
 });
 
