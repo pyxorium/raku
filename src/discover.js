@@ -6,16 +6,16 @@
 //   centre  the search box (Q95 C) and the chosen source, widest;
 //   right   previews of the other sources (the latest few of each); clicking one brings it to the centre.
 // Narrower windows: the left column shrinks to icons, then the right column drops (style.css). A phone: one
-// column, with the sources as chips across the top. Nothing on this page runs a tile: cards only, and a tile
-// opens in the tab when its card is clicked.
+// column, with the sources as chips across the top. Nothing on this page runs a tile until asked: a tile opens in the
+// tab when its card is clicked, and a tile post's tile can play inside its post (Play here, claude/raku-play-here-plan.md).
 //
 // Addresses (address.js): raku:discover, raku:discover/news, raku:discover/posts, raku:discover/recent,
 // raku:discover/following, raku:discover/make, raku:search/<words>.
 
-import { PICKS, SEARCH, RECENT, MAKE, FEED, NEWS_PINS, TILE_POSTS, siteLabel, feedUri, postApp, appmosphereCopy } from './config.js';
+import { PICKS, SEARCH, RECENT, MAKE, FEED, NEWS_PINS, TILE_POSTS, PLAY_HERE, siteLabel, feedUri, postApp, appmosphereCopy } from './config.js';
 import { atUri, discoverUri, searchUri, accountPageUri, parseAddress, parsePost, SHELF_URI, DISCOVER_URI, ABOUT_URI } from './address.js';
 import { describeTile } from './tiles.js';
-import { NetError } from './net.js';
+import { NetError, formatBytes } from './net.js';
 import { h, bannerCid } from './cards.js';
 import { icon } from './icons.js';
 import { createFollowing } from './following.js';
@@ -224,7 +224,7 @@ export function drawDiscover(ctx, { source = null, query = '' } = {}) {
   for (const s of others) right.append(preview(ctx, s, uriFor(s)));
   right.append(h('div', { class: 'dv-about' },
     h('p', {}, `Search looks at your shelf first, here in this browser, then asks ${SEARCH.name}.`),
-    h('p', {}, 'Nothing on this page runs: a tile starts only when you open its card.'),
+    h('p', {}, 'Nothing on this page runs until you ask: a tile starts when you open its card or press Play here.'),
     h('p', {}, h('button', { type: 'button', class: 'linkish', onclick: () => tabs.go(tab.id, ABOUT_URI) }, 'About Raku \u2192'))));
 }
 
@@ -500,6 +500,10 @@ function drawTilePosts(ctx, into) {
     h('p', { class: 'tp-how' }, 'A tile post is a record in your own account naming one of your tiles, or anyone\'s, with a few words. For now a small script writes them: ',
       h('a', { href: TILE_POSTS.repo, target: '_blank', rel: 'noopener noreferrer', referrerpolicy: 'no-referrer' }, 'pyxorium/tile-posts'), '.'));
   into.append(head, status, note, list, empty);
+  // PH2: the tile playing in a post stops when this page goes (another page in the tab, or the tab closed) or redraws.
+  const { p, player } = ctx;
+  const before = p.dispose;
+  p.dispose = () => { player.stop(); if (before) before(); };
   const fill = async (fresh) => {
     refresh.disabled = true;
     status.hidden = false;
@@ -513,6 +517,7 @@ function drawTilePosts(ctx, into) {
     }
     if (!alive()) return;
     refresh.disabled = false;
+    if (player.current && list.contains(player.current)) player.stop();
     list.replaceChildren(...r.items.map((post) => tilePostCard(ctx, post)));
     const words = [];
     if (!r.relayOk) words.push("Couldn't reach the network just now, showing accounts you know.");
@@ -546,9 +551,7 @@ function tilePostCard(ctx, post) {
   }).catch(() => {});
 
   const t = post.tile;
-  const tileCard = kit.tileCard({ name: '…', onOpen: () => tabs.go(tab.id, t.uri), onOpenNew: () => openNew(t.uri) });
-  tileCard.el.classList.add('post-tile');
-  tileCard.el.dataset.tile = t.uri;
+  const tileCard = playCard(ctx, t);
   body.append(tileCard.el);
   const cannot = () => {
     tileCard.el.replaceWith(h('p', { class: 'post-note tp-gone' }, "This tile can't be shown."));
@@ -557,14 +560,103 @@ function tilePostCard(ctx, post) {
     const [rec, acct] = await Promise.all([resolver.tileRecord(t.did, t.rkey), resolver.account(t.did)]);
     const d = describeTile(rec);
     if (!d.ok || tileState(post, rec) !== 'ok') { cannot(); return; }
-    tileCard.set({ name: d.name, description: d.description });
-    tileCard.picture({ pds: acct.pds, did: t.did, cid: bannerCid(d.manifest), alt: post.alt || d.description || d.name || '' });
+    tileCard.ready({ d, pds: acct.pds, alt: post.alt || d.description || d.name || '' });
     resolver.checkedHandle(t.did).then((hd) => tileCard.set({ by: hd || '' }));
   })().catch((err) => {
     if (err && err.code === 'not-found') cannot();
     else tileCard.set({ note: "Couldn't reach the tile's server just now." });
   });
   return card;
+}
+
+/**
+ * A tile post's tile card with "Play here" (claude/raku-play-here-plan.md): the slot (the banner, then the tile running
+ * in its place) above the card's words. The words open the tile in this tab and the corner button in a new tab, as any
+ * card; Play runs it here (ctx.player, app.js). ready() once the tile record is checked: until then there is no Play.
+ */
+function playCard(ctx, t) {
+  const { kit, tabs, tab, openNew, player } = ctx;
+  const slot = h('div', { class: 'tp-slot' });
+  const title = h('span', { class: 'card-title' }, '…');
+  const desc = h('span', { class: 'card-desc' });
+  const byLine = h('span', { class: 'card-by' });
+  const noteLine = h('span', { class: 'card-note' });
+  const main = h('button', { type: 'button', class: 'card-main', onclick: () => tabs.go(tab.id, t.uri),
+    onauxclick: (ev) => { if (ev.button === 1) { ev.preventDefault(); openNew(t.uri); } } },
+  h('span', { class: 'card-text' }, title, desc, byLine, noteLine));
+  const corner = h('div', { class: 'card-corner' },
+    h('button', { type: 'button', class: 'card-btn', title: 'Open in a new tab', 'aria-label': 'Open this tile in a new tab', onclick: () => openNew(t.uri) }, icon('newtab', 16)));
+  const el = h('article', { class: 'card post-tile tp-card', 'data-tile': t.uri }, slot, main, corner);
+  let tile = null;           // { d, pds }
+  let over = null, play = null, stopBtn = null, hint = null, hintTimer = null;
+  const clear = () => {
+    for (const x of [over, play, stopBtn, hint]) if (x) x.remove();
+    over = play = stopBtn = hint = null;
+    clearTimeout(hintTimer);
+    slot.classList.remove('playing', 'keys');
+  };
+  const panel = (...kids) => { over = h('div', { class: 'tp-over' }, ...kids); slot.append(over); };
+  const name = () => (tile ? tile.d.name : 'this tile');
+  function banner() {
+    clear();
+    if (!tile) return;
+    const v = player.verdict(tile.d.declaredBytes, t.uri);
+    if (v === 'refuse') { panel(h('p', {}, `This tile is too large to open (${formatBytes(tile.d.declaredBytes)}).`)); return; }
+    play = h('button', { type: 'button', class: 'tp-play', 'aria-label': `Play ${name()} here`, onclick: () => press() }, icon('play', 16), 'Play here');
+    slot.append(play);
+  }
+  function press() {
+    if (player.verdict(tile.d.declaredBytes, t.uri) === 'ask') {
+      clear();
+      panel(h('p', {}, `This tile is large (${formatBytes(tile.d.declaredBytes)}). Play anyway?`),
+        h('div', { class: 'tp-row' },
+          h('button', { type: 'button', class: 'go', onclick: () => { player.allow(t.uri); start(); } }, 'Play anyway'),
+          h('button', { type: 'button', onclick: () => banner() }, 'Cancel')));
+      return;
+    }
+    start();
+  }
+  function start() {
+    player.play({ slot, uri: t.uri, did: t.did, pds: tile.pds, d: tile.d, onState });
+  }
+  function onState(kind, detail) {
+    if (kind === 'keys') { if (slot.classList.contains('playing')) slot.classList.toggle('keys', !!detail); return; }
+    if (kind === 'stopped') { banner(); return; }
+    if (kind === 'error') {
+      clear();
+      panel(h('p', {}, detail || "Couldn't load this tile."), h('div', { class: 'tp-row' }, h('button', { type: 'button', class: 'go', onclick: () => start() }, 'Try again')));
+      return;
+    }
+    if (kind === 'starting' || kind === 'slow') {
+      clear();
+      panel(h('div', { class: 'tp-spin', 'aria-hidden': 'true' }), h('p', { class: 'tp-quiet', role: 'status' }, kind === 'slow' ? 'Still starting…' : 'Starting the tile…'),
+        kind === 'slow' ? h('div', { class: 'tp-row' }, h('button', { type: 'button', onclick: () => player.stop(slot) }, 'Stop')) : null);
+      return;
+    }
+    if (kind === 'playing') {
+      clear();
+      slot.classList.add('playing');
+      stopBtn = h('button', { type: 'button', class: 'card-btn tp-stop', title: 'Stop', 'aria-label': `Stop ${name()}`, onclick: () => player.stop(slot) }, icon('close', 16));
+      hint = h('span', { class: 'tp-keys-hint', 'aria-hidden': 'true' }, 'Keys go to the tile');
+      slot.append(stopBtn, hint);
+      hintTimer = setTimeout(() => { if (hint) hint.classList.add('gone'); }, PLAY_HERE.hintMs);
+    }
+  }
+  return {
+    el,
+    set({ by, note }) {
+      if (by !== undefined) byLine.textContent = by ? `by @${by}` : '';
+      if (note !== undefined) noteLine.textContent = note;
+    },
+    ready({ d, pds, alt }) {
+      tile = { d, pds };
+      title.textContent = d.name || 'Untitled tile';
+      desc.textContent = d.description || '';
+      const cid = bannerCid(d.manifest);
+      if (cid) kit.picture(slot, { pds, did: t.did, cid, alt });
+      banner();
+    },
+  };
 }
 
 /** "+1 more reply in this thread" on a thread's card: opens the thread's first post (through the link message). */

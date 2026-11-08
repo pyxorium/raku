@@ -31,6 +31,9 @@ export const TALKS_TO = Object.freeze([
 /** What a tile says to Raku, and where it shows (Oct 23: the button appears only once a tile sends something). */
 export const MESSAGES_LINE = 'A tile can only talk to Raku. If it sends anything, a Messages button appears on its tab and shows what it sent. At a table, the Messages button in the table’s bar shows everything passing between its tiles.';
 
+/** Play here (Nov 2026): when a tile runs on Discover. */
+export const PLAY_LINE = 'A tile runs only when you open it, or press Play here on a tile post; one plays in a post at a time, and it stops when you scroll away from it.';
+
 export const EXCEPTION = 'a tile can open a link in a new tab when you click it, and that link could carry information about what you did in the tile. It’s the same as clicking a link on any web page, so use the same care.';
 
 /** Installing Raku (stage 9, S3): the steps for each kind of browser, [where, how]. */
@@ -75,6 +78,7 @@ export function drawAbout(ctx) {
         h('li', {}, 'A tile can’t reach the internet on its own: no fetching, no pictures from elsewhere, no tracking pixels. What it shows comes from its author’s account.'),
         h('li', {}, MESSAGES_LINE),
         h('li', {}, 'Large tiles ask before they load.'),
+        h('li', {}, PLAY_LINE),
         h('li', {}, 'Raku asks for your microphone only when you unmute in a room, and for your screen only when you choose to share it.')),
       h('div', { class: 'ab-exception' }, h('b', {}, 'One exception:'), ` ${EXCEPTION}`)),
     sect('Install Raku',

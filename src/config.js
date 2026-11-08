@@ -359,6 +359,9 @@ export const TILE_POSTS = Object.freeze({
   maxAccounts: 500, perAccount: 10, max: 100, atOnce: 4, accountMs: 10000, keepMs: 5 * 60 * 1000,
   repo: 'https://github.com/pyxorium/tile-posts',
 });
+// "Play here" (claude/raku-play-here-plan.md): a tile post's tile running in its post. awayMs: how long fully out of view
+// before it stops (PH2); hintMs: how long "Keys go to the tile" shows after Play (PH8).
+export const PLAY_HERE = Object.freeze({ awayMs: 3000, hintMs: 2500 });
 // Recent tiles (stage 6c, Q106 to Q110): appmosphe.re's list of every tile it has seen, newest first by each
 // tile's createdAt, 30 a page (?page=N), shown in appmosphe.re's own order. Cards only; pictures are
 // appmosphe.re's copies (/img/), drawn as ordinary pictures straight from appmosphe.re (Q122: its /img/ answers

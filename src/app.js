@@ -26,7 +26,7 @@
 
 import { Tile } from '@dasl/tile-loader';
 import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS, TABLES, ROOMS, tableForTile, isRoomHouse, appmosphereCopy,
-  rendererFor, pinnedRenderers, RENDER, RECORD_APPS, RECORD_APP_KEY, recordApp, explorerLink, WAYS, KEYS_AFTER_MS } from './config.js';
+  rendererFor, pinnedRenderers, RENDER, RECORD_APPS, RECORD_APP_KEY, recordApp, explorerLink, WAYS, KEYS_AFTER_MS, PLAY_HERE } from './config.js';
 import { parseAddress, parseTarget, atUri, SHELF_URI, ABOUT_URI, ROOM_URI, roomInHash, tableUri, DISCOVER_URI, discoverUri, wayUri, WAY_PREFIX } from './address.js';
 import { createTabs, current, stateAt } from './tabs.js';
 import { WAY_UP, readWays, entranceFor, readWayMessage, statusMessage, arriveMessage, testSignposts, createWayReader, chosenDoor, keepDoor,
@@ -49,6 +49,7 @@ import { groupThreads } from './posts.js';
 import { createRooms } from './room-tab.js';
 import { setLeaveWarning } from './signin-ui.js';
 import { isInstalled } from './app-shell.js';
+import { playVerdict, leaveVerdict, createOneAtATime } from './play-here.js';
 
 export function mountRaku(root, { mothership, resolver, moderation, files, shelf, auth, storage = null, session = null, returned = null, keepForReturn = () => {}, loc = globalThis.location, hist = globalThis.history, tableDeps = {}, install = null }) {
   const kit = createCardKit({ files });
@@ -390,7 +391,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   function pageContext(p, tab) {
     const mine = p.attempt;
     return {
-      p, tab, kit, shelf, tabs, resolver, moderation, openNew, say, drawChrome, discover, linkMessage,
+      p, tab, kit, shelf, tabs, resolver, moderation, openNew, say, drawChrome, discover, linkMessage, player,
       alive: () => mine === p.attempt,
       status: (kind, text, ...actions) => status(p, kind, text, ...actions),
       hideStatus: () => hideStatus(p),
@@ -699,6 +700,98 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       && (a.matches?.('input, textarea, select, [contenteditable=""], [contenteditable="true"]') || a.closest?.('[role="dialog"], [role="menu"]'))) return;
     focusTile(pane);
   }
+
+  // ---------- "Play here" (claude/raku-play-here-plan.md, PH1 to PH8) ----------
+  // A tile post's tile running inside its post on Discover, built as a tab builds one (startTile: the same loader, frame
+  // and sandbox, the same size rule) but held by the post's slot. One at a time across Raku (play-here.js); it stops on
+  // its ×, when another starts, when its page goes (the pane's dispose), or a few seconds fully out of view.
+  const postSlots = createOneAtATime({ awayMs: PLAY_HERE.awayMs });
+  let playing = null;          // the tile playing: { slot, frame, ways, attempt, arrival, timers, observer, state }
+  // onState(kind, detail): 'starting' | 'slow' | 'playing' | 'keys' (detail: true/false) | 'stopped' | 'error' (detail: words)
+  function playInPost({ slot, uri, did, pds, d, onState }) {
+    const pane = { slot, frame: null, ways: null, attempt: 0, arrival: null, timers: [], observer: null, state: 'loading', failed: null, onState };
+    postSlots.start(slot, () => endPost(pane));
+    playing = pane;
+    const alive = () => playing === pane;
+    onState('starting');
+    pane.timers.push(setTimeout(() => { if (alive() && pane.state === 'loading') onState('slow'); }, TIMES.retry));
+    const loader = createPathLoader({
+      files, pds, did, manifest: d.manifest,
+      onFile(path, ok, err) {
+        if (!alive() || (path !== '/' && path !== '/index.html')) return;
+        if (!ok) { pane.failed = err?.message || "Couldn't load this tile."; postSlots.stop(slot); return; }
+        pane.state = 'ready';
+        onState('playing');
+        // PH4: the keys at once, as a tab gives them (RW10), twice as its page settles
+        for (const ms of KEYS_AFTER_MS) pane.timers.push(setTimeout(() => { if (alive()) focusPost(pane); }, ms));
+      },
+    });
+    const tile = new Tile(mothership, uri, d.manifest, loader);
+    const frame = tile.renderContent(600);
+    frame.className = 'tp-frame';
+    frame.removeAttribute('style');
+    frame.title = d.name;
+    frame.setAttribute('allow', '');
+    frame.setAttribute('referrerpolicy', 'no-referrer');
+    if (!TILE_POPUPS) frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-downloads');
+    pane.frame = frame;
+    slot.append(frame);
+    if (d.manifest.resources?.['/ways.json']) hostWays(pane, did, pds, d.manifest);
+    if (typeof IntersectionObserver === 'function') {
+      pane.observer = new IntersectionObserver((entries) => { for (const en of entries) postSlots.seen(slot, en.isIntersecting); });
+      pane.observer.observe(slot);
+    }
+  }
+  function endPost(pane) {
+    if (playing === pane) playing = null;
+    pane.timers.forEach(clearTimeout);
+    if (pane.observer) pane.observer.disconnect();
+    if (pane.frame) { pane.frame.remove(); pane.frame = null; }
+    pane.onState(pane.failed ? 'error' : 'stopped', pane.failed || undefined);
+  }
+  // PH4: the keys go to the tile unless someone is typing in one of Raku's boxes or using a menu meanwhile (as focusIfFront).
+  function focusPost(pane) {
+    if (!pane.frame || !pane.slot.isConnected) return;
+    const a = document.activeElement;
+    if (a && a !== document.body && a !== pane.frame
+      && (a.matches?.('input, textarea, select, [contenteditable=""], [contenteditable="true"]') || a.closest?.('[role="dialog"], [role="menu"]'))) return;
+    focusTile(pane);
+  }
+  // The ring (PH4): on while the tile's frame holds the keys. Focus moving into a frame blurs Raku's window.
+  const keysToPost = () => { if (playing) playing.onState('keys', document.activeElement === playing.frame); };
+  addEventListener('blur', () => setTimeout(keysToPost, 0));
+  addEventListener('focus', () => setTimeout(keysToPost, 0));
+  document.addEventListener('focusin', keysToPost);
+  document.addEventListener('pointerdown', (e) => { if (playing && !playing.frame?.contains(e.target)) setTimeout(keysToPost, 0); }, true);
+  // PH5: a tile with ways in a post: its exits' status on hello; stepping through opens the way in a new tab and the
+  // post's tile stops; a way that leads nowhere keeps the traveller at that portal.
+  async function fromWayPost(pane, d) {
+    const m = readWayMessage(d);
+    const host = pane.ways;
+    if (!m || !host || !(await host.ready) || playing !== pane) return;
+    if (m.kind === 'hello') { postTo(pane, statusMessage(host.statuses)); return; }
+    if (m.kind !== 'leave' || host.busy) return;
+    const exit = host.ways.exits.find((x) => x.id === m.exit);
+    if (!exit) return;
+    host.busy = true;
+    const at = parseAtUri(exit.signpost);
+    const view = await ways.lookUp(at.did, at.rkey).catch(() => ({ state: 'error', doors: [] }));
+    host.busy = false;
+    if (playing !== pane) return;
+    if (leaveVerdict(view) === 'go') { openNew(wayUri(at.did, at.rkey)); postSlots.stop(pane.slot); return; }
+    const e = entranceFor(host.ways, exit.id);
+    if (e) postTo(pane, arriveMessage(e));
+    say('The way is blocked.');
+  }
+  // What Discover's tile posts use (discover.js tilePostCard).
+  const playOk = new Set();      // tiles the visitor said "Play anyway" to, this visit (as largeOk for tabs)
+  const player = {
+    verdict: (bytes, key) => playVerdict(bytes, key, new Set([...largeOk, ...playOk])),
+    allow: (key) => { playOk.add(key); largeOk.add(key); },
+    play: playInPost,
+    stop: (slot) => (slot ? postSlots.stop(slot) : postSlots.stop()),
+    get current() { return postSlots.current; },
+  };
 
   // A tile's way messages: hello (answered with its exits' status, and the arrival when it was reached by a way or
   // by Back), leave (take the traveller on).
@@ -1031,6 +1124,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   addEventListener('message', (e) => {
     const d = e.data;
     if (!d || typeof d.action !== 'string' || !d.action.startsWith('tiles-protocol-up-')) return;
+    // The tile playing in a tile post (Play here): only its way messages are answered.
+    if (playing && playing.frame && playing.frame.contentWindow === e.source) { if (playing.ways && d.action === WAY_UP) fromWayPost(playing, d); return; }
     for (const [id, pane] of panes) {
       if (!pane.frame || pane.frame.contentWindow !== e.source) continue;
       if (pane.renderer) { fromRenderer(pane, d); return; }

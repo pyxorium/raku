@@ -557,6 +557,30 @@ doesn't show them (TP1); Raku does, under **Discover → Tile posts** (`raku:dis
 - Code: `src/tile-posts.js` (no DOM), drawn in `src/discover.js` (`drawTilePosts`, `tilePostCard`, and its preview in
   the right column). Unit tests: `test/tile-posts.test.mjs`. Browser: `test/browser/check_posts.py` (below).
 
+### Play here (Nov 2026): a tile post's tile running in its post
+
+Decisions: `claude/raku-play-here-plan.md` (PH1 to PH8; mockup `claude/raku-play-here-mockup.html`). A tile post's
+card has a **Play here** button on its banner: the tile loads in place of the banner, through the same loading server,
+frame and sandbox as a tab (`playInPost` in `src/app.js`, beside `startTile`). Nothing on Discover runs until asked.
+
+- **One at a time** (PH1): playing another stops the one running. The card's words still open the tile in this tab,
+  and its corner button in a new tab.
+- **What stops it** (PH2): its ×, another tile starting, leaving Tile posts (another page in the tab, Refresh, or the
+  tab closed: the pane's `dispose`), or `PLAY_HERE.awayMs` (3 s) fully out of view; a brief scroll doesn't. Stopping
+  brings the banner back; the tile's state is lost ("Open in a tab" keeps it).
+- **Large tiles** (PH3): the same rule as tabs: over 25 MB, "This tile is large (60 MB). Play anyway?" in the post
+  (once per visit, shared with tabs' "Open anyway"); over 500 MB, "This tile is too large to open", no Play.
+- **The keys** (PH4, PH8): the tile gets them at once (as RW10), with a turquoise ring while it has them and "Keys go
+  to the tile" for `PLAY_HERE.hintMs` (2.5 s); a click elsewhere gives them back to the page.
+- **Ways** (PH5): a tile with ways is answered (its exits' status); stepping through opens the way taken
+  (`raku:way/…`) in a new tab and the post's tile stops; a way that leads nowhere keeps the traveller at that portal,
+  "The way is blocked." (Travel inside the post is planned for the expand round.) A tile in a post sends Raku nothing
+  else that's answered or shown.
+- **The phone** (PH6): the card stays a column, the tile 16:9 at the post's full width; touches on it go to the tile.
+- **Tile posts only** (PH7). Discover's right column and the About page say when a tile runs.
+- The rules: `src/play-here.js` (no DOM); config `PLAY_HERE`. Unit tests: `test/play-here.test.mjs`. Browser:
+  `test/browser/check_posts.py` (below).
+
 ## Try it
 
 ```
@@ -600,6 +624,7 @@ and open http://127.0.0.1:5181/.
 | `src/discover.js` | stage 6: the Discover page (sources, Tile news, Tile posts, Recent tiles, Following, search results, previews; Make a tile) |
 | `src/following.js` | the newest tiles of the accounts on your shelf, and "New since your last visit" |
 | `src/tile-posts.js` | tile posts (Nov 2026): finding the accounts (the relay, and its fallback), reading and checking `cafe.thunderbird.tile.post` records, newest first |
+| `src/play-here.js` | Play here (Nov 2026): the size rule, one tile at a time, the out-of-view timer, where a portal leads (the frame itself is `playInPost` in `app.js`) |
 | `src/recent.js` | stage 6c: Recent tiles, appmosphe.re's list read carefully and moderated |
 | `src/marks.js` | stage 6c: when you last visited Following and Recent tiles (this device only) |
 | `src/search.js` | search: matches here in the browser, then appmosphe.re (only the tile addresses are read) |
@@ -641,11 +666,17 @@ Following (order, hidden ones, "New"), search from the box and from Discover (no
 with only the words), a word with a dot as a handle first, Tile news from a stand-in feed with a post linking a tile,
 hand-picked posts mixed in by date, loading the next batch on scroll (and More without IntersectionObserver), labels, replies with their thread, the link message (Cancel, Escape, Open with no opener), a post's address in the box, the phone.
 
-`check_posts.py` (31 checks, tile posts) runs the same way as `check_discover.py`: posts from several accounts in order
+`check_posts.py` (65 checks, tile posts and Play here) runs the same way as `check_discover.py`, with the loader replica
+running too (`node test/browser/loader-replica.mjs <tiles-loading-server folder>`, port 80): posts from several accounts in order
 (the relay's, the owner's, the shelf's), the author and time, the tile's card with its banner described by the post's
 `alt` (or the tile's description), a hidden account (its server not asked) and a hidden tile, a deleted and a changed
 tile ("This tile can't be shown."), over-long text cut, the right column's preview, opening a card in the tab and in a
-new tab, Back, Refresh, the relay failing and unreachable (the note, the accounts Raku knows), the empty page, the phone.
+new tab, Back, Refresh, the relay failing and unreachable (the note, the accounts Raku knows), the empty page, the phone;
+Play here with stand-in tiles that really run: nothing running until Play, the tile in place of the banner in this tab,
+the keys (focus, the ring, the label fading, a click elsewhere), a tile with ways (its exits' status, a dormant way
+blocked at the portal, a way taken opening in a new tab and the post's tile stopping), one at a time, the ×, a large
+tile's question (Cancel, Play anyway, not asked again) and a too-large one, a brief scroll vs out of view, leaving Tile
+posts, the card's words, the About page, the phone (a tap, 16:9 at full width, a card under the sticky chips).
 
 `check_daisy.py` (63 checks, stage 5) bundles and starts everything itself (Raku's page with the stand-in
 sign-in, the loader replica, daisy-tiles' stand-in relay, and the site's Daisy page bundled with a stand-in
