@@ -531,6 +531,32 @@ are. Rules in `src/ways.js`; the host in `src/app.js` (`hostWays`, `fromWayTile`
   The live Raku ignores it.
 - Unit tests: `test/ways.test.mjs`. Browser: `test/browser/check_ways.py` (below).
 
+## Tile posts (Nov 2026): Discover → Tile posts
+
+Decisions: `claude/tile-posts-notes.md` (TP1 to TP11); the plan, `claude/tile-posts-plan.md` (stage 3). Read-only;
+the sign-in promise is unchanged. A **tile post** is a record of the kind `cafe.thunderbird.tile.post` in its
+author's own account: a tile (by address and exact version, a strongRef), some optional text (up to 300 characters),
+an optional `alt`, a time. The lexicon and a small script that writes them live in `pyxorium/tile-posts`. Bluesky
+doesn't show them (TP1); Raku does, under **Discover → Tile posts** (`raku:discover/posts`), after Tile news.
+
+- **Whose posts** (TP11): everyone's. Bluesky's relay (`TILE_POSTS.relay` in config.js) says which accounts hold tile
+  posts (`com.atproto.sync.listReposByCollection`, 100 a request, up to 500 accounts); the owner's accounts
+  (`TILE_POSTS.always`) and the accounts on your shelf are always read too. If the relay doesn't answer, those are
+  shown with a quiet "Couldn't reach the network just now, showing accounts you know."
+- **Reading:** each account's newest ten posts from its own server, four accounts at a time, kept five minutes
+  (Refresh looks again). Newest first by `createdAt` (or the record key's time when that's missing or far in the
+  future). A record that doesn't name an `ing.dasl.masl` record by DID and CID is left out; longer text is cut.
+- **The hide list:** a hidden account's posts don't show (its server isn't even asked), and neither does a post whose
+  tile, or the tile's account, is hidden.
+- **Drawing** (TP10): the author (avatar, name, checked handle), the time, the text, then the tile's card (banner,
+  name, description, "by @handle": the same card Raku uses elsewhere). The banner's description for screen readers is
+  the post's `alt`, or the tile's own description (TP8). Tapping the card opens the tile in the tab; its corner button
+  in a new tab. A tile that's gone, or whose record no longer matches the version the post names, shows
+  "This tile can't be shown." under the text. Nothing runs on the page.
+- **Empty:** "No tile posts yet.", with a line on how to make one (the repo).
+- Code: `src/tile-posts.js` (no DOM), drawn in `src/discover.js` (`drawTilePosts`, `tilePostCard`, and its preview in
+  the right column). Unit tests: `test/tile-posts.test.mjs`. Browser: `test/browser/check_posts.py` (below).
+
 ## Try it
 
 ```
@@ -571,8 +597,9 @@ and open http://127.0.0.1:5181/.
 | `src/signin-ui.js` | the sign-in form, Raku's dialog, the blocked-window choices |
 | `src/account-menu.js` | the account button and its menu |
 | `src/cards.js` | tile cards and account chips, pictures loaded as they come near |
-| `src/discover.js` | stage 6: the Discover page (sources, Tile news, Recent tiles, Following, search results, previews; Make a tile) |
+| `src/discover.js` | stage 6: the Discover page (sources, Tile news, Tile posts, Recent tiles, Following, search results, previews; Make a tile) |
 | `src/following.js` | the newest tiles of the accounts on your shelf, and "New since your last visit" |
+| `src/tile-posts.js` | tile posts (Nov 2026): finding the accounts (the relay, and its fallback), reading and checking `cafe.thunderbird.tile.post` records, newest first |
 | `src/recent.js` | stage 6c: Recent tiles, appmosphe.re's list read carefully and moderated |
 | `src/marks.js` | stage 6c: when you last visited Following and Recent tiles (this device only) |
 | `src/search.js` | search: matches here in the browser, then appmosphe.re (only the tile addresses are read) |
@@ -607,12 +634,18 @@ the manifest as Chromium reads it, the icons, no worker in an ordinary tab, the 
 its ground rule, the tabs in the title bar (a stand-in `navigator.windowControlsOverlay`), the offline page and coming back online, the update note and the one start-up reload, the Install
 row, the About page's section, the phone.
 
-`check_discover.py` (177 checks, stage 6, 6c and the About page) runs the same way as `check_page.py`: Discover's columns at four widths,
+`check_discover.py` (196 checks, stage 6, 6c and the About page; Tile posts among the sources) runs the same way as `check_page.py`: Discover's columns at four widths,
 Recent tiles (appmosphe.re's order, hidden ones, checked handles, blurred and icon pictures, More, "New"; repeats as one card with "+N earlier versions", the page filling itself, More adding to the count, the line opening the account's page, the phone), Make a tile
 (the groups, the cards, Open in a new tab, the phone), the About page (its three links, its outside links, what it says, the phone),
 Following (order, hidden ones, "New"), search from the box and from Discover (nothing sent while typing, one request
 with only the words), a word with a dot as a handle first, Tile news from a stand-in feed with a post linking a tile,
 hand-picked posts mixed in by date, loading the next batch on scroll (and More without IntersectionObserver), labels, replies with their thread, the link message (Cancel, Escape, Open with no opener), a post's address in the box, the phone.
+
+`check_posts.py` (31 checks, tile posts) runs the same way as `check_discover.py`: posts from several accounts in order
+(the relay's, the owner's, the shelf's), the author and time, the tile's card with its banner described by the post's
+`alt` (or the tile's description), a hidden account (its server not asked) and a hidden tile, a deleted and a changed
+tile ("This tile can't be shown."), over-long text cut, the right column's preview, opening a card in the tab and in a
+new tab, Back, Refresh, the relay failing and unreachable (the note, the accounts Raku knows), the empty page, the phone.
 
 `check_daisy.py` (63 checks, stage 5) bundles and starts everything itself (Raku's page with the stand-in
 sign-in, the loader replica, daisy-tiles' stand-in relay, and the site's Daisy page bundled with a stand-in

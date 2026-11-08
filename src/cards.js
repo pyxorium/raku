@@ -62,10 +62,11 @@ export function createCardKit({ files }) {
    *  the screen, sends no referrer, and draws it only if it is a picture. */
   // fallback (Q129): where to load the picture from when the address has none (appmosphe.re never copied it):
   // the tile's own file, as above.
-  function picture(holder, { pds, did, cid, url, fallback = null }) {
+  // alt (tile posts, TP8): what the picture shows, for screen readers; empty by default (the card's words say it).
+  function picture(holder, { pds, did, cid, url, fallback = null, alt = '' }) {
     if (url) {
       if (!/^https:\/\//.test(url)) return;
-      const img = h('img', { src: url, alt: '', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' });
+      const img = h('img', { src: url, alt, loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' });
       img.addEventListener('error', () => { img.remove(); if (fallback && fallback.cid) picture(holder, fallback); });
       holder.append(img);
       return;
@@ -74,7 +75,7 @@ export function createCardKit({ files }) {
       try {
         const buf = await files.get(pds, did, cid, { left: LIMITS.cardImageBytes });
         const type = buf && sniffPicture(new Uint8Array(buf));
-        if (type && holder.isConnected) holder.append(h('img', { src: URL.createObjectURL(new Blob([buf], { type })), alt: '' }));
+        if (type && holder.isConnected) holder.append(h('img', { src: URL.createObjectURL(new Blob([buf], { type })), alt }));
       } catch { /* the plain background stays */ }
     };
     if (observer) observer.observe(holder);

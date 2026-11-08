@@ -717,6 +717,12 @@ a { color: var(--glaze-light); }
 .post-quote-who { color: var(--muted); font-size: 12.5px; }
 .post-quote-text { font-size: 13.5px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .post-tile { border-color: #4a3f35; }
+/* Tile posts (Nov 2026): the tile's card no wider than a card in a grid; the notes quiet */
+.tile-post .post-tile { max-width: 440px; }
+.tile-post .tp-gone { padding: 10px 12px; border-radius: 10px; border: 1px dashed #4a3f35; }
+.tp-note[hidden], .dv-empty[hidden] { display: none; }
+.dv-empty .tp-how { margin-top: 6px; font-size: 13.5px; }
+.dv-empty .tp-how a { color: var(--glaze-light); }
 .post-note { margin: 0; color: var(--muted); font-size: 13px; }
 .post-warn { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; border-radius: 10px; background: #2d2722; color: var(--warn); }
 .post-warn p { margin: 0; flex: 1; }

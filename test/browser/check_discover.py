@@ -6,6 +6,7 @@
 # appmosphe.re's /img/ copies, More, "New" since the last visit); Make a tile (the makers in two groups,
 # Open in a new tab, set apart at the bottom of the sources); the About page (going public, Q134: its three links,
 # what it says, the phone).
+# Tile posts (Nov 2026) joins the sources after Tile news; its own checks are check_posts.py.
 # Everything outside is a Playwright route (account directory, account servers, Bluesky's public API, its
 # picture server, appmosphe.re). Tiles aren't run here (check_page.py does that).
 # Usage: python3 test/browser/check_discover.py <work folder>   (servers.mjs and the replica already running,
@@ -231,7 +232,7 @@ with sync_playwright() as pw:
     for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**',
                  'https://appmosphe.re/**', 'https://typeahead.waow.tech/**', 'https://bsky.app/**', 'https://example.org/**', 'https://mu.social/**', 'https://evil.example/**',
                  'https://atmosynth.at/**', 'https://treeline.world/**', 'https://foundry.thunderbird.cafe/**', 'https://dasl.ing/**', 'https://szzt.app/**',
-                 'https://pdsls.dev/**', 'https://atproto.at/**']:
+                 'https://pdsls.dev/**', 'https://atproto.at/**', 'https://relay1.us-east.bsky.network/**']:   # the relay: Tile posts' preview (answers 404 here)
         ctx.route(host, route)
     ctx.add_init_script(f"if (!sessionStorage.getItem('seeded')) {{ localStorage.setItem('raku-shelf', {json.dumps(SHELF)}); sessionStorage.setItem('seeded', '1'); }}")
     popups = []
@@ -258,7 +259,7 @@ with sync_playwright() as pw:
     page.wait_for_selector('.discover')
     check('Discover opens as a page in a tab, titled Discover', 'Discover' in page.title() and texts(page, '.tab.on .tab-title') == ['Discover'])
     check('the Discover button in the top bar shows it is on', page.eval_on_selector('.bar .nav-btn[title="Discover"]', 'b => b.classList.contains("on")'))
-    check('with the Web Tiles feed (step 6b) the sources are Tile news, Recent tiles (stage 6c) and Following', texts(page, '.dv-src:not(.dv-make)') == ['Tile news', 'Recent tiles', 'Following'], str(texts(page, '.dv-src')))
+    check('with the Web Tiles feed (step 6b) the sources are Tile news, Tile posts (Nov 2026), Recent tiles (stage 6c) and Following', texts(page, '.dv-src:not(.dv-make)') == ['Tile news', 'Tile posts', 'Recent tiles', 'Following'], str(texts(page, '.dv-src')))
     check('Recent tiles has the clock icon', page.query_selector('.dv-src[data-source="recent"] .icon-clock') is not None)
     wait_for(lambda: page.eval_on_selector_all('.dv-centre .card-title', 'els => els.length >= 3 && els.every(e => e.textContent !== "…")'), page=page)
     names = texts(page, '.dv-centre .card-title')
@@ -308,7 +309,7 @@ with sync_playwright() as pw:
     check('search: "Already in Raku" pictures still come from the authors\' servers', pics and pics[0] and all(x.startswith('blob:') for x in pics[0]), str(pics))
     check('search: the line says what was sent where', 'Only the words you searched for were sent' in page.inner_text('.dv-foot'))
     check('search: the address box shows the words; the Discover box too', page.input_value('.addr') == 'coaster' and page.input_value('.dv-q') == 'coaster')
-    check('search: Search results joins the sources', texts(page, '.dv-src:not(.dv-make)') == ['Tile news', 'Recent tiles', 'Following', 'Search results'] and page.eval_on_selector('.dv-src[data-source="search"]', 'b => b.classList.contains("on")'))
+    check('search: Search results joins the sources', texts(page, '.dv-src:not(.dv-make)') == ['Tile news', 'Tile posts', 'Recent tiles', 'Following', 'Search results'] and page.eval_on_selector('.dv-src[data-source="search"]', 'b => b.classList.contains("on")'))
     check('search: the right column previews Following, with its new count', wait_for(lambda: '1 new' in page.inner_text('.dv-preview[data-source="following"]'), page=page))
     check('...and the previews\' small banners', wait_for(lambda: page.eval_on_selector_all('.dv-preview[data-source="following"] .dv-mini-pic img', 'is => is.length === 3 && is.every(i => i.src.startsWith("blob:"))'), page=page))
     page.screenshot(path=str(OUT / 'd3-search-wide.png'))
@@ -374,7 +375,8 @@ with sync_playwright() as pw:
     check('...an account labelled adult: its picture blurred', page.eval_on_selector('.card:nth-child(2) .card-pic', 'p => p.classList.contains("blurred") && getComputedStyle(p.querySelector("img")).filter.includes("blur")'))
     recent_calls = calls[seen_before:]
     check('...one request for the list, page 1', [c for c in recent_calls if '/api/tiles' in c] == ['https://appmosphe.re/api/tiles?page=1'], str([c for c in recent_calls if '/api/tiles' in c]))
-    check('...authors checked in one Bluesky request', len([c for c in recent_calls if 'getProfiles' in c]) == 1)
+    # (Tile posts' preview on the right asks Bluesky about its own authors: only the requests naming Recent's are counted)
+    check('...authors checked in one Bluesky request', len([c for c in recent_calls if 'getProfiles' in c and quote(MK, safe='') in c]) == 1, str([c for c in recent_calls if 'getProfiles' in c]))
     check("...nothing fetched from the tiles' own servers or elsewhere", not [c for c in recent_calls if 'evil.example' in c or ('getBlob' in c and any(quote(d, safe='') in c for d in (MK, AD, NH)))])   # (Following's preview on the right fetches its own banners)
     check('...a first visit marks nothing new', page.query_selector('.dv-centre .card-badge') is None)
     check('...More for the next page', page.is_visible('.dv-centre > .more') and page.inner_text('.dv-centre > .more') == 'More')
@@ -506,7 +508,7 @@ with sync_playwright() as pw:
     check('...Open, to the maker\'s site in a new tab, with no opener', opens == [['Open', u, '_blank', 'noopener noreferrer'] for u in ['https://atmosynth.at/', 'https://treeline.world/', 'https://foundry.thunderbird.cafe/', 'https://appmosphe.re/publish', 'https://szzt.app/publish/']], str(opens))
     check('nothing is asked of the makers\' sites until you open one', not [c for c in calls[before_make:] if any(h in c for h in ('atmosynth.at', 'treeline.world', 'foundry.thunderbird.cafe', 'appmosphe.re/publish', 'szzt.app', 'dasl.ing'))])
     pv = page.eval_on_selector_all('.dv-preview', 'ps => ps.map(p => p.dataset.source)')
-    check('the right column previews the reading sources', pv[:3] == ['news', 'recent', 'following'] and 'make' not in pv, str(pv))
+    check('the right column previews the reading sources', pv[:4] == ['news', 'posts', 'recent', 'following'] and 'make' not in pv, str(pv))
     page.screenshot(path=str(OUT / 'd4d-make-wide.png'))
     n0 = len(popups)
     page.click('.mk-card[data-maker="treeline"] .mk-open')
@@ -534,7 +536,7 @@ with sync_playwright() as pw:
 
     # ---------- Tile news (a stand-in feed, ?feed= on this computer) ----------
     page.goto(RAKU + '?loader=' + LOADER + '&feed=' + quote(FEED, safe='') + '#t=raku%3Adiscover&a=0'); page.wait_for_selector('.discover')
-    check('with a feed, Tile news comes first among the sources', texts(page, '.dv-src:not(.dv-make)') == ['Tile news', 'Recent tiles', 'Following'] and texts(page, '.dv-src.on') == ['Tile news'])
+    check('with a feed, Tile news comes first among the sources', texts(page, '.dv-src:not(.dv-make)') == ['Tile news', 'Tile posts', 'Recent tiles', 'Following'] and texts(page, '.dv-src.on') == ['Tile news'])
     page.wait_for_selector('.post')
     uris = page.eval_on_selector_all('.posts > *', 'ps => ps.map(p => p.dataset.uri.split("/").pop())')[:4]
     check('posts drawn; hidden by moderation and from a hidden account left out', uris == ['3post1', '3post2', '3post3', '3post5'], str(uris))
@@ -721,7 +723,7 @@ with sync_playwright() as pw:
     tools = mp.eval_on_selector_all('.toolbar button', 'bs => bs.map(b => [b.title, Math.round(b.getBoundingClientRect().width), b.classList.contains("on")])')
     check('phone: six toolbar buttons of 44 px, Discover among them and on', [t[0] for t in tools] == ['Back', 'Forward', 'Reload this tile', 'Your shelf', 'Discover', 'Open tabs'] and all(t[1] >= 44 for t in tools) and tools[4][2], str(tools))
     chips = mp.evaluate("() => [getComputedStyle(document.querySelector('.dv-sources')).display, [...document.querySelectorAll('.dv-src')].map(b => b.textContent.trim()), getComputedStyle(document.querySelector('.dv-right')).display]")
-    check('phone: one column, the sources as chips across the top (Make a tile last), no right column', chips[0] == 'flex' and chips[1] == ['Tile news', 'Recent tiles', 'Following', 'Make a tile'] and chips[2] == 'none', str(chips))
+    check('phone: one column, the sources as chips across the top (Make a tile last), no right column', chips[0] == 'flex' and chips[1] == ['Tile news', 'Tile posts', 'Recent tiles', 'Following', 'Make a tile'] and chips[2] == 'none', str(chips))
     check('phone: no sideways scroll', mp.evaluate('() => document.querySelector(".pane.front").scrollWidth <= document.querySelector(".pane.front").clientWidth + 1 && document.documentElement.scrollWidth <= 391'))
     mp.screenshot(path=str(OUT / 'd8-phone-news.png'))
     mp.click('.dv-src[data-source="following"]'); mp.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Following'")

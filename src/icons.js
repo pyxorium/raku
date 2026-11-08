@@ -20,6 +20,8 @@ const PATHS = {
   search: ['M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z', 'M15.3 15.3L20 20'],
   news: ['M5 4.5h10.5v15H6.5A1.5 1.5 0 0 1 5 18z', 'M15.5 8.5H19v9.5a1.5 1.5 0 0 1-1.5 1.5H15.5', 'M8 8.5h4.5', 'M8 12h4.5', 'M8 15.5h4.5'],
   people: ['M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z', 'M2.8 20a6.2 6.2 0 0 1 12.4 0', 'M15.5 4.3a3.5 3.5 0 0 1 0 6.4', 'M18 14.3a6.2 6.2 0 0 1 3.2 5.7'],
+  // tile posts (Nov 2026): a speech bubble holding a tile
+  posts: ['M5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 4v-4A1.5 1.5 0 0 1 4 14.5v-9A1.5 1.5 0 0 1 5.5 4z', 'M8.5 7.5h7v5h-7z'],
   // stage 6c: Recent tiles, Make a tile
   clock: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M12 7v5l3.5 2'],
   // going public: the About page's link in the account menu

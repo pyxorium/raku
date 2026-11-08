@@ -349,6 +349,16 @@ export const MODERATION_SERVICES = Object.freeze([BLUESKY_MODERATION]);
 export const SEARCH = Object.freeze({ name: 'appmosphe.re', url: 'https://appmosphe.re/api/search', max: 24, maxBytes: 1024 * 1024 });
 // Following (Q91): the newest few tiles of each account kept on your shelf, a few accounts at a time.
 export const FOLLOWING = Object.freeze({ perAccount: 10, max: 60, keepMs: 5 * 60 * 1000 });
+// Tile posts (claude/tile-posts-plan.md, TP11): posts that share a tile (cafe.thunderbird.tile.post records, the
+// lexicon in pyxorium/tile-posts). Bluesky's relay says which accounts have them (100 a request, up to maxAccounts);
+// the owner's accounts (`always`: thunderbird.cafe, pyxorium.com) and the shelf's are always read too, so the
+// source still works when the relay doesn't answer. The newest few posts of each account, a few accounts at a time.
+export const TILE_POSTS = Object.freeze({
+  relay: 'https://relay1.us-east.bsky.network', relayPage: 100, relayMs: 8000,
+  always: Object.freeze(['did:plc:6vxjigxrqizmbo56gojxico3', 'did:plc:rqbqpaaluty5v47jwciowpik']),
+  maxAccounts: 500, perAccount: 10, max: 100, atOnce: 4, accountMs: 10000, keepMs: 5 * 60 * 1000,
+  repo: 'https://github.com/pyxorium/tile-posts',
+});
 // Recent tiles (stage 6c, Q106 to Q110): appmosphe.re's list of every tile it has seen, newest first by each
 // tile's createdAt, 30 a page (?page=N), shown in appmosphe.re's own order. Cards only; pictures are
 // appmosphe.re's copies (/img/), drawn as ordinary pictures straight from appmosphe.re (Q122: its /img/ answers

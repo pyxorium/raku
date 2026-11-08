@@ -1,7 +1,7 @@
 // Discover (stage 6, claude/raku-stage6-plan.md): a page inside a tab, like your shelf.
 //
 // Three columns on a wide window (the owner's idea, like Bluesky's main screen, Q85 and Q86):
-//   left    the sources: Tile news (step 6b), Recent tiles (stage 6c), Following, Search results; then, set
+//   left    the sources: Tile news (step 6b), Tile posts (Nov 2026), Recent tiles (stage 6c), Following, Search results; then, set
 //           apart at the bottom, Make a tile (stage 6c: a page of tile makers, not a reading source);
 //   centre  the search box (Q95 C) and the chosen source, widest;
 //   right   previews of the other sources (the latest few of each); clicking one brings it to the centre.
@@ -9,10 +9,10 @@
 // column, with the sources as chips across the top. Nothing on this page runs a tile: cards only, and a tile
 // opens in the tab when its card is clicked.
 //
-// Addresses (address.js): raku:discover, raku:discover/news, raku:discover/recent, raku:discover/following,
-// raku:discover/make, raku:search/<words>.
+// Addresses (address.js): raku:discover, raku:discover/news, raku:discover/posts, raku:discover/recent,
+// raku:discover/following, raku:discover/make, raku:search/<words>.
 
-import { PICKS, SEARCH, RECENT, MAKE, FEED, NEWS_PINS, siteLabel, feedUri, postApp, appmosphereCopy } from './config.js';
+import { PICKS, SEARCH, RECENT, MAKE, FEED, NEWS_PINS, TILE_POSTS, siteLabel, feedUri, postApp, appmosphereCopy } from './config.js';
 import { atUri, discoverUri, searchUri, accountPageUri, parseAddress, parsePost, SHELF_URI, DISCOVER_URI, ABOUT_URI } from './address.js';
 import { describeTile } from './tiles.js';
 import { NetError } from './net.js';
@@ -22,9 +22,10 @@ import { createFollowing } from './following.js';
 import { createRecent, createCollapser, earlierLine } from './recent.js';
 import { createMarks } from './marks.js';
 import { createPublicReads } from './bluesky.js';
-import { readPost, threadContext, whenText, groupThreads } from './posts.js';
+import { readPost, threadContext, whenText, groupThreads, ago } from './posts.js';
 import { postCard, threadCard } from './post-card.js';
 import { searchAppmosphere, localMatches } from './search.js';
+import { createTilePosts, tileState } from './tile-posts.js';
 
 const SEARCH_KEEP_MS = 5 * 60 * 1000;
 
@@ -40,6 +41,7 @@ export function createDiscover({ resolver, moderation, shelf, storage = null, lo
   const marks = createMarks({ storage });
   const following = createFollowing({ resolver, moderation, shelf, storage, marks });
   const recent = createRecent({ moderation, marks, fetchImpl });
+  const tilePosts = createTilePosts({ resolver, moderation, shelf, fetchImpl });
   const reads = createPublicReads({ fetchImpl });
   const feed = feedUri(loc);
   const pinList = pins || (feed === FEED ? NEWS_PINS : []);   // hand-picked posts go with the real feed only
@@ -146,7 +148,7 @@ export function createDiscover({ resolver, moderation, shelf, storage = null, lo
   }
 
   return {
-    following, recent, reads, feed, news, remote, inHand,
+    following, recent, tilePosts, reads, feed, news, remote, inHand,
     get lastQuery() { return lastQuery; },
     set lastQuery(q) { lastQuery = q; },
     cachedSearch: (q) => searches.get(q) || null,
@@ -156,6 +158,7 @@ export function createDiscover({ resolver, moderation, shelf, storage = null, lo
 
 const SOURCES = {
   news: { label: 'Tile news', icon: 'news', blurb: 'Posts about web tiles, from the Web Tiles feed.' },
+  posts: { label: 'Tile posts', icon: 'posts', blurb: "Tiles people have posted, with a few words, from their own accounts. Everyone's, newest first." },
   recent: { label: 'Recent tiles', icon: 'clock', blurb: `The newest tiles on the network, as listed by ${RECENT.name}.` },
   following: { label: 'Following', icon: 'people', blurb: 'New tiles from the accounts on your shelf, newest first.' },
   search: { label: 'Search results', icon: 'search', blurb: '' },
@@ -165,7 +168,7 @@ const SOURCES = {
 /** Draws Discover in a tab. ctx: the page context (app.js pageContext) with discover and linkMessage. */
 export function drawDiscover(ctx, { source = null, query = '' } = {}) {
   const { p, tab, tabs, discover, drawChrome } = ctx;
-  const sources = [...(discover.feed ? ['news'] : []), 'recent', 'following'];
+  const sources = [...(discover.feed ? ['news'] : []), 'posts', 'recent', 'following'];
   if (source === 'search') discover.lastQuery = query;
   if (discover.lastQuery) sources.push('search');
   const current = source || sources[0];
@@ -212,6 +215,7 @@ export function drawDiscover(ctx, { source = null, query = '' } = {}) {
 
   if (current === 'following') drawFollowing(ctx, centre);
   else if (current === 'news') drawNews(ctx, centre);
+  else if (current === 'posts') drawTilePosts(ctx, centre);
   else if (current === 'recent') drawRecent(ctx, centre);
   else if (current === 'make') drawMake(ctx, centre);
   else drawSearch(ctx, centre, query);
@@ -479,6 +483,90 @@ function drawNews(ctx, into, { observe = globalThis.IntersectionObserver } = {})
   page();
 }
 
+// ---------- Tile posts (Nov 2026, claude/tile-posts-plan.md) ----------
+// Everyone's tile posts, newest first: the author (avatar, name, @handle), the time, the text, and the tile's card
+// (the same card Raku uses elsewhere; tapping it opens the tile in this tab). The banner's description is the post's
+// `alt`, or the tile's own description (TP8). Nothing runs here.
+function drawTilePosts(ctx, into) {
+  const { discover, alive } = ctx;
+  const head = h('div', { class: 'dv-head' }, h('h1', {}, 'Tile posts'), h('p', { class: 'sub' }, SOURCES.posts.blurb));
+  const refresh = h('button', { type: 'button', class: 'dv-refresh', title: 'Look again now' }, icon('reload', 16), 'Refresh');
+  head.append(refresh);
+  const status = h('p', { class: 'dv-status' }, 'Looking for tile posts…');
+  const note = h('p', { class: 'dv-status tp-note', hidden: true });
+  const list = h('div', { class: 'posts tile-posts' });
+  const empty = h('div', { class: 'dv-empty', hidden: true },
+    h('p', {}, 'No tile posts yet.'),
+    h('p', { class: 'tp-how' }, 'A tile post is a record in your own account naming one of your tiles, or anyone\'s, with a few words. For now a small script writes them: ',
+      h('a', { href: TILE_POSTS.repo, target: '_blank', rel: 'noopener noreferrer', referrerpolicy: 'no-referrer' }, 'pyxorium/tile-posts'), '.'));
+  into.append(head, status, note, list, empty);
+  const fill = async (fresh) => {
+    refresh.disabled = true;
+    status.hidden = false;
+    status.textContent = 'Looking for tile posts…';
+    let r;
+    try { r = await discover.tilePosts.load({ fresh }); } catch {
+      if (!alive()) return;
+      refresh.disabled = false;
+      status.textContent = "Couldn't look for tile posts just now.";
+      return;
+    }
+    if (!alive()) return;
+    refresh.disabled = false;
+    list.replaceChildren(...r.items.map((post) => tilePostCard(ctx, post)));
+    const words = [];
+    if (!r.relayOk) words.push("Couldn't reach the network just now, showing accounts you know.");
+    if (r.unreachable) words.push(`Couldn't reach ${r.unreachable} account${r.unreachable === 1 ? '' : 's'} just now.`);
+    note.textContent = words.join(' ');
+    note.hidden = !words.length;
+    status.hidden = true;
+    empty.hidden = !!r.items.length;
+  };
+  refresh.addEventListener('click', () => fill(true));
+  fill(false);
+}
+
+/** One tile post as a card (post.css's look): author, time, text, then the tile's card or "This tile can't be shown." */
+function tilePostCard(ctx, post) {
+  const { kit, tabs, tab, openNew, resolver, moderation } = ctx;
+  const av = h('span', { class: 'post-av' });
+  const name = h('span', { class: 'post-name', hidden: true });
+  const handle = h('span', { class: 'post-handle' }, post.did);
+  const head = h('header', { class: 'post-head' },
+    h('button', { type: 'button', class: 'post-who', title: 'Their tiles in Raku', onclick: () => tabs.go(tab.id, accountPageUri(post.did)) },
+      av, h('span', { class: 'post-names' }, name, handle)),
+    h('span', { class: 'post-time', title: post.time ? new Date(post.time).toISOString() : '' }, post.time ? ago(new Date(post.time).toISOString()) : ''));
+  const body = h('div', { class: 'post-body' }, post.text ? h('p', { class: 'post-text' }, post.text) : null);
+  const card = h('article', { class: 'post tile-post', 'data-uri': post.uri }, head, body);
+  moderation.profile(post.did).then((prof) => {
+    if (prof.avatar && !av.firstChild) av.append(h('img', { src: prof.avatar, alt: '', referrerpolicy: 'no-referrer', loading: 'lazy' }));
+    if (prof.displayName) { name.textContent = prof.displayName; name.hidden = false; }
+    if (prof.handle) handle.textContent = `@${prof.handle}`;
+    else resolver.checkedHandle(post.did).then((hd) => { if (hd) handle.textContent = `@${hd}`; });
+  }).catch(() => {});
+
+  const t = post.tile;
+  const tileCard = kit.tileCard({ name: '…', onOpen: () => tabs.go(tab.id, t.uri), onOpenNew: () => openNew(t.uri) });
+  tileCard.el.classList.add('post-tile');
+  tileCard.el.dataset.tile = t.uri;
+  body.append(tileCard.el);
+  const cannot = () => {
+    tileCard.el.replaceWith(h('p', { class: 'post-note tp-gone' }, "This tile can't be shown."));
+  };
+  (async () => {
+    const [rec, acct] = await Promise.all([resolver.tileRecord(t.did, t.rkey), resolver.account(t.did)]);
+    const d = describeTile(rec);
+    if (!d.ok || tileState(post, rec) !== 'ok') { cannot(); return; }
+    tileCard.set({ name: d.name, description: d.description });
+    tileCard.picture({ pds: acct.pds, did: t.did, cid: bannerCid(d.manifest), alt: post.alt || d.description || d.name || '' });
+    resolver.checkedHandle(t.did).then((hd) => tileCard.set({ by: hd || '' }));
+  })().catch((err) => {
+    if (err && err.code === 'not-found') cannot();
+    else tileCard.set({ note: "Couldn't reach the tile's server just now." });
+  });
+  return card;
+}
+
 /** "+1 more reply in this thread" on a thread's card: opens the thread's first post (through the link message). */
 function moreReplies(g, postCtx) {
   if (!g.el) return;
@@ -608,6 +696,16 @@ function preview(ctx, source, uri) {
       count.textContent = n ? `${n} new` : '';
       fill(shown.slice(0, 3).map((t) => row(t.name, t.handle ? `@${t.handle}` : whenText(t.createdAt),
         t.picture ? { url: t.picture, look: [t.pictureIsIcon ? 'is-icon' : '', t.blur ? 'blurred' : ''].filter(Boolean).join(' ') } : null)), 'No tiles yet.');
+    } else if (source === 'posts') {
+      const r = await discover.tilePosts.load();
+      if (!alive()) return;
+      const rows = [];
+      for (const post of r.items.slice(0, 3)) {
+        const prof = await ctx.moderation.profile(post.did).catch(() => null);
+        const hd = (prof && prof.handle) || await resolver.checkedHandle(post.did);
+        rows.push(row((prof && prof.displayName) || (hd ? `@${hd}` : 'Someone'), post.text.slice(0, 90) || ago(post.createdAt), null));
+      }
+      if (alive()) fill(rows, 'No tile posts yet.');
     } else if (source === 'news') {
       const r = await discover.news();
       if (!alive()) return;
