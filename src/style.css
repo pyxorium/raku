@@ -880,6 +880,18 @@ a { color: var(--glaze-light); }
 .news-who { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; overflow: hidden; white-space: nowrap; }
 .news-reply { font-weight: 400; font-size: 11.5px; color: var(--muted); border: 1px solid #4a3f35; border-radius: 999px; padding: 0 6px; }
 .news-text { color: var(--muted); font-size: 13px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* NR1, NR2 (claude/raku-baked-picks-plan.md): the row holds its place. Every item keeps room for two lines of text, so the
+   placeholders and the posts (one line or two) are the same height; placeholders are plain faint bars, no animation. */
+.first-news .news-text { min-height: 2.6em; min-height: 2lh; }
+.news-placeholder { cursor: default; }
+.news-placeholder:hover { border-color: #3a322b; }
+.news-placeholder .news-words { flex: 1; }
+.first-news .news-who { min-height: 1lh; }
+.news-ph { display: block; height: 0.7em; margin: 0.1em 0; border-radius: 4px; background: #332b25; }
+.news-who .news-ph { width: 45%; }
+.news-text .news-ph { width: 92%; }
+.news-text .news-ph.short { width: 60%; }
+.news-none { display: flex; align-items: center; grid-column: 1 / -1; margin: 0; padding: 10px 12px; color: var(--muted); font-size: 13px; }
 .link-msg-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 4px 0 10px; }
 .link-msg-choice label { display: inline-flex; align-items: center; gap: 8px; color: var(--text); }
 .link-msg-choice .small { color: #8d8172; font-size: 12px; }

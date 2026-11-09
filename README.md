@@ -323,6 +323,9 @@ Plan and decisions: `claude/raku-baked-picks-plan.md` (BP1 to BP3).
 - **Bake again whenever `PICKS` changes.** `test/picks.test.mjs` fails while `PICKS` and the bake disagree ("PICKS changed
   since the last bake: run npm run bake-picks"), and the deploy runs the tests first, so a stale bake never goes live
   (BP3). Changes the authors make to the same six tiles need no new bake: the quiet check picks them up.
+- **The Tile news row holds its place** (NR1, NR2): its heading, More and three faint placeholder rows show at once
+  (no animation; marked busy for screen readers); the posts take their place, or "No tile news just now" when the feed
+  is empty or can't be read. Every item keeps room for two lines of text, so nothing below moves.
 
 ## The About page (Oct 22 2026)
 
@@ -781,7 +784,7 @@ the manifest as Chromium reads it, the icons, no worker in an ordinary tab, the 
 its ground rule, the tabs in the title bar (a stand-in `navigator.windowControlsOverlay`), the offline page and coming back online, the update note and the one start-up reload, the Install
 row, the About page's section, the phone.
 
-`check_discover.py` (196 checks, stage 6, 6c and the About page; Tile posts among the sources) runs the same way as `check_page.py`: Discover's columns at four widths,
+`check_discover.py` (206 checks, stage 6, 6c and the About page; Tile posts among the sources; since Nov 9 the first screen's Tile news row holding its place, on a computer and a phone, with the feed held back, empty or failing) runs the same way as `check_page.py`: Discover's columns at four widths,
 Recent tiles (appmosphe.re's order, hidden ones, checked handles, blurred and icon pictures, More, "New"; repeats as one card with "+N earlier versions", the page filling itself, More adding to the count, the line opening the account's page, the phone), Make a tile
 (the groups, the cards, Open in a new tab, the phone), the About page (its three links, its outside links, what it says, the phone),
 Following (order, hidden ones, "New"), search from the box and from Discover (nothing sent while typing, one request

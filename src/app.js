@@ -1371,27 +1371,40 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   function drawNewsRow(p, tab, box) {
     if (!discover.feed) return;
     const mine = p.attempt;
-    const list = h('div', { class: 'news-row' });
-    const part = h('section', { class: 'first-news', hidden: true },
+    // NR1, NR2 (claude/raku-baked-picks-plan.md): the row holds its place from the start: three faint placeholders the
+    // size of real items, replaced by the posts, or by a quiet line when the feed fails or has none. Nothing below moves.
+    const placeholder = () => h('div', { class: 'news-item news-placeholder', 'aria-hidden': 'true' },
+      h('span', { class: 'news-av' }),
+      h('span', { class: 'news-words' }, h('span', { class: 'news-who' }, h('span', { class: 'news-ph' })),
+        h('span', { class: 'news-text' }, h('span', { class: 'news-ph' }), h('span', { class: 'news-ph short' }))));
+    const list = h('div', { class: 'news-row', 'aria-busy': 'true' }, placeholder(), placeholder(), placeholder());
+    const part = h('section', { class: 'first-news' },
       h('div', { class: 'first-news-head' }, h('h2', {}, 'Tile news'),
         h('button', { type: 'button', class: 'linkish', onclick: () => tabs.go(tab.id, discoverUri('news')) }, 'More')),
       list);
     box.append(part);
+    const nothing = () => {
+      list.style.minHeight = `${list.getBoundingClientRect().height}px`;   // the line keeps the placeholders' space (exactly)
+      list.replaceChildren(h('p', { class: 'news-none' }, 'No tile news just now.'));
+      list.removeAttribute('aria-busy');
+    };
     discover.news().then((r) => {
-      if (mine !== p.attempt || !r.items.length) return;
+      if (mine !== p.attempt) return;
       // one item per thread, as on Discover (Q123)
-      for (const it of groupThreads(r.items).added.slice(0, 3).map((g) => g.item)) {
+      const items = groupThreads(r.items).added.slice(0, 3).map((g) => g.item);
+      if (!items.length) { nothing(); return; }
+      list.replaceChildren(...items.map((it) => {
         const a = it.post.author;
         const reply = !!(it.context || it.post.replyTo);
-        list.append(h('button', { type: 'button', class: 'news-item', onclick: () => tabs.go(tab.id, discoverUri('news')) },
+        return h('button', { type: 'button', class: 'news-item', onclick: () => tabs.go(tab.id, discoverUri('news')) },
           h('span', { class: 'news-av' }, a.avatar ? h('img', { src: a.avatar, alt: '', referrerpolicy: 'no-referrer', loading: 'lazy' }) : null),
           h('span', { class: 'news-words' },
             h('span', { class: 'news-who' }, a.displayName || (a.handle ? `@${a.handle}` : 'Someone'),
               reply ? h('span', { class: 'news-reply' }, 'reply') : null),
-            h('span', { class: 'news-text' }, (it.post.text || '').split('\n')[0].slice(0, 140) || (it.post.tile ? 'A web tile' : 'A post')))));
-      }
-      part.hidden = false;
-    }).catch(() => { /* no row: the feed couldn't be read just now */ });
+            h('span', { class: 'news-text' }, (it.post.text || '').split('\n')[0].slice(0, 140) || (it.post.tile ? 'A web tile' : 'A post'))));
+      }));
+      list.removeAttribute('aria-busy');
+    }).catch(() => { if (mine === p.attempt) nothing(); });   // the feed couldn't be read just now
   }
 
   function tableCard(t, tab) {

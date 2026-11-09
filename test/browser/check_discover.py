@@ -145,6 +145,9 @@ feed2_fail = {'20': 1}
 
 calls = []
 pin_asks = []
+# NR1, NR2 (claude/raku-baked-picks-plan.md): the first screen's Tile news row can be held back, empty or failing
+news_mode = {'mode': 'normal'}
+news_held = []
 def route(r):
     url = r.request.url; calls.append(url)
     u = urlparse(url); q = {k: v[0] for k, v in parse_qs(u.query).items()}
@@ -171,8 +174,12 @@ def route(r):
                 n = int(c or 0); nxt = n + 5
                 return js({'feed': [{'post': p} for p in SCROLL_POSTS[n:nxt]], **({'cursor': str(nxt)} if nxt < len(SCROLL_POSTS) else {})})
             if q.get('feed') != FEED: return js({'error': 'UnknownFeed'}, 400)
+            if news_mode['mode'] == 'hold': news_held.append(lambda: js({'feed': [{'post': p} for p in POSTS] + THREAD_ITEMS})); return
+            if news_mode['mode'] == 'empty': return js({'feed': []})
+            if news_mode['mode'] == 'fail': return js({'error': 'InternalServerError'}, 502)
             return js({'feed': [{'post': p} for p in POSTS] + THREAD_ITEMS})
         if u.path.endswith('getPosts'):
+            if news_mode['mode'] == 'empty': return js({'posts': []})
             want = parse_qs(u.query).get('uris', [])
             pin_asks.append(len(want))
             return js({'posts': [p for p in PINS if p['uri'] in want]})
@@ -244,7 +251,7 @@ with sync_playwright() as pw:
     # ---------- Discover, Following ----------
     # step 6b: the first screen's Tile news row
     page.goto(RAKU)
-    page.wait_for_selector('.first-news:not([hidden]) .news-item')
+    page.wait_for_selector('.first-news:not([hidden]) .news-item:not(.news-placeholder)')
     row = page.eval_on_selector_all('.first-news .news-item', 'bs => bs.map(b => [b.querySelector(".news-who").textContent, !!b.querySelector(".news-reply")])')
     check('first screen: a Tile news row with the latest three posts', len(row) == 3, str(row))
     check('...no old hand-picked post among them (mixed in by date)', not any('Robin' in r[0] for r in row), str(row))
@@ -255,6 +262,45 @@ with sync_playwright() as pw:
     page.click('.first-news .linkish')
     page.wait_for_function("() => document.querySelector('.dv-centre h1')?.textContent === 'Tile news'")
     check('...More opens Tile news on Discover', True)
+
+    # NR1, NR2: the row holds its place from the start: three placeholders, then the posts, or a quiet line when the
+    # feed is empty or fails; "Tables and rooms" never moves (a computer and a phone)
+    tables_y = lambda pg: pg.evaluate("() => { const e = [...document.querySelectorAll('.first h2')].find(x => x.textContent === 'Tables and rooms'); return e ? Math.round(e.getBoundingClientRect().top - document.querySelector('.first').getBoundingClientRect().top) : null; }")   # from the first screen's top (Raku scrolls inside its pane)
+    for label, size in [('computer', {'width': 1400, 'height': 900}), ('phone', {'width': 390, 'height': 844})]:
+        nc = b.new_context(viewport=size, **({'is_mobile': True, 'has_touch': True} if label == 'phone' else {}))
+        for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**', 'https://appmosphe.re/**', 'https://typeahead.waow.tech/**', 'https://relay1.us-east.bsky.network/**']:
+            nc.route(host, route)
+        news_mode['mode'] = 'hold'; news_held.clear()
+        npg = nc.new_page(); npg.goto(RAKU); npg.wait_for_selector('.first .picks .card')
+        asked = wait_for(lambda: news_held, 10, page=npg)
+        ph = npg.eval_on_selector_all('.first-news:not([hidden]) .news-item.news-placeholder', 'els => els.length')
+        check(f'NR1 ({label}): while the feed is being read, the Tile news row is there with three placeholders', asked and ph == 3, f'held={len(news_held)} placeholders={ph}')
+        check(f'...the heading and More already there; the row marked busy for screen readers', npg.is_visible('.first-news h2') and npg.is_visible('.first-news .linkish') and npg.get_attribute('.first-news .news-row', 'aria-busy') == 'true')
+        npg.wait_for_timeout(400)
+        y0 = tables_y(npg)
+        npg.eval_on_selector('.first-news', 'e => e.scrollIntoView({ block: "center" })'); npg.wait_for_timeout(200)
+        npg.screenshot(path=str(OUT / f'd0-news-placeholders-{label}.png'))
+        news_mode['mode'] = 'normal'
+        for f in list(news_held): f()
+        news_held.clear()
+        real = wait_for(lambda: npg.eval_on_selector_all('.first-news .news-item:not(.news-placeholder)', 'els => els.length') == 3, 10, page=npg)
+        npg.wait_for_timeout(400)
+        y1 = tables_y(npg)
+        check(f'...the posts take the placeholders\' place, and "Tables and rooms" doesn\'t move', real and y0 is not None and y0 == y1 and not npg.query_selector('.first-news .news-placeholder') and not npg.get_attribute('.first-news .news-row', 'aria-busy'), f'{y0} -> {y1}')
+        npg.close()
+        for mode in ['empty', 'fail']:
+            news_mode['mode'] = mode
+            npg = nc.new_page(); npg.goto(RAKU); npg.wait_for_selector('.first .picks .card')
+            line = wait_for(lambda: npg.query_selector('.first-news .news-none') and npg.inner_text('.first-news .news-none'), 10, page=npg)
+            npg.wait_for_timeout(400)
+            y2 = tables_y(npg)
+            check(f'NR2 ({label}, the feed {"empty" if mode == "empty" else "failing"}): "No tile news just now", More kept, "Tables and rooms" where it was', line == 'No tile news just now.' and npg.is_visible('.first-news .linkish') and y2 == y0, f'{line!r} {y0} -> {y2}')
+            if mode == 'empty':
+                npg.eval_on_selector('.first-news', 'e => e.scrollIntoView({ block: "center" })'); npg.wait_for_timeout(200)
+                npg.screenshot(path=str(OUT / f'd0-news-none-{label}.png'))
+            npg.close()
+        nc.close()
+    news_mode['mode'] = 'normal'
     page.goto(RAKU + '#t=raku%3Adiscover%2Ffollowing&a=0')
     page.wait_for_selector('.discover')
     check('Discover opens as a page in a tab, titled Discover', 'Discover' in page.title() and texts(page, '.tab.on .tab-title') == ['Discover'])
