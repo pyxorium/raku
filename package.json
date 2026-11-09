@@ -9,6 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test test/*.test.mjs",
+    "bake-picks": "node scripts/bake-picks.mjs",
     "publish-lexicons": "node scripts/publish-lexicons.mjs"
   },
   "dependencies": {
@@ -17,6 +18,7 @@
     "rooms-lab": "github:pyxorium/rooms-lab#v0.13.0"
   },
   "devDependencies": {
+    "sharp": "^0.35.5",
     "vite": "^6.3.5"
   },
   "engines": {

@@ -30,6 +30,7 @@
 import { Tile } from '@dasl/tile-loader';
 import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS, TABLES, ROOMS, tableForTile, isRoomHouse, appmosphereCopy,
   rendererFor, pinnedRenderers, RENDER, RECORD_APPS, RECORD_APP_KEY, recordApp, explorerLink, WAYS, KEYS_AFTER_MS, PLAY_HERE } from './config.js';
+import { bakedPick, bakedPictureUrl } from './picks.js';
 import { parseAddress, parseTarget, atUri, SHELF_URI, ABOUT_URI, ROOM_URI, roomInHash, tableUri, DISCOVER_URI, discoverUri, wayUri, WAY_PREFIX } from './address.js';
 import { createTabs, current, stateAt } from './tabs.js';
 import { WAY_UP, readWays, entranceFor, readWayMessage, statusMessage, arriveMessage, testSignposts, createWayReader, chosenDoor, keepDoor,
@@ -1421,7 +1422,13 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     const parsed = parseAddress(uri);
     const pickTable = parsed.ok && parsed.actor.startsWith('did:') ? tableForTile(parsed.actor, parsed.rkey) : null;
     const target = pickTable ? tableUri(pickTable.id) : parsed.ok && parsed.actor.startsWith('did:') && isRoomHouse(parsed.actor, parsed.rkey) ? ROOM_URI : uri;
-    const card = kit.tileCard({ name: '…', onOpen: () => tabs.go(tab.id, target), onOpenNew: () => openNew(target) });
+    // Baked picks (claude/raku-baked-picks-plan.md, BP1): a pick baked into Raku draws its whole card at once from
+    // Raku's own files; the checks below then run quietly and only change the card if something changed since the
+    // bake. A pick with no baked copy waits for them, as before.
+    const baked = bakedPick(uri);
+    const card = kit.tileCard({ name: baked ? baked.name : '…', description: baked?.description || '', by: baked?.handle || '',
+      onOpen: () => tabs.go(tab.id, target), onOpenNew: () => openNew(target) });
+    if (baked?.banner) card.picture({ url: bakedPictureUrl(baked), fallback: { url: appmosphereCopy(baked.did, baked.banner.cid), cid: baked.banner.cid } });
     (async () => {
       if (!parsed.ok) throw new Error('bad pick');
       const did = await resolver.didFor(parsed.actor);
@@ -1431,11 +1438,13 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       if (!d.ok) throw new Error(d.reason);
       card.set({ name: d.name, description: d.description });
       // the banner from appmosphe.re's copy (one fast server; the picks are the same for everyone, so this reveals
-      // nothing), else from the author's own server as before (Q128, Q129)
+      // nothing), else from the author's own server as before (Q128, Q129); a baked pick keeps its own copy unless
+      // the banner changed since the bake
       const cid = bannerCid(d.manifest);
-      card.picture({ url: appmosphereCopy(did, cid), fallback: { pds: acct.pds, did, cid } });
-      resolver.checkedHandle(did).then((hd) => card.set({ by: hd || '' }));
-    })().catch(() => card.set({ name: "Couldn't load this pick", greyed: true }));
+      if (!baked || cid !== (baked.banner?.cid || null)) card.picture({ url: appmosphereCopy(did, cid), fallback: { pds: acct.pds, did, cid } }, { replace: !!baked });
+      // a baked handle stays unless a different one checks out now
+      resolver.checkedHandle(did).then((hd) => { if (!baked || hd) card.set({ by: hd || '' }); });
+    })().catch(() => { if (!baked) card.set({ name: "Couldn't load this pick", greyed: true }); });   // a baked card stays as baked
     return card.el;
   }
 

@@ -305,6 +305,25 @@ Plan and decisions: `claude/raku-launch-plan.md` (Q128 to Q130).
   "Already in Raku" still load from the authors' servers**, so appmosphe.re never learns what you keep (Q129).
 - **Northsky** joins "Open in" for posts (`northsky.app`).
 
+## Baked picks (Nov 2026): the first screen at once
+
+Plan and decisions: `claude/raku-baked-picks-plan.md` (BP1 to BP3).
+
+- **The first screen's picks are baked in:** `npm run bake-picks` (`scripts/bake-picks.mjs`), run directly in
+  `C:\thunderbird-cafe\raku` on your computer, reads each pick in `PICKS` from its author's server (Raku's own careful
+  lookups, the handle checked both ways), saves a 640 px WebP copy of its banner as `public/picks/<record key>.webp`, and
+  writes `src/picks.baked.js` (name, description, checked handle, banner). If a pick can't be read, nothing is written;
+  copies of picks no longer in `PICKS` are removed. It needs `sharp` (a development tool only:
+  `npm install --save-dev sharp`).
+- **The card draws at once** from those files (`pickCard` in `src/app.js`, `src/picks.js`), then checks quietly: the
+  moderation check (a pick hidden since the bake is removed), the record (a changed name or description swapped in; a
+  changed banner replaced by appmosphe.re's copy of the new one, else the author's file). A record that can't be read
+  leaves the baked card as it is; a baked file that's missing falls back to appmosphe.re's copy of the baked banner. A
+  pick with no baked copy loads as before.
+- **Bake again whenever `PICKS` changes.** `test/picks.test.mjs` fails while `PICKS` and the bake disagree ("PICKS changed
+  since the last bake: run npm run bake-picks"), and the deploy runs the tests first, so a stale bake never goes live
+  (BP3). Changes the authors make to the same six tiles need no new bake: the quiet check picks them up.
+
 ## The About page (Oct 22 2026)
 
 Plan and decisions: `claude/raku-launch-plan.md` (Q133, Q134).
@@ -710,6 +729,7 @@ and open http://127.0.0.1:5181/.
 | `src/moderation.js` | the coded hide list and Bluesky's moderation |
 | `src/tabs.js` | the tabs as data (history with a state beside each place, the cap, the page address) |
 | `src/app.js` | the page: tab strip, address bar, panes, the first screen |
+| `src/picks.js`, `src/picks.baked.js` | the first screen's picks as baked by `npm run bake-picks` (`scripts/bake-picks.mjs`; banners in `public/picks/`) |
 | `src/frame-guard.js` | refusing to run inside another site's frame |
 | `src/icons.js` | Raku's own icons, drawn (back, forward, reload, new tab, close, shelf, star, person; stage 6: compass, search, news, people; stage 6c: clock, brush) |
 | `src/shelf-store.js` | your shelf as data (this browser's storage, Export and Import) |
@@ -820,6 +840,14 @@ from it, the room tab's marker (the ring, the dot, a click folding and unfolding
 for a guest's request and Allow from it, Pop out with the floating window showing a shared screen under Raku's page
 policy, Back to the room from the window, and on a phone the bar above the toolbar, its chip and the tabs sheet's
 marker.
+
+`check_picks.py` (17 checks, Nov 2026: baked picks) sets itself up like `check_renderer.py` (a copy of this folder with a
+test bake, bundled, `servers.mjs`; no loader replica). Usage: `python3 test/browser/check_picks.py <work folder>`. The
+baked cards whole while every record read and moderation lookup is held back; Raku's own /picks/ pictures; a missing
+baked file falling back to appmosphe.re; a pick hidden since the bake removed; a changed record's words and banner
+swapped in (one picture); an unchanged pick asking appmosphe.re for nothing; an unreadable record leaving the baked
+card; a pick with no bake loading as before; a baked card opening its tile. 8 of its checks fail on the code before
+the bake.
 
 `check_renderer.py` (81 checks, renderer tiles; since ways, a signpost's "Go to" taking that way to the maze's tile; since Nov 9, a test renderer adding handlers after `listen()` gets the record from the loading server's `data.js`: fails with the stock one) sets everything up itself, like `check_daisy.py`: a copy of this folder
 with a test pin in `RENDERERS`, bundled, Raku's page and the loader replica, and the real place renderer from a

@@ -65,7 +65,8 @@ export function createCardKit({ files }) {
   // alt (tile posts, TP8): what the picture shows, for screen readers; empty by default (the card's words say it).
   function picture(holder, { pds, did, cid, url, fallback = null, alt = '' }) {
     if (url) {
-      if (!/^https:\/\//.test(url)) return;
+      // an https address, or (baked picks, claude/raku-baked-picks-plan.md) a file on Raku's own site: "/picks/…"
+      if (!/^https:\/\//.test(url) && !/^\/picks\/[a-z0-9]{1,64}\.webp$/.test(url)) return;
       const img = h('img', { src: url, alt, loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' });
       img.addEventListener('error', () => { img.remove(); if (fallback && fallback.cid) picture(holder, fallback); });
       holder.append(img);
@@ -116,7 +117,9 @@ export function createCardKit({ files }) {
       },
       // look (stage 6c): 'icon' draws a small picture whole instead of filling the card; 'blur' blurs it (an
       // account labelled adult or graphic)
-      picture(ref, { look = '' } = {}) {
+      // replace (baked picks): the picture drawn so far goes first (a pick whose banner changed since the bake)
+      picture(ref, { look = '', replace = false } = {}) {
+        if (replace) { delete pic._loadPicture; for (const i of pic.querySelectorAll('img')) i.remove(); }
         if (!ref?.cid && !ref?.url) return;
         if (look.includes('icon')) pic.classList.add('is-icon');
         if (look.includes('blur')) pic.classList.add('blurred');
