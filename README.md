@@ -467,7 +467,10 @@ for `RENDERERS`). Until its `uri` and `cid` are filled in, places keep opening t
   the renderer, and answers its `tiles-protocol-up-data-ready` with one `tiles-protocol-down-data-payload`:
   `{ uri, cid, did, handle, collection, rkey, value }`, the record as stored, the same shape for every kind
   (`src/renderers.js`). Every "ready" is answered (a reloaded tile asks again); the handle goes along once it checks
-  out both ways, or after 1.5 s without it.
+  out both ways, or after 1.5 s without it. Since Nov 9 the loading server's `data.js` keeps that first payload after
+  `listen()` (the context) and replays a copy to handlers a tile adds later, with one console warning; answers to a
+  tile's own requests aren't replayed (`claude/raku-data-replay-plan.md`; the patch note is at the end of
+  `tiles-loading-server\public\data.js`). Renderers should still add their handler before `listen()`.
 - **The one thing a renderer may ask:** `{ open: "at://…" }` (`tiles-protocol-up-data-payload`), opened as if typed:
   a tile, an account or a record with a renderer in a **new tab**; a record or collection with no renderer, or a post,
   in the link message. `at://` only, at most 600 characters, and requests within a second of the last from the same
@@ -818,7 +821,7 @@ for a guest's request and Allow from it, Pop out with the floating window showin
 policy, Back to the room from the window, and on a phone the bar above the toolbar, its chip and the tabs sheet's
 marker.
 
-`check_renderer.py` (76 checks, renderer tiles; since ways, a signpost's "Go to" taking that way to the maze's tile) sets everything up itself, like `check_daisy.py`: a copy of this folder
+`check_renderer.py` (81 checks, renderer tiles; since ways, a signpost's "Go to" taking that way to the maze's tile; since Nov 9, a test renderer adding handlers after `listen()` gets the record from the loading server's `data.js`: fails with the stock one) sets everything up itself, like `check_daisy.py`: a copy of this folder
 with a test pin in `RENDERERS`, bundled, Raku's page and the loader replica, and the real place renderer from a
 maze-tiles folder. Usage: `python3 test/browser/check_renderer.py <work folder> <tiles-loading-server folder> <maze-tiles
 folder>`. A place typed in the box opens in its tab through the real loader; the record handed over (name, checked

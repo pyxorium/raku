@@ -5,6 +5,8 @@
 # card (claude/raku-places-card-plan.md, PC1 to PC6): the tile record Raku reads for it, and the banner's bytes Raku
 # fetches for it ({ picture, from }) only when a record it was handed lists that file, of the four picture kinds, at most
 # 1 MB, within the same 20 per load. Since ways (claude/raku-ways-plan.md, RW5): a signpost's "Go to" takes that way.
+# Since Nov 9 (claude/raku-data-replay-plan.md): a test renderer that adds handlers after listen() gets the record from
+# the loading server's data.js (step 6c, which fails with the stock data.js).
 #
 # It sets everything up itself: a copy of this Raku folder with a test pin in RENDERERS (the real pin is filled in
 # after publishing), bundled with esbuild and the stand-in sign-in, then servers.mjs and loader-replica.mjs.
@@ -79,6 +81,35 @@ for f in ['index.html', 'signpost.css', 'signpost.js', 'view.js', 'icon.png', 'b
 records[(A, TILE, SIGN_RKEY)] = (SIGN_CID, {'$type': TILE, 'cid': 'bafyreimanifest2', 'tile': {'name': 'Signposts', 'description': 'Shows a signpost.', 'resources': sign_res,
     'icons': [{'src': '/icon.png'}], 'screenshots': [{'src': '/banner.png'}]}, 'createdAt': '2026-11-06T12:00:00Z'})
 MAZE_PLACE = f'at://{P}/{PLACE}/maze'
+# ---- a renderer that adds a handler late (claude/raku-data-replay-plan.md, DR1 and DR2), test-pinned for a test kind ----
+# One handler before listen() (the safe order), one added once the record has come and gone, then a { get }, then a
+# third handler once its answer has come: with the loading server's data.js, the late ones get the record (and only
+# the record: the answer isn't replayed), and nobody gets anything twice. With the stock data.js the late ones get
+# nothing of what came before them.
+LATE = 'cafe.thunderbird.test.late'
+LATE_RKEY = '3mzlatetest'
+LATE_CID = 'bafyreilatehandlertestpinaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+LATE_JS = '''const seen = { early: [], late: [], later: [] };
+const kind = (p) => (p && typeof p.got === 'string' ? 'got' : p && p.value ? 'record' : 'other');
+const show = () => { document.getElementById('n').textContent = JSON.stringify({ early: seen.early.map(kind), late: seen.late.map(kind), later: seen.later.map(kind) }); };
+const until = (ok, then) => { const t = setInterval(() => { if (ok()) { clearInterval(t); then(); } }, 50); };
+const dp = await import('/.well-known/web-tiles/data.js');
+dp.addDataHandler((p) => { seen.early.push(p); show(); });
+dp.listen();
+until(() => seen.early.length === 1, () => setTimeout(() => {
+  dp.addDataHandler((p) => { seen.late.push(p); if (p && p.value) document.getElementById('h').textContent = p.value.name; show(); });
+  setTimeout(() => {
+    dp.sendData({ get: seen.early[0].value.see });
+    until(() => seen.early.length === 2, () => setTimeout(() => { dp.addDataHandler((p) => { seen.later.push(p); show(); }); setTimeout(() => { document.body.dataset.done = '1'; show(); }, 800); }, 200));
+  }, 600);
+}, 300));
+show();
+'''.encode()
+LATE_HTML = b'''<!doctype html><meta charset=utf-8><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'">
+<body><h1 id=h>No record</h1><p id=n></p><script type=module src=./late.js></script>'''
+records[(A, TILE, LATE_RKEY)] = (LATE_CID, {'$type': TILE, 'cid': 'bafyreimanifest3', 'tile': {'name': 'Late handler', 'description': 'Adds its handler after listen().',
+    'resources': {'/': res(LATE_HTML, 'text/html'), '/late.js': res(LATE_JS, 'text/javascript')}}, 'createdAt': '2026-11-09T12:00:00Z'})
+records[(A, LATE, 'one')] = ('bafyreilaterecord', {'$type': LATE, 'name': 'A record for a late handler', 'see': MAZE_PLACE})
 records[(A, SIGNPOST, 'winter-forest.slide')] = ('bafyreisignslide', {'$type': SIGNPOST, 'to': [{'place': MAZE_PLACE, 'entrance': 'obelisk'}], 'updatedAt': '2026-10-29T05:40:00.000Z'})
 state = {'renderer_cid': RENDERER_CID}
 calls = []
@@ -92,7 +123,8 @@ cfg = (COPY / 'src' / 'config.js').read_text()
 pin = f"'{PLACE}': Object.freeze({{ name: 'Places', uri: 'at://{A}/{TILE}/{RENDERER_RKEY}', cid: '{RENDERER_CID}' }}),"
 cfg2 = re.sub(r"'cafe\.thunderbird\.way\.place': Object\.freeze\(\{[^}]*\}\),", pin, cfg, count=1)
 assert cfg2 != cfg or "uri: 'at://" in cfg, 'the RENDERERS entry was not found'
-sign_pin = f"'{SIGNPOST}': Object.freeze({{ name: 'Signposts', uri: 'at://{A}/{TILE}/{SIGN_RKEY}', cid: '{SIGN_CID}' }}),"
+sign_pin = (f"'{SIGNPOST}': Object.freeze({{ name: 'Signposts', uri: 'at://{A}/{TILE}/{SIGN_RKEY}', cid: '{SIGN_CID}' }}),"
+            f"\n  '{LATE}': Object.freeze({{ name: 'Late handler', uri: 'at://{A}/{TILE}/{LATE_RKEY}', cid: '{LATE_CID}' }}),")
 cfg3 = re.sub(r"'cafe\.thunderbird\.way\.signpost': Object\.freeze\(\{[^}]*\}\),", sign_pin, cfg2, count=1)
 assert cfg3 != cfg2 or SIGN_CID in cfg2, 'the signpost RENDERERS entry was not found'
 (COPY / 'src' / 'config.js').write_text(cfg3)
@@ -173,7 +205,8 @@ try:
         ctx.on('page', lambda pg: popups.append(pg))
         page = ctx.new_page()
         console = []
-        page.on('console', lambda m: console.append((m.type, m.text, (m.location or {}).get('url', ''))) if m.type == 'error' else None)
+        warnings = []      # console warnings, from Raku's page and the tiles in it (step 6c)
+        page.on('console', lambda m: console.append((m.type, m.text, (m.location or {}).get('url', ''))) if m.type == 'error' else (warnings.append(m.text) if m.type == 'warning' else None))
         page.on('pageerror', lambda e: console.append(('pageerror', str(e))))
         POKE['page'] = page
         page.goto(RAKU + '?loader=' + LOADER)
@@ -363,6 +396,22 @@ try:
               and page.input_value('.addr') == f'raku:way/{A_HANDLE}/winter-forest.slide', 15), f'{tab_count()} {page.input_value(".addr")}')
         check('...and arrives at the maze\'s tile (the version its place points at), not its postcard', wait_for(lambda: tile_text('#h') == 'Escher maze tile', 15), str(tile_text('#h')))
         page.screenshot(path=str(OUT / 'renderer-signpost-go.png'))
+
+        # 6c. a renderer that adds a handler after listen() (claude/raku-data-replay-plan.md): the loading server's data.js
+        # replays the record to it, never an answer, never twice, and warns once in the tile's console
+        n_warn = len(warnings)
+        page.click('.newtab')
+        page.fill('.addr', f'at://{A_HANDLE}/{LATE}/one'); page.press('.addr', 'Enter')
+        done = lambda: inner() and inner().locator('body').get_attribute('data-done') == '1'
+        wait_for(done, 25)
+        seen = json.loads(tile_text('#n') or '{}')
+        check('DR1: a handler added after the record came gets the record (replayed)', tile_text('h1') == 'A record for a late handler' and seen.get('late', [None])[0] == 'record', str(seen))
+        check('...the handler added before listen() got it once, as before', seen.get('early') == ['record', 'got'], str(seen))
+        check('...an answer ({ got }) reaches the handlers present, and the late one gets nothing twice', seen.get('late') == ['record', 'got'], str(seen))
+        check('...a handler added after the answer gets only the record, not the answer', seen.get('later') == ['record'], str(seen))
+        late_warns = [w for w in warnings[n_warn:] if w.startswith('Web tiles data.js: a data handler was added after listen().')]
+        check('DR2: the tile\'s console warns once (two handlers were added late)', len(late_warns) == 1, str(warnings[n_warn:][:3]))
+        page.locator('.tab.on .tab-x').click()
 
         # 7. a renderer that changed since it was pinned is refused
         state['renderer_cid'] = 'bafyreisomethingelseentirelyaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
