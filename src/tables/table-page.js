@@ -107,7 +107,7 @@ export function drawTable(ctx, id, sub = null) {
     }
     const count = h('span', { class: 'table-count' });
     accountLine.replaceChildren(...[h('span', { class: 'table-who' }, `@${cur.handle} ✓`), count,
-      auth.covers(cur.did, id) || !auth.known(cur.did) ? null : h('span', { class: 'table-asks' }, ` · ${table.name} asks for its permission at your first save`)].filter(Boolean));
+      auth.covers(cur.did, id) || !auth.known(cur.did) ? null : h('span', { class: 'table-asks' }, ` · this sign-in asks to approve “Raku” again at your first save`)].filter(Boolean));
     const key = `${cur.did} ${id}`;
     if (counted && counted.key === key) { count.textContent = counted.text; return; }
     resolver.countRecords(cur.did, table.collection).then(({ count: n, more }) => {
@@ -127,7 +127,7 @@ export function drawTable(ctx, id, sub = null) {
     });
     // (the box first, the promise below: Q55)
     d.body.append(h('h2', {}, 'Sign in to save matches'), form.el,
-      h('div', { class: 'rk-details' }, h('p', {}, `The first time, your account server asks you to approve "${table.name}": saving its match records, nothing else.`), h('p', { class: 'rk-promise' }, SIGNIN_PROMISE)));
+      h('div', { class: 'rk-details' }, h('p', {}, `Your account server asks you once to approve one permission, "Raku": saving your matches, rooms, game lounges and tile posts.`), h('p', { class: 'rk-promise' }, SIGNIN_PROMISE)));
     form.focus();
   }
   const offAuth = auth.onChange(() => drawAccount());

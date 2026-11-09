@@ -815,6 +815,30 @@ with sync_playwright() as pw:
     check('...and the About page', 'if you turn on Autoplay' in page.inner_text('.about') and 'off unless you turn it on' in page.inner_text('.about'))
     check('no page errors with Autoplay', not aerrors, str(aerrors))
     ctx11.close()
+    # Two posts well on screen at once (fix, Nov 9 2026): before, each start stopped the other, over and over ("Starting the
+    # tile…", the banner, again). Now one starts and keeps playing; the other gets its turn once the first scrolls away.
+    ctxT = new_ctx(viewport={'width': 1400, 'height': 2000})
+    ctxT.add_init_script("try { localStorage.setItem('raku-autoplay', 'on'); } catch {}")
+    page = ctxT.new_page(); terrs = []; page.on('pageerror', lambda e: terrs.append(str(e)))
+    page.goto(PLAY_URL); page.wait_for_selector('.discover')
+    wait_for(lambda: page.is_visible(f"{post_sel('A second tile')} .tp-play") or frames() >= 1, page=page)
+    page.evaluate("""() => { window.__starts = 0; new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes)
+      if (n.classList && n.classList.contains('tp-frame')) window.__starts++; }).observe(document.querySelector('.tile-posts'), { childList: true, subtree: true }); }""")
+    shown = page.evaluate("""() => [...document.querySelectorAll('.tile-post .tp-slot')].filter((s) => { const r = s.getBoundingClientRect();
+      const seen = Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0)); return r.height && seen / r.height >= 0.9; }).length""")
+    check('(two or more posts\u2019 tiles fully on screen at once, for the case below)', shown >= 2, str(shown))
+    wait_for(lambda: frames() == 1, 8, page=page)
+    one = playing_post()
+    for _ in range(40): page.wait_for_timeout(200)
+    starts = page.evaluate('window.__starts')
+    check('two posts well on screen: one starts by itself and keeps playing (no stopping and starting each other)', frames() == 1 and playing_post() == one and starts <= 1, f'{starts} starts, playing {playing_post()}')
+    slots = page.eval_on_selector_all('.tile-post', """ps => ps.map((p) => { const r = p.querySelector('.tp-slot')?.getBoundingClientRect(); return [p.querySelector('.post-text')?.textContent, r ? r.bottom : 0]; })""")
+    bottom = dict(slots)[one]
+    page.evaluate(f"() => document.querySelector('.pane.front').scrollBy(0, {int(bottom) - 200})")
+    nxt = wait_for(lambda: playing_post() not in (None, one) and playing_post(), 8, page=page)
+    check('...scrolled so it leaves the screen, another post still showing starts by itself after a moment', nxt, str(playing_post()))
+    check('...no page errors', not terrs, str(terrs))
+    ctxT.close()
     # AU6: reduced motion doesn't stop it; a phone says "Tap"
     ctx12 = new_ctx(reduced_motion='reduce')
     ctx12.add_init_script("try { localStorage.setItem('raku-autoplay', 'on'); } catch {}")

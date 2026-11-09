@@ -3,8 +3,8 @@
 // The room itself is rooms-lab's code (package.json "rooms-lab", pinned to a GitHub tag, RR1): mountRoomPage
 // draws the room, Raku hands it what's Raku's own:
 //   - the join screen (RR4): "Join as @handle ✓" with Raku's own account, "or type a name instead"; signed out,
-//     "Sign in to show your handle" (Raku's sign-in) or a typed name. The first time an account joins a room,
-//     Raku asks once for the "Rooms" permission in a small window, as a game's first save asks for its set;
+//     "Sign in to show your handle" (Raku's sign-in) or a typed name. Since Nov 2026 Raku's one permission, "Raku",
+//     covers the rooms pass; a sign-in whose grant lacks it asks for "Raku" again in a small window;
 //   - the address (RR2): a room tab is just raku:room. The room code (and, for the host, the host key) stay in this
 //     browser tab's own storage, so a reload brings you back with one click (RR10: browsers won't play other
 //     people's voices without a click), and a copied Raku link never lets anyone in. Closing Raku's window, or this
@@ -121,7 +121,7 @@ export function createRooms(deps) {
         if (!auth.coversRooms(acct.did)) {
           // The first time: "Rooms" from this account, in a small window opened straight from the click. Then one more
           // press: the room's sound starts from a click (some browsers won't play it after the wait).
-          if (await approve(acct, btn)) { status.textContent = '“Rooms” approved. Press the button again to go in.'; redrawHelp(); }
+          if (await approve(acct, btn)) { status.textContent = '“Raku” approved. Press the button again to go in.'; redrawHelp(); }
           return;
         }
         const did = acct.did;
@@ -149,13 +149,13 @@ export function createRooms(deps) {
       const popup = auth.openWindow();
       if (!popup) { status.textContent = 'The sign-in window was blocked. Allow pop-ups for this page, then try again, or type a name instead.'; return false; }
       const ac = new AbortController();
-      status.textContent = `Approve “Rooms” in the small window from @${a.handle}’s account server…`;
+      status.textContent = `Approve “Raku” in the small window from @${a.handle}’s account server…`;
       for (const b of buttons) b.disabled = true;
       e.busy = true;
       try {
         const did = await auth.signIn(a.handle, auth.roomsScopeFor(a.did), { signal: ac.signal });
-        if (did !== a.did) { status.textContent = `That was a different account. Approve “Rooms” as @${a.handle}.`; return false; }
-        if (!auth.coversRooms(did)) { status.textContent = '“Rooms” wasn’t approved, so the room can’t show your handle. Try again, or type a name instead.'; return false; }
+        if (did !== a.did) { status.textContent = `That was a different account. Approve “Raku” as @${a.handle}.`; return false; }
+        if (!auth.coversRooms(did)) { status.textContent = '“Raku” wasn’t approved, so the room can’t show your handle. Try again, or type a name instead.'; return false; }
         status.textContent = '';
         return true;
       } catch (err) {
@@ -195,7 +195,7 @@ export function createRooms(deps) {
     if (acct && canShowHandle(acct.did) && !typed) {
       who = h('div', { class: 'rl-way rl-way-signed', 'data-signed-in': '' }, appear,
         h('button', { type: 'button', class: 'rl-link rk-type-instead', onclick: () => { e.typedName = true; typed = true; joinScreen(tabId, p, { view, note: '', enter }); } }, 'or type a name instead'),
-        auth.coversRooms(acct.did) ? null : h('p', { class: 'rl-help rk-rooms-help' }, 'The first time, Raku asks your account for one more permission, “Rooms”: a pass that shows the room your handle is really yours. Nothing in your account is read or changed.'));
+        auth.coversRooms(acct.did) ? null : h('p', { class: 'rl-help rk-rooms-help' }, 'This sign-in needs Raku’s permission, “Raku”, approved again: it includes a pass that shows the room your handle is really yours.'));
     } else {
       const parts = [];
       if (acct && canShowHandle(acct.did)) {

@@ -152,6 +152,8 @@ export function createAutoplaySetting({ storage = null, key = AUTOPLAY.key } = {
  * called when one qualifies and canStart(id) agrees (the switch on, the tile ready and small enough, AU4, …); the newest
  * to qualify takes over, as one at a time already does. recheck() after the switch is turned on: tiles already showing
  * qualify after settling. Timers come in for the tests.
+ * (Nov 9 2026: a tile leaving the two-thirds also re-arms the others still showing, so one that was held back while
+ * another played well in view gets its turn: see autoplayMayStart.)
  */
 export function createAutoplayWatch({ share = AUTOPLAY.share, settleMs = AUTOPLAY.settleMs, canStart, start,
   setTimer = (f, ms) => setTimeout(f, ms), clearTimer = (t) => clearTimeout(t) }) {
@@ -169,14 +171,30 @@ export function createAutoplayWatch({ share = AUTOPLAY.share, settleMs = AUTOPLA
     update(id, ratio) {
       const was = ratios.get(id) || 0;
       ratios.set(id, ratio);
-      if (ratio < share) cancel(id);
-      else if (was < share) arm(id);
+      if (ratio < share) {
+        cancel(id);
+        if (was >= share) for (const [other, r] of ratios) if (other !== id && r >= share) arm(other);   // its turn may come now
+      } else if (was < share) arm(id);
     },
     recheck() { for (const [id, r] of ratios) if (r >= share) arm(id); },
+    /** How much of this tile was last seen on screen (0 to 1). */
+    ratio(id) { return ratios.get(id) || 0; },
     forget(id) { cancel(id); ratios.delete(id); },
     stop() { for (const id of [...pending.keys()]) cancel(id); ratios.clear(); },
     get pending() { return pending.size; },
   };
+}
+
+/**
+ * May a tile post's tile start by itself now, with another one perhaps running? (Fix, Nov 9 2026: with two posts well on
+ * screen at once, each start stopped the other and the stopped one started again: "Starting the tile…", the banner,
+ * again, over and over.) Never over itself, never over a tile you started or clicked (byHand), and never over another
+ * that is still about two-thirds on screen (currentRatio ≥ share): it takes over only once that one is scrolling away.
+ */
+export function autoplayMayStart({ slot, current = null, byHand = false, currentRatio = 0, share = AUTOPLAY.share }) {
+  if (!current) return true;
+  if (current === slot || byHand) return false;
+  return currentRatio < share;
 }
 
 /** AU4: a tile over the size Raku asks about (25 MB) never starts by itself; it keeps Play here and its question. */

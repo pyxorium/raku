@@ -26,7 +26,7 @@ import { readPost, threadContext, whenText, groupThreads, ago } from './posts.js
 import { postCard, threadCard } from './post-card.js';
 import { searchAppmosphere, localMatches } from './search.js';
 import { createTilePosts, tileState } from './tile-posts.js';
-import { expandMotion, createAutoplayWatch, autoplaySize } from './play-here.js';
+import { expandMotion, createAutoplayWatch, autoplaySize, autoplayMayStart } from './play-here.js';
 import { switchButton } from './account-menu.js';
 import { createExpanded } from './expand-view.js';
 
@@ -498,6 +498,8 @@ function drawTilePosts(ctx, into) {
   const { autoplay } = ctx;
   const autoSwitch = autoplay ? switchButton(autoplay, 'Autoplay') : null;
   const autoLabel = autoplay ? h('label', { class: 'dv-autoplay', title: 'Start a post\u2019s tile once it\u2019s been on screen a moment' }, h('span', {}, 'Autoplay'), autoSwitch) : null;
+  // Write a post (claude/raku-write-posts-plan.md, WP8 C): before Autoplay and Refresh; signed out it asks you to sign in first.
+  if (ctx.postBox) head.append(h('button', { type: 'button', class: 'dv-write', onclick: () => ctx.postBox.openWrite() }, icon('plus', 16), h('span', {}, 'Write', h('span', { class: 'lbl-long' }, ' a post'))));
   if (autoLabel) head.append(autoLabel);
   head.append(refresh);
   const status = h('p', { class: 'dv-status' }, 'Looking for tile posts…');
@@ -505,7 +507,7 @@ function drawTilePosts(ctx, into) {
   const list = h('div', { class: 'posts tile-posts' });
   const empty = h('div', { class: 'dv-empty', hidden: true },
     h('p', {}, 'No tile posts yet.'),
-    h('p', { class: 'tp-how' }, 'A tile post is a record in your own account naming one of your tiles, or anyone\'s, with a few words. For now a small script writes them: ',
+    h('p', { class: 'tp-how' }, 'Open one of your tiles and press Post, or use Write a post above. A tile post is a record in your own account; a small script can write them too: ',
       h('a', { href: TILE_POSTS.repo, target: '_blank', rel: 'noopener noreferrer', referrerpolicy: 'no-referrer' }, 'pyxorium/tile-posts'), '.'));
   into.append(head, status, note, list, empty);
   // PH2: the tile playing in a post stops when this page goes (another page in the tab, or the tab closed) or redraws.
@@ -557,11 +559,15 @@ function autoplayFor(ctx, list, autoSwitch) {
   const onPointer = (e) => { lastPointer = e.pointerType === 'touch' ? 'touch' : 'mouse'; };
   document.addEventListener('pointerdown', onPointer, true);
   const busyByHand = () => { const cur = player.current; const c = cur && cards.get(cur); return !!(cur && (!c || c.touched())); };
-  const watch = createAutoplayWatch({
+  // (Nov 9 2026: a tile that started by itself and is still well on screen keeps playing; another showing too waits for it
+  // to scroll away, instead of the two stopping each other over and over: autoplayMayStart.)
+  let watch = null;
+  watch = createAutoplayWatch({
     canStart: (slot) => {
       const c = cards.get(slot);
+      const cur = player.current;
       return autoplay.on && !!c && slot.isConnected && p.el.classList.contains('front') && !declined.has(slot)
-        && player.current !== slot && !busyByHand() && c.canAuto();
+        && autoplayMayStart({ slot, current: cur, byHand: busyByHand(), currentRatio: cur && cards.has(cur) ? watch.ratio(cur) : 0 }) && c.canAuto();
     },
     start: (slot) => cards.get(slot)?.startAuto(),
   });

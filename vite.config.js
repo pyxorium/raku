@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { pageCsp, oauthMetadata, cardTags } from './src/config.js';
+import { pageCsp, oauthMetadata, cardTags, SIGNIN } from './src/config.js';
 
 // The page's security policy goes into the built page only (GitHub Pages can't send headers). Vite's
 // dev server injects its own scripts, which the policy would block, so `npm run dev` runs without it;
@@ -21,12 +21,13 @@ const card = () => ({
 });
 
 // The sign-in description file (stage 4), written from config.js on build so Raku's address is named in
-// one place. On this computer (127.0.0.1) the sign-in is a "loopback" one that needs no file (auth.js).
+// one place; its name too (SIGNIN.clientId: client-metadata.json since Nov 2026, WP5; it was oauth.json). On this
+// computer (127.0.0.1) the sign-in is a "loopback" one that needs no file (auth.js).
 const signInFile = () => ({
   name: 'raku-oauth-json',
   apply: 'build',
   generateBundle() {
-    this.emitFile({ type: 'asset', fileName: 'oauth.json', source: `${JSON.stringify(oauthMetadata(), null, 2)}\n` });
+    this.emitFile({ type: 'asset', fileName: new URL(SIGNIN.clientId).pathname.replace(/^\//, ''), source: `${JSON.stringify(oauthMetadata(), null, 2)}\n` });
   },
 });
 

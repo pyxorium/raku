@@ -227,3 +227,52 @@ test('Autoplay: the wording on Discover and the About page', async () => {
   assert.match(PLAY_LINE, /if you turn on Autoplay/);
   assert.match(PLAY_LINE, /off unless you turn it on/);
 });
+
+// ---------- Autoplay with two posts on screen (fix, Nov 9 2026) ----------
+import { autoplayMayStart } from '../src/play-here.js';
+
+test('autoplayMayStart: never over itself or a tile you started; over another only once it is scrolling away', () => {
+  assert.equal(autoplayMayStart({ slot: 'a' }), true, 'nothing running');
+  assert.equal(autoplayMayStart({ slot: 'a', current: 'a', currentRatio: 1 }), false, 'itself');
+  assert.equal(autoplayMayStart({ slot: 'b', current: 'a', byHand: true, currentRatio: 0 }), false, 'one you started or clicked');
+  assert.equal(autoplayMayStart({ slot: 'b', current: 'a', currentRatio: 0.9 }), false, 'another still well on screen');
+  assert.equal(autoplayMayStart({ slot: 'b', current: 'a', currentRatio: 0.66 }), false, 'exactly two-thirds still counts');
+  assert.equal(autoplayMayStart({ slot: 'b', current: 'a', currentRatio: 0.4 }), true, 'scrolling away: the next may start');
+});
+
+// The page's rule replayed (discover.js autoplayFor) with Raku's own watch and one-at-a-time, on a fake clock.
+function page({ fixed = true } = {}) {
+  const T = fakeTimers();
+  const log = [];
+  const one = createOneAtATime({ awayMs: 3000, setTimer: T.setTimer, clearTimer: T.clearTimer });
+  let w = null;
+  w = createAutoplayWatch({ ...T,
+    canStart: (slot) => (fixed ? autoplayMayStart({ slot, current: one.current, currentRatio: one.current ? w.ratio(one.current) : 0 }) : one.current !== slot),
+    start: (slot) => { log.push(`start ${slot}`); one.start(slot, () => { log.push(`stop ${slot}`); T.setTimer(() => w.recheck(), 0); }); },
+  });
+  return { T, w, log, one };
+}
+
+test('two posts well on screen: one starts and keeps playing (before the fix they stopped each other over and over)', () => {
+  const before = page({ fixed: false });
+  before.w.update('a', 0.9); before.w.update('b', 0.9);
+  for (let i = 0; i < 80; i++) before.T.advance(100);     // (step by step: timers set while advancing run too)
+  assert.ok(before.log.filter((l) => l.startsWith('start')).length > 6, `the bug, replayed: ${before.log.length} events`);
+
+  const { T, w, log, one } = page();
+  const run = (ms) => { for (let i = 0; i < ms / 100; i++) T.advance(100); };
+  w.update('a', 0.9); w.update('b', 0.9); run(8000);
+  assert.deepEqual(log, ['start a'], 'one starts, and stays');
+  assert.equal(one.current, 'a');
+  // scrolling on: a leaves the two-thirds, b (still showing) gets its turn after settling
+  w.update('a', 0.3); run(900);
+  assert.deepEqual(log, ['start a']);
+  run(200);
+  assert.deepEqual(log, ['start a', 'start b', 'stop a']);
+  run(8000);
+  assert.deepEqual(log, ['start a', 'start b', 'stop a'], 'and b stays');
+  // a coming back into view doesn't take over from b while b is still well on screen
+  w.update('a', 0.9); run(3000);
+  assert.deepEqual(log, ['start a', 'start b', 'stop a']);
+  assert.equal(one.current, 'b');
+});

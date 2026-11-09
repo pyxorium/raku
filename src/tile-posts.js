@@ -155,11 +155,19 @@ export function createTilePosts({ resolver, moderation, shelf, fetchImpl = globa
     return r.json.records.map((rec) => readTilePost(rec, did, now())).filter(Boolean);
   }
 
+  // Posts written from this Raku (claude/raku-write-posts-plan.md, WP10): shown straight away, without waiting for the
+  // relay or a Refresh, until a load finds them on their own.
+  const written = new Map();          // uri → post
+  const withWritten = (value) => {
+    for (const uri of written.keys()) if (value.items.some((x) => x.uri === uri)) written.delete(uri);
+    return written.size ? { ...value, items: mergePosts([value.items, [...written.values()]], limits.max) } : value;
+  };
+
   /** Everyone's newest tile posts. → { items: [post], accounts, unreachable, relayOk } */
   async function load({ fresh = false } = {}) {
     const mine = shelf.accounts().map((a) => a.did);
     const key = mine.slice().sort().join(' ');
-    if (!fresh && kept && kept.key === key && now() - kept.at < limits.keepMs) return kept.value;
+    if (!fresh && kept && kept.key === key && now() - kept.at < limits.keepMs) return withWritten(kept.value);
     if (loading && loading.key === key) return loading.p;
     const p = (async () => {
       const relay = await relayAccounts({ fetchImpl, limits });
@@ -183,11 +191,14 @@ export function createTilePosts({ resolver, moderation, shelf, fetchImpl = globa
       })));
       const value = { items: mergePosts(lists, limits.max), accounts: dids.length, unreachable, relayOk: relay.ok };
       kept = { at: now(), key, value };
-      return value;
+      return withWritten(value);
     })().finally(() => { loading = null; });
     loading = { key, p };
     return p;
   }
 
-  return { load, get cached() { return kept ? kept.value : null; } };
+  /** A post just written from Raku (a readTilePost result): in the list at once, newest first. */
+  function add(post) { if (post && post.uri) written.set(post.uri, post); }
+
+  return { load, add, get cached() { return kept ? withWritten(kept.value) : null; } };
 }

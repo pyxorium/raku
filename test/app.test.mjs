@@ -158,7 +158,7 @@ test("the ground rule: only navigations to Raku's own address, network first; ev
   for (const req of [
     { url: 'https://raku.lexicographer.space/assets/main-abc.js', mode: 'cors', method: 'GET' },
     { url: 'https://raku.lexicographer.space/version.json', mode: 'cors', method: 'GET' },
-    { url: 'https://raku.lexicographer.space/oauth.json', mode: 'cors', method: 'GET' },
+    { url: 'https://raku.lexicographer.space/client-metadata.json', mode: 'cors', method: 'GET' },
     { url: 'https://load.tiles.lexicographer.space/.well-known/web-tiles/', mode: 'navigate', method: 'GET' },
     { url: 'https://abcdefgh.tiles.lexicographer.space/', mode: 'navigate', method: 'GET' },
     { url: 'https://plc.directory/did:plc:x', mode: 'cors', method: 'GET' },

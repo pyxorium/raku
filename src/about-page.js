@@ -6,7 +6,7 @@
 // Keep it true: when Raku starts talking to another server, or keeps something new in the browser, this page
 // changes in the same commit.
 
-import { SITE, TAKEDOWNS_PAGE, SOURCE_CODE, MADE_BY, BLOG_POST } from './config.js';
+import { SITE, TAKEDOWNS_PAGE, SOURCE_CODE, MADE_BY, BLOG_POST, SIGNIN_PROMISE } from './config.js';
 import { accountPageUri } from './address.js';
 import { h } from './cards.js';
 
@@ -32,6 +32,8 @@ export const TALKS_TO = Object.freeze([
 export const MESSAGES_LINE = 'A tile can only talk to Raku. If it sends anything, a Messages button appears on its tab and shows what it sent. At a table, the Messages button in the table’s bar shows everything passing between its tiles.';
 
 /** Play here (Nov 2026): when a tile runs on Discover. */
+// "You don't need an account" (since WP11, Nov 2026: one sign-in, tile posts; the promise word for word).
+export const NO_ACCOUNT_LINE = `Browsing, searching, joining a room with a typed name, and playing the tables against the bot need no sign-in. ${SIGNIN_PROMISE}`;
 export const PLAY_LINE = 'A tile runs only when you open it, or press Play here on a tile post (or, if you turn on Autoplay, when a tile post has been on screen a moment: it is off unless you turn it on, a tile that starts by itself gets the keys only when you click it, and browsers hold back its sound until then); one plays in a post at a time, and it stops when you scroll away from it.';
 
 export const EXCEPTION = 'a tile can open a link in a new tab when you click it, and that link could carry information about what you did in the tile. It’s the same as clicking a link on any web page, so use the same care.';
@@ -59,7 +61,7 @@ export function drawAbout(ctx) {
     h('h1', {}, `About ${SITE.name}`),
     h('p', { class: 'lede' }, `${SITE.name} is a browser for web tiles: small pages and apps that people publish to their own atproto accounts. It opens them, keeps the ones you like on your shelf, and finds new ones.`),
     sect("You don't need an account",
-      h('p', {}, "Browsing, searching, joining a room with a typed name, and playing the tables against the bot need no sign-in. Signing in is only for saving your match results, showing your handle in a room, and (if you choose) being seen in Daisy's lounge. Raku never touches your posts, likes, follows or anything else.")),
+      h('p', {}, NO_ACCOUNT_LINE)),
     sect('What stays in this browser',
       h('p', {}, "Raku has no server of its own and no accounts of its own. These are kept in this browser only, and you can clear them by clearing this site's data:"),
       h('ul', {},

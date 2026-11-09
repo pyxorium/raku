@@ -1,24 +1,50 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createAccounts, createAuth, clientIdFor, isSignInReturn, cleanHandle, SignInNeeded } from '../src/auth.js';
-import { SIGNIN, scopeFor, fullScope, coversTable, tablesCovered, TABLES, ROOMS } from '../src/config.js';
+import { SIGNIN, fullScope, RAKU_SCOPE, coversTable, coversLounge, coversRooms, coversPosts, coversRaku, readGrant, rakuSet, TABLES, ROOMS } from '../src/config.js';
 
 const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k), m }; };
 const A = 'did:plc:aaaaaaaaaaaaaaaaaaaaaaaa', B = 'did:plc:bbbbbbbbbbbbbbbbbbbbbbbb';
 
-test('the permissions: your account plus the sets of the tables a sign-in is for', () => {
-  assert.equal(scopeFor([]), 'atproto');
-  assert.equal(scopeFor(['sevenup']), 'atproto include:cafe.thunderbird.sevenup.authPlay');
-  assert.equal(scopeFor(['sevenup', 'daisy', 'sevenup']), 'atproto include:cafe.thunderbird.sevenup.authPlay include:cafe.thunderbird.daisy.authPlay');
-  assert.equal(fullScope(), `${scopeFor(Object.keys(TABLES))} ${TABLES.daisy.lounge.scope} ${ROOMS.scope}`, "oauth.json: the tables' sets, Daisy's lounge (step 5b) and Rooms (rooms step 1)");
-  // the server expands a set into plain permissions; either form counts
+// The grant Bluesky handed back in the probe (claude/raku-write-posts-plan.md, "Build", Nov 8 2026), on two servers.
+const PROBE = 'repo?collection=cafe.thunderbird.daisy.lounge&collection=cafe.thunderbird.daisy.match&collection=cafe.thunderbird.sevenup.match&collection=cafe.thunderbird.tile.post rpc?lxm=cafe.thunderbird.daisy.lounge.enter&lxm=cafe.thunderbird.rooms.join&aud=* atproto';
+
+test('the permission (WP3): one set, "Raku", for every sign-in', () => {
+  assert.equal(fullScope(), 'atproto include:cafe.thunderbird.authRaku');
+  assert.equal(RAKU_SCOPE, fullScope());
+  assert.deepEqual(rakuSet(), {
+    repo: ['cafe.thunderbird.sevenup.match', 'cafe.thunderbird.daisy.match', 'cafe.thunderbird.daisy.lounge', 'cafe.thunderbird.tile.post'],
+    rpc: ['cafe.thunderbird.daisy.lounge.enter', 'cafe.thunderbird.rooms.join'],
+  });
+});
+
+test("reading a grant: every form a server writes, the probe's grouped form too", () => {
+  assert.ok(coversRaku(PROBE));
+  assert.ok(coversTable(PROBE, TABLES.sevenup) && coversTable(PROBE, TABLES.daisy) && coversLounge(PROBE, TABLES.daisy) && coversRooms(PROBE) && coversPosts(PROBE));
+  assert.ok(coversRaku(RAKU_SCOPE), 'the set by name, before a server expands it');
+  assert.ok(coversRaku('atproto repo:cafe.thunderbird.sevenup.match repo:cafe.thunderbird.daisy.match repo:cafe.thunderbird.daisy.lounge?action=create&action=delete repo:cafe.thunderbird.tile.post rpc:cafe.thunderbird.daisy.lounge.enter?aud=did:web:relay.daisy.thunderbird.cafe%23daisy_relay rpc:cafe.thunderbird.rooms.join?aud=*'), 'the colon forms');
+  assert.ok(coversRaku('atproto repo:* rpc:*?aud=*'), 'wildcards');
+  assert.ok(coversRaku('atproto transition:generic'), 'an old-style wide grant');
+  assert.ok(!coversRaku('atproto include:cafe.thunderbird.daisy.authPlay'), 'a sign-in from before WP5');
+  assert.ok(!coversRaku(PROBE.replace('&collection=cafe.thunderbird.tile.post', '')), 'no tile posts');
+  assert.ok(!coversPosts(PROBE.replace('&collection=cafe.thunderbird.tile.post', '')));
+  assert.ok(!coversRaku(PROBE.replace('&lxm=cafe.thunderbird.rooms.join', '')), 'no rooms pass');
+  assert.ok(!coversRaku(''), 'nothing');
+  assert.ok(!coversRaku('atproto include:cafe.thunderbird.someoneElse'), 'a set Raku does not know counts for nothing');
+  assert.ok(!coversTable('atproto repo?collection=cafe.thunderbird.sevenup.matches', TABLES.sevenup), 'exact names only');
+  assert.ok(!coversRooms('atproto rpc?lxm=cafe.thunderbird.rooms.joined&aud=*'));
+  assert.ok(!coversPosts('atproto repo:cafe.thunderbird.tile.posts'));
+  // the older per-game forms still read correctly
   assert.ok(coversTable('atproto repo:cafe.thunderbird.sevenup.match', TABLES.sevenup));
   assert.ok(coversTable('atproto repo:cafe.thunderbird.sevenup.match?action=create&action=update', TABLES.sevenup));
   assert.ok(coversTable('atproto include:cafe.thunderbird.daisy.authPlay', TABLES.daisy));
   assert.ok(!coversTable('atproto repo:cafe.thunderbird.daisy.match', TABLES.sevenup));
-  assert.ok(!coversTable('atproto repo:cafe.thunderbird.sevenup.matches', TABLES.sevenup));
   assert.ok(!coversTable('', TABLES.sevenup));
-  assert.deepEqual(tablesCovered('atproto repo:cafe.thunderbird.daisy.match repo:cafe.thunderbird.sevenup.match'), ['sevenup', 'daisy']);
+  assert.ok(coversLounge(`atproto ${TABLES.daisy.lounge.scope}`, TABLES.daisy));
+  assert.ok(coversRooms(`atproto ${ROOMS.scope}`));
+  const g = readGrant(PROBE);
+  assert.deepEqual([...g.repo].sort(), [...rakuSet().repo].sort());
+  assert.deepEqual([...g.rpc].sort(), [...rakuSet().rpc].sort());
 });
 
 test('on this computer a loopback sign-in back to 127.0.0.1; elsewhere the description file', () => {
@@ -91,25 +117,31 @@ function fakeLib({ grant = (scope) => scope, callback = null, inWindow = false }
 }
 const handleFor = async (did) => ({ [A]: 'a.example', [B]: 'b.example' })[did];
 
-test('signing in for a table asks for that game only; another game grows the same sign-in', async () => {
-  const f = fakeLib();
+test('signing in, whatever for, asks for the one set; the probe-shaped grant covers every game, the lounge, rooms and posts', async () => {
+  const f = fakeLib({ grant: (scope) => (scope === RAKU_SCOPE ? PROBE : scope) });
   const auth = createAuth(async () => f.lib, { storage: memStore(), loc: { hostname: 'raku.lexicographer.space', port: '' }, handleFor });
   assert.deepEqual(await auth.start(), {});
   assert.equal(f.calls[0].load.clientId, SIGNIN.clientId);
-  const scope = auth.scopeFor(auth.didForHandle('a.example'), 'daisy');
-  assert.equal(scope, 'atproto include:cafe.thunderbird.daisy.authPlay');
-  const did = await auth.signIn('a.example', scope);
+  for (const scope of [auth.scopeFor(null, 'daisy'), auth.scopeFor(A, 'sevenup'), auth.scopeFor(null, null), auth.loungeScopeFor(null, 'daisy'), auth.roomsScopeFor(null)]) assert.equal(scope, RAKU_SCOPE);
+  const did = await auth.signIn('a.example', auth.scopeFor(auth.didForHandle('a.example'), 'daisy'));
   assert.equal(did, A);
   assert.equal(auth.current().handle, 'a.example');
-  assert.ok(auth.covers(A, 'daisy') && !auth.covers(A, 'sevenup'));
-  assert.equal(auth.scopeFor(A, 'sevenup'), 'atproto include:cafe.thunderbird.daisy.authPlay include:cafe.thunderbird.sevenup.authPlay', 'keeps what it had');
-  await auth.signIn('a.example', auth.scopeFor(A, 'sevenup'));
-  assert.ok(auth.covers(A, 'daisy') && auth.covers(A, 'sevenup'));
+  assert.ok(auth.covers(A, 'daisy') && auth.covers(A, 'sevenup') && auth.coversLounge(A, 'daisy') && auth.coversRooms(A) && auth.coversPosts(A) && auth.coversAll(A));
+  assert.ok(f.calls.filter((c) => c.popup).every((c) => c.scope === RAKU_SCOPE), 'every window asked for the one set');
   await auth.signIn('b.example', auth.scopeFor(null, null));
   assert.equal(auth.current().did, B, 'the newest sign-in is current');
   assert.deepEqual(auth.list().map((a) => [a.handle, a.current]), [['b.example', true], ['a.example', false]]);
   auth.switchTo(A);
   assert.equal(auth.current().did, A, 'switching needs no window');
+});
+
+test('a grant missing something (refused, or older) is told apart, so Raku asks for "Raku" again', async () => {
+  const f = fakeLib({ grant: () => 'atproto include:cafe.thunderbird.daisy.authPlay' });
+  const auth = createAuth(async () => f.lib, { storage: memStore(), loc: { hostname: 'raku.lexicographer.space', port: '' }, handleFor });
+  await auth.start();
+  await auth.signIn('a.example', RAKU_SCOPE);
+  assert.ok(auth.covers(A, 'daisy'));
+  assert.ok(!auth.coversPosts(A) && !auth.coversAll(A) && !auth.coversRooms(A));
 });
 
 test('saving: the record goes to the account\'s own repo; a sign-in that ran out says so', async () => {
@@ -130,7 +162,7 @@ test('the end of a sign-in: in the small window, and back in this tab', async ()
   const w = fakeLib({ inWindow: true });
   const inWindow = createAuth(async () => w.lib, { storage: memStore(), loc: { hostname: '127.0.0.1', port: '5180' } });
   assert.deepEqual(await inWindow.start(), { finishedInWindow: true });
-  const back = fakeLib({ callback: { did: B, scope: 'atproto include:cafe.thunderbird.daisy.authPlay', state: 'save' } });
+  const back = fakeLib({ callback: { did: B, scope: RAKU_SCOPE, state: 'save' } });
   const auth = createAuth(async () => back.lib, { storage: memStore(), loc: { hostname: '127.0.0.1', port: '5180' }, handleFor });
   assert.deepEqual(await auth.start(), { returned: { did: B, state: 'save' } });
   assert.equal(auth.current().handle, 'b.example');
@@ -159,45 +191,33 @@ test('a library that fails to load: browsing is untouched, signing in says so', 
   await assert.rejects(auth.signIn('a.example', 'atproto'), /still getting ready|isn't working/);
 });
 
-test("Daisy's lounge (step 5b): its own permission, kept by later sign-ins; the relay pass from the account's server", async () => {
-  const f = fakeLib();
+test("Daisy's lounge (step 5b): covered by the one set; the relay pass from the account's server", async () => {
+  const f = fakeLib({ grant: () => PROBE });
   const auth = createAuth(async () => f.lib, { storage: memStore(), loc: { hostname: 'raku.lexicographer.space', port: '' }, handleFor });
   await auth.start();
   const L = TABLES.daisy.lounge;
-  // signed out: one window asks for the account, "Play Daisy" and "Daisy lounge" together (Q54)
-  assert.equal(auth.loungeScopeFor(null, 'daisy'), `atproto include:cafe.thunderbird.daisy.authPlay ${L.scope}`);
-  await auth.signIn('a.example', auth.scopeFor(null, 'sevenup'));
-  assert.ok(!auth.coversLounge(A, 'daisy'));
-  assert.equal(auth.loungeScopeFor(A, 'daisy'), `atproto include:cafe.thunderbird.sevenup.authPlay include:cafe.thunderbird.daisy.authPlay ${L.scope}`, 'keeps Seven-Up');
-  await auth.signIn('a.example', auth.loungeScopeFor(A, 'daisy'));
+  assert.equal(auth.loungeScopeFor(null, 'daisy'), RAKU_SCOPE);
+  await auth.signIn('a.example', auth.loungeScopeFor(null, 'daisy'));
   assert.ok(auth.coversLounge(A, 'daisy') && auth.covers(A, 'daisy') && auth.covers(A, 'sevenup'));
-  assert.ok(auth.scopeFor(A, 'sevenup').split(' ').includes(L.scope), 'a later sign-in for a table never drops the lounge');
   const pass = await auth.getPass(A, 'daisy');
   assert.equal(pass, `pass:${A}`);
   const call = f.calls.find((c) => c.path && c.path.startsWith('/xrpc/com.atproto.server.getServiceAuth'));
   const q = new URLSearchParams(call.path.split('?')[1]);
-  assert.equal(q.get('aud'), 'did:web:relay.daisy.thunderbird.cafe#daisy_relay');
+  assert.equal(q.get('aud'), 'did:web:relay.daisy.thunderbird.cafe#daisy_relay', 'the pass is still addressed to the exact relay (WP4)');
   assert.equal(q.get('lxm'), 'cafe.thunderbird.daisy.lounge.enter');
   assert.ok(Number(q.get('exp')) - Date.now() / 1000 <= 61, 'good for a minute');
-  // the server's expanded form counts too
-  const { coversLounge } = await import('../src/config.js');
   assert.ok(coversLounge(`atproto repo:${L.collection} rpc:${L.enter}?aud=did:web:relay.daisy.thunderbird.cafe%23daisy_relay`, TABLES.daisy));
   assert.ok(!coversLounge(`atproto repo:${L.collection}`, TABLES.daisy), 'the record alone is not enough: the pass is needed too');
   assert.ok(!coversLounge(`atproto ${L.scope}`, TABLES.sevenup), 'Seven-Up has no lounge');
 });
 
-test('rooms (rooms step 1, RR4): "Rooms" is asked once, on top of what the sign-in allows, and kept by later sign-ins; the pass is for the rooms relay', async () => {
-  const f = fakeLib();
+test('rooms (rooms step 1, RR4): covered by the one set; the pass is for the rooms relay', async () => {
+  const f = fakeLib({ grant: () => PROBE });
   const auth = createAuth(async () => f.lib, { storage: memStore(), loc: { hostname: 'raku.lexicographer.space', port: '' }, handleFor });
   await auth.start();
-  assert.equal(auth.roomsScopeFor(null), `atproto ${ROOMS.scope}`, 'signing in from the join screen: the account and Rooms, one window');
-  await auth.signIn('a.example', auth.scopeFor(null, 'daisy'));
-  assert.ok(!auth.coversRooms(A));
-  assert.equal(auth.roomsScopeFor(A), `atproto include:cafe.thunderbird.daisy.authPlay ${ROOMS.scope}`, 'keeps Play Daisy');
-  await auth.signIn('a.example', auth.roomsScopeFor(A));
+  assert.equal(auth.roomsScopeFor(null), RAKU_SCOPE);
+  await auth.signIn('a.example', auth.roomsScopeFor(null));
   assert.ok(auth.coversRooms(A) && auth.covers(A, 'daisy'));
-  assert.equal(auth.scopeFor(A, 'sevenup'), `atproto include:cafe.thunderbird.daisy.authPlay include:cafe.thunderbird.sevenup.authPlay ${ROOMS.scope}`, 'a game’s sign-in keeps Rooms');
-  assert.equal(auth.roomsScopeFor(A), auth.scopeFor(A, null), 'nothing added twice');
   assert.equal(await auth.getRoomPass(A), `pass:${A}`);
   const q = new URLSearchParams(f.calls.find((c) => c.path?.startsWith('/xrpc/com.atproto.server.getServiceAuth')).path.split('?')[1]);
   assert.equal(q.get('aud'), 'did:web:relay.rooms.thunderbird.cafe#rooms_relay');

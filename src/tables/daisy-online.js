@@ -399,7 +399,7 @@ export function mountDaisyOnline(root, ctx) {
     }
     lobbyActions.replaceChildren(...buttons);
     lobby.append(lobbyNote);
-    lobbyNote.textContent = cur ? 'You sit as the account shown in the top bar (switch it there). Playing someone needs "Play Daisy", the permission saving uses.' : 'Playing someone needs a sign-in, so the other player sees your real, checked handle.';
+    lobbyNote.textContent = cur ? 'You sit as the account shown in the top bar (switch it there). Playing someone uses your sign-in, the same one saving uses.' : 'Playing someone needs a sign-in, so the other player sees your real, checked handle.';
   }
   const offAuth = auth.onChange(() => { if (!me && !lobby.hidden) showLobby(); });
 

@@ -47,6 +47,8 @@ import { READY, UP, DOWN, recordPayload, recordTitle, readOpenRequest, openDecis
 import { createAccountMenu } from './account-menu.js';
 import { createLinkMessage } from './link-message.js';
 import { createDiscover, drawDiscover } from './discover.js';
+import { createPostBox } from './post-box.js';
+import { canPostTile } from './tile-post-write.js';
 import { drawAbout } from './about-page.js';
 import { groupThreads } from './posts.js';
 import { createRooms } from './room-tab.js';
@@ -93,6 +95,11 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     title: 'Open this record in an explorer', onclick: () => toggleOpenIn() }, 'Open in', h('span', { class: 'openin-caret', 'aria-hidden': 'true' }, '▾'));
   const openInMenu = h('div', { class: 'openin-menu', role: 'menu', 'aria-label': 'Open this record in', hidden: true });
   const openIn = h('span', { class: 'openin', hidden: true }, openInBtn, openInMenu);
+  // Post (claude/raku-write-posts-plan.md, WP8 A): on a tile's tab, beside the address box, only when the tile belongs to
+  // one of the accounts signed in on this browser (WP1); it opens the post box (post-box.js). On a phone, the icon alone.
+  const postBtn = h('button', { class: 'post-btn', type: 'button', hidden: true, title: 'Post this tile to Tile posts', 'aria-label': 'Post this tile to Tile posts',
+    onclick: () => { const k = paneFor(tabs.active).keep; if (k && k.kind === 'tile') postBox.openForTile({ did: k.did, rkey: k.rkey }); } },
+  icon('posts', 16), h('span', { class: 'lbl' }, 'Post'));
   // Ways (RW8): a quiet mark while some signposts come from the address (this computer only).
   const testMark = h('span', { class: 'testmark', hidden: !wayOverrides.size, title: 'This computer only: some signposts come from the address (?sign=…)' }, 'test signposts');
   // Handle suggestions under the box (typeahead.js): choosing one opens that account's tiles.
@@ -148,11 +155,21 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       // moves by the Raku label, the free space beside the tabs and this grip, which tabs never cover.
       h('div', { class: 'strip-row' }, brand, strip, newTabBtn, h('span', { class: 'wco-grip', 'aria-hidden': 'true' })),
       h('div', { class: 'bar' }, h('span', { class: 'brand brand-small' }, pot(), SITE.name),
-        h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn, shelfBtn, discoverBtn), form, openIn, testMark, menu.button),
+        h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn, shelfBtn, discoverBtn), form, postBtn, openIn, testMark, menu.button),
       updateLine, noteLine, menu.panel),
     callSlot, stage, toolbar, sheet);
   // Links out of Raku (a post, a link in a post): Raku says where they go and opens them on a click.
   const linkMessage = createLinkMessage(root, { storage });
+  // Writing tile posts (claude/raku-write-posts-plan.md): the post box over the stage. "See it in Tile posts" opens Tile
+  // posts in a new tab, so a tile you posted from keeps running (WP10); from Tile posts itself, the page is drawn again.
+  const POSTS_URI = discoverUri('posts');
+  const postBox = createPostBox({
+    auth, resolver, moderation, kit, tilePosts: discover.tilePosts, host: () => stage, say: (t) => say(t), keepForReturn: (info) => keep(info),
+    onSeePosts: () => { if (current(tabs.active) === POSTS_URI) reload(tabs.active.id); else openNew(POSTS_URI); },
+    onAfterPost: () => { if (current(tabs.active) === POSTS_URI) reload(tabs.active.id); },
+  });
+  // The Post button follows the accounts signed in here (signing in or out, another account added).
+  auth.onChange(() => drawChrome());
 
   // Rooms (rooms step 1): at most one room in this window (RR6). A raku:page tab (not a room) or a first screen can
   // become the room tab; otherwise a new tab.
@@ -396,7 +413,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   function pageContext(p, tab) {
     const mine = p.attempt;
     return {
-      p, tab, kit, shelf, tabs, resolver, moderation, openNew, say, drawChrome, discover, linkMessage, player, autoplay,
+      p, tab, kit, shelf, tabs, resolver, moderation, openNew, say, drawChrome, discover, linkMessage, player, autoplay, postBox,
       alive: () => mine === p.attempt,
       status: (kind, text, ...actions) => status(p, kind, text, ...actions),
       hideStatus: () => hideStatus(p),
@@ -1478,6 +1495,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     reloadBtn.disabled = reloadTool.disabled = !current(tab);
     const k = p.keep;
     starBtn.hidden = !k;
+    postBtn.hidden = !(k && k.kind === 'tile' && canPostTile(k.did, auth.list()));
     openIn.hidden = !p.record;
     if (!p.record && !openInMenu.hidden) toggleOpenIn(false);
     if (k) {

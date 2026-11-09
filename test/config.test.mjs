@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { SITE, CARD, cardTags, pageCsp, loadSourceOverride, TILE_LOAD_DOMAIN, HIDE_LIST_URL, PICKS, SIGNIN, SIGNIN_PROMISE, oauthMetadata, fullScope, TABLES, ROOMS } from '../src/config.js';
+import { SITE, CARD, cardTags, pageCsp, loadSourceOverride, TILE_LOAD_DOMAIN, HIDE_LIST_URL, PICKS, SIGNIN, SIGNIN_PROMISE, oauthMetadata, fullScope, RAKU_SCOPE, TABLES, ROOMS } from '../src/config.js';
 import { parseAddress } from '../src/address.js';
 
 const file = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
@@ -50,26 +50,27 @@ test("avatars only from Bluesky's picture server", () => {
   assert.match(pageCsp(), /img-src 'self' blob: data: https:\/\/cdn\.bsky\.app https:\/\/appmosphe\.re;/, "stage 6c: Recent tiles' pictures from appmosphe.re");
 });
 
-test("the sign-in description file names Raku's own address, and asks for no more than the tables' sets and Rooms", () => {
+test("the sign-in description file names Raku's own address (a new file since WP5), and asks for the one set, \"Raku\"", () => {
   const m = oauthMetadata();
-  assert.equal(m.client_id, `${SITE.origin}/oauth.json`);
+  assert.equal(m.client_id, `${SITE.origin}/client-metadata.json`, 'WP5: a new address signed everyone out once (it was /oauth.json)');
   assert.equal(m.client_id, SIGNIN.clientId);
   assert.deepEqual(m.redirect_uris, [`${SITE.origin}/`]);
   assert.equal(m.client_uri, `${SITE.origin}/`);
   assert.equal(m.scope, fullScope());
-  // the tables' sets, then (step 5b) their lounges' sets, then (rooms step 1) "Rooms"
-  assert.deepEqual(m.scope.split(' '), ['atproto', ...Object.values(TABLES).map((t) => t.scope), ...Object.values(TABLES).filter((t) => t.lounge).map((t) => t.lounge.scope), ROOMS.scope]);
-  assert.equal(ROOMS.scope, 'include:cafe.thunderbird.rooms.authJoin?aud=did:web:relay.rooms.thunderbird.cafe%23rooms_relay', 'a permission set for the rooms relay only');
+  assert.equal(m.scope, 'atproto include:cafe.thunderbird.authRaku', 'WP3: one permission set for everything, never a plain wide scope');
+  assert.equal(RAKU_SCOPE, m.scope);
+  // the games', the lounge's and Rooms' own sets keep their names (the Daisy and Seven-Up pages, rooms-lab, older grants)
+  assert.equal(ROOMS.scope, 'include:cafe.thunderbird.rooms.authJoin?aud=did:web:relay.rooms.thunderbird.cafe%23rooms_relay');
   for (const t of Object.values(TABLES)) if (t.lounge) assert.match(t.lounge.scope, /^include:cafe\.thunderbird\.[a-z]+\.authLounge\?aud=did:web:[a-z.]+%23[a-z_]+$/);
-  for (const t of Object.values(TABLES)) assert.match(t.scope, /^include:cafe\.thunderbird\.[a-z]+\.authPlay$/, 'a permission set, never a plain wide scope');
+  for (const t of Object.values(TABLES)) assert.match(t.scope, /^include:cafe\.thunderbird\.[a-z]+\.authPlay$/);
   assert.equal(m.dpop_bound_access_tokens, true);
   assert.equal(m.token_endpoint_auth_method, 'none');
   assert.ok(!file('vite.config.js').includes('raku.lexicographer.space'), 'the build writes it from config.js');
+  assert.ok(!file('vite.config.js').includes("'oauth.json'"), "the file's name comes from SIGNIN.clientId too");
 });
 
-test('the sign-in promise names the address and the per-game permission (Q43)', () => {
-  // widened in step 5b (Q53) for the lounge; since rooms (RR8, owner Oct 29) the shorter version naming rooms
-  assert.equal(SIGNIN_PROMISE, `Signing in lets ${SITE.host} save your match results, show your handle in rooms, and, if you choose to mingle, show you in a game's lounge. Each asks for its own permission the first time. Raku doesn't touch your posts, likes, follows or anything else.`);
+test('the sign-in promise: one sign-in, tile posts (WP11)', () => {
+  assert.equal(SIGNIN_PROMISE, "Signing in lets Raku save your match results, show you in rooms and game lounges, and post tiles from your accounts. It asks once, for all of these. Raku doesn't touch your Bluesky posts, likes, follows or anything else.");
 });
 
 test("Raku's link card (stage 6): tags from config.js, pictures in public/, the address not written into index.html", () => {

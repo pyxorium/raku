@@ -33,7 +33,7 @@ test('rooms-lab is a package pinned to a GitHub tag (RR1), and Raku names what r
   assert.equal(ROOMS.labPage, `https://thunderbird.cafe${LAB.PAGE_PATH}`);
 });
 
-test('the rooms relay: the live one; ?roomsRelay= on this computer only; the page policy names it; the sign-in asks for Rooms', () => {
+test('the rooms relay: the live one; ?roomsRelay= on this computer only; the page policy names it; the sign-in covers rooms', () => {
   const live = (q = '') => ({ hostname: 'raku.lexicographer.space', search: q });
   const here = (q = '') => ({ hostname: '127.0.0.1', search: q });
   assert.equal(roomsRelayUrl(live()), ROOMS.relay);
@@ -43,8 +43,9 @@ test('the rooms relay: the live one; ?roomsRelay= on this computer only; the pag
   assert.equal(roomsRelayUrl(here('?roomsRelay=javascript:alert(1)')), ROOMS.relay);
   assert.ok(pageRelays().includes('wss://relay.rooms.thunderbird.cafe'));
   assert.match(pageCsp(), /connect-src [^;]*wss:\/\/relay\.rooms\.thunderbird\.cafe[;\s]/);
-  assert.ok(fullScope().split(' ').includes(ROOMS.scope));
-  // the server expands the set into the pass for this relay
+  // since WP3 (Nov 2026) the one set, "Raku", holds the rooms pass; the server expands it, in any of its forms
+  assert.ok(coversRooms(fullScope()));
+  assert.ok(coversRooms('atproto rpc?lxm=cafe.thunderbird.daisy.lounge.enter&lxm=cafe.thunderbird.rooms.join&aud=*'), 'the grouped form Bluesky hands back');
   assert.ok(coversRooms(`atproto ${ROOMS.scope}`));
   assert.ok(coversRooms('atproto rpc:cafe.thunderbird.rooms.join?aud=did:web:relay.rooms.thunderbird.cafe%23rooms_relay'));
   assert.ok(!coversRooms('atproto rpc:cafe.thunderbird.rooms.joined?aud=x'));
@@ -102,7 +103,8 @@ test('the first screen’s words (FS1, RR5, owner’s) and the Rooms card', () =
 
 test('the About page names rooms (RR9)', () => {
   const page = file('src/about-page.js');
-  assert.ok(page.includes('Browsing, searching, joining a room with a typed name, and playing the tables against the bot need no sign-in. Signing in is only for saving your match results, showing your handle in a room, and (if you choose) being seen in Daisy\'s lounge.'));
+  // since WP11 (Nov 2026) the line ends with the sign-in promise, which names rooms (about.test.mjs checks it word for word)
+  assert.ok(page.includes('Browsing, searching, joining a room with a typed name, and playing the tables against the bot need no sign-in. ${SIGNIN_PROMISE}'));
   assert.ok(page.includes("h('b', {}, 'A room you’re in'), ', for that tab only, so a reload brings you back in (for the host, also the host key).'"));
   assert.ok(page.includes("h('b', {}, 'The name you typed'), ' for rooms, for next time.'"));
   assert.ok(page.includes('Raku asks for your microphone only when you unmute in a room, and for your screen only when you choose to share it.'));

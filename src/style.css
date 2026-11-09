@@ -1022,3 +1022,68 @@ button.way-door:hover, button.way-door:focus-visible { border-color: var(--glaze
   font-size: 11px; white-space: nowrap; }
 .testmark[hidden] { display: none; }
 @media (max-width: 640px) { .testmark { order: 5; } .way-name { font-size: 22px; } }
+
+/* ---------- writing tile posts (claude/raku-write-posts-plan.md, WP8 to WP13; from claude/raku-write-posts-mockup.html) ---------- */
+/* (A) Post on a tile's tab: beside the address box, only for a tile of one of your signed-in accounts */
+.post-btn { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 31px; padding: 0 12px 0 9px; border-radius: 7px;
+  border: 1px solid var(--glaze-btn); background: rgba(63,184,168,.12); color: var(--glaze-light); cursor: pointer; font-size: 13px; white-space: nowrap; }
+.post-btn:hover { background: rgba(63,184,168,.22); }
+.post-btn[hidden] { display: none; }
+/* (C) Write a post, in Tile posts' header */
+.dv-write { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 4px 13px 4px 10px; border-radius: 8px;
+  border: 1px solid var(--glaze-btn); background: var(--glaze-btn); color: var(--glaze-ink); font-weight: 600; font-size: 13px; cursor: pointer; }
+.dv-write:hover { filter: brightness(1.08); }
+.dv-write + .dv-autoplay, .dv-write + .dv-refresh { margin-left: 0; }
+/* the post box (a Raku dialog, signin-ui.js openDialog) */
+.wp-back { display: inline-flex; align-items: center; gap: 6px; margin: -4px 0 10px; padding: 0; border: 0; background: none; color: var(--glaze-light); cursor: pointer; font-size: 13px; }
+.wp-help { color: var(--muted); font-size: 13.5px; }
+.wp-tile { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; padding: 8px; border-radius: 10px; background: #221d19; border: 1px solid #3a322b; }
+.wp-tile-pic { width: 96px; aspect-ratio: 16 / 9; flex: none; border-radius: 7px; overflow: hidden; background: #2d2722; }
+.wp-tile-pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wp-tile-words { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wp-tile-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-tile-by { color: var(--glaze-light); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-label { display: flex; justify-content: space-between; gap: 10px; margin: 0 0 4px; font-size: 12.5px; color: var(--muted); }
+.wp-count { font-variant-numeric: tabular-nums; }
+.wp-count.over { color: var(--warn); font-weight: 600; }
+.wp-words, .wp-alt { width: 100%; padding: 10px 12px; border-radius: 8px; background: var(--well); color: var(--text); border: 1px solid var(--line);
+  font: inherit; line-height: 1.45; resize: vertical; }
+.wp-words { min-height: 96px; }
+.wp-alt { min-height: 64px; }
+.wp-words::placeholder, .wp-alt::placeholder { color: #8d8172; }
+.wp-words:focus, .wp-alt:focus, .wp-lang:focus, .wp-from select:focus { outline: none; border-color: var(--glaze); box-shadow: 0 0 0 2px rgba(63,184,168,.25); }
+.wp-words:disabled, .wp-alt:disabled, .wp-lang:disabled, .wp-from select:disabled { opacity: .6; }
+.wp-more { margin: 10px 0 0; font-size: 13px; }
+.wp-more summary { cursor: pointer; color: var(--muted); }
+.wp-more-body { display: grid; gap: 10px; margin-top: 10px; }
+.wp-lang { width: 9em; height: 36px; padding: 0 10px; border-radius: 8px; background: var(--well); color: var(--text); border: 1px solid var(--line); font: inherit; }
+.wp-from { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 14px 0 0; font-size: 13.5px; color: var(--muted); }
+.wp-from select { max-width: 100%; height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--well); color: var(--text); font: inherit; }
+.wp-from .small { flex-basis: 100%; color: #8d8172; font-size: 12.5px; }
+.wp-done { margin: 0 0 4px; padding: 12px 14px; border-radius: 10px; background: rgba(63,184,168,.10); border: 1px solid rgba(63,184,168,.35); }
+.wp-done p { margin: 0 0 6px; }
+.wp-done b { color: var(--glaze-light); }
+.wp-addr { display: flex; gap: 8px; align-items: center; }
+.wp-addr code { flex: 1; min-width: 0; padding: 6px 8px; border-radius: 7px; background: var(--well); color: #d8ccbb; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+.wp-addr button { min-height: 32px; padding: 3px 10px; border-radius: 7px; border: 1px solid var(--line); background: rgba(255,255,255,.06); color: var(--text); cursor: pointer; font-size: 12.5px; }
+.wp-warn { margin: 10px 0 0; padding: 10px 12px; border-radius: 9px; background: rgba(230,179,106,.08); border: 1px solid rgba(230,179,106,.35); color: var(--warn); font-size: 13.5px; }
+/* Write a post: your accounts' tiles to choose from */
+.wp-acct { margin: 14px 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.wp-pick > .wp-acct:first-child { margin-top: 4px; }
+.wp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.wp-row { width: 100%; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 8px; border-radius: 9px; border: 1px solid transparent;
+  background: rgba(255,255,255,.04); color: var(--text); cursor: pointer; text-align: left; }
+.wp-row:hover, .wp-row:focus-visible { border-color: var(--glaze); }
+.wp-row-pic { width: 64px; aspect-ratio: 16 / 9; flex: none; border-radius: 5px; overflow: hidden; background: #2d2722; }
+.wp-row-pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wp-row-words { display: flex; flex-direction: column; min-width: 0; }
+.wp-row-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-row-when { color: var(--muted); font-size: 12.5px; }
+.rk-dialog .wp-more-accounts { margin-top: 14px; }
+.stage > .rk-dialog { z-index: 40; }
+@media (max-width: 640px) {
+  .post-btn { order: 4; width: 36px; height: 36px; padding: 0; justify-content: center; }
+  .post-btn .lbl { display: none; }
+  .dv-write .lbl-long { display: none; }
+  .wp-tile-pic { width: 80px; }
+}

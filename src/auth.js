@@ -1,19 +1,21 @@
 // Signing in and saving (stage 4, claude/raku-stage4-plan.md).
 //
-// Browsing never needs a sign-in; signing in is only for saving match results from Raku's tables. Adapted
-// from the site's src/sevenup/auth.js and src/daisy/auth.js (COPY, Oct 20 2026), with Raku's own choices:
+// Browsing never needs a sign-in; signing in is for saving match results, the lounge, rooms and (since Nov 2026)
+// posting tiles. Adapted from the site's src/sevenup/auth.js and src/daisy/auth.js (COPY, Oct 20 2026), with Raku's
+// own choices:
 //   - several accounts signed in on this browser, one of them current (Q38): createAccounts() below;
-//   - the permissions grow game by game (Q36): a sign-in asks for your account plus the sets of the
-//     tables it's for (config.js scopeFor); Raku remembers what each account's sign-in covers (its
-//     token's scope) so it knows, before a click, whether a window is needed (browsers only allow a new
-//     window straight from a click, before anything that waits);
+//   - one permission for everything (claude/raku-write-posts-plan.md, WP3 to WP5, Nov 2026; before, the permissions
+//     grew game by game, Q36): every sign-in asks for config.js RAKU_SCOPE, the "Raku" set. Raku still remembers
+//     what each account's sign-in covers (its token's scope) so it knows, before a click, whether a window is needed
+//     (browsers only allow a new window straight from a click, before anything that waits): a refused or partial
+//     grant asks again for the same one set;
 //   - the sign-in opens in a small window (popup), so running tiles and the match stay as they are; when
 //     the window is blocked, "Sign in in this tab instead" goes to the account server in this tab and
 //     comes back (Q41; app.js keeps what's needed in sessionStorage);
 //   - "Always" choices per account and game, in this browser (Q37).
 // Uses @atproto/oauth-client-browser 0.5.8 (as the site and the Foundry). createAuth takes the library's
 // exports (loaded when needed), so the browser checks can hand in a stand-in (test/browser/oauth-standin.js).
-import { SIGNIN, fullScope, scopeFor, coversTable, coversLounge, coversRooms, tablesCovered, TABLES, ROOMS } from './config.js';
+import { SIGNIN, fullScope, RAKU_SCOPE, coversTable, coversLounge, coversRooms, coversPosts, coversRaku, TABLES, ROOMS } from './config.js';
 
 export class SignInNeeded extends Error {}
 export class SignInStopped extends Error {}
@@ -204,29 +206,21 @@ export function createAuth(getLib, { storage, loc = globalThis.location, win = g
     /** Does this account's sign-in cover saving at the table? (Known without waiting.) */
     covers(did, tableId) { return coversTable(scopes.get(did), TABLES[tableId]); },
     known(did) { return scopes.has(did); },
-    /** The permissions to ask for when this account (or a new one: did null) signs in for a table. The
-     *  games (and lounges, step 5b, and Rooms) its sign-in already allows are kept, so a new sign-in never loses them. */
-    scopeFor(did, tableId) {
-      const had = did ? tablesCovered(scopes.get(did)) : [];
-      const lounges = did ? Object.keys(TABLES).filter((id) => coversLounge(scopes.get(did), TABLES[id])).map((id) => TABLES[id].lounge.scope) : [];
-      const rooms = did && coversRooms(scopes.get(did)) ? [ROOMS.scope] : [];
-      return [scopeFor(tableId ? [...had, tableId] : had), ...lounges, ...rooms].join(' ');
-    },
-    /** Does this account's sign-in cover rooms (the "Rooms" set: a pass for the rooms relay)? (Known without waiting.) */
+    /** The permissions to ask for when an account signs in, whatever for: always the one set, "Raku" (WP3). (The
+     *  arguments are kept so the tables, the lounge and rooms read as before.) */
+    scopeFor(did, tableId) { return RAKU_SCOPE; },
+    /** Does this account's sign-in cover rooms (a pass for the rooms relay)? (Known without waiting.) */
     coversRooms(did) { return coversRooms(scopes.get(did)); },
-    /** The permissions for joining a room signed in (RR4): what the account already allows, plus "Rooms". */
-    roomsScopeFor(did) {
-      const base = this.scopeFor(did, null);
-      return base.split(' ').includes(ROOMS.scope) ? base : `${base} ${ROOMS.scope}`;
-    },
+    /** The permissions for joining a room signed in: the one set. */
+    roomsScopeFor(did) { return RAKU_SCOPE; },
     /** Does this account's sign-in cover a table's lounge (step 5b)? (Known without waiting.) */
     coversLounge(did, tableId) { return coversLounge(scopes.get(did), TABLES[tableId]); },
-    /** The permissions for turning mingling on at a table's lounge: the table's own set too (Q54: one window). */
-    loungeScopeFor(did, tableId) {
-      const base = this.scopeFor(did, tableId);
-      const L = TABLES[tableId] && TABLES[tableId].lounge;
-      return L && !base.split(' ').includes(L.scope) ? `${base} ${L.scope}` : base;
-    },
+    /** The permissions for turning mingling on: the one set. */
+    loungeScopeFor(did, tableId) { return RAKU_SCOPE; },
+    /** Does this account's sign-in cover writing tile posts (claude/raku-write-posts-plan.md)? (Known without waiting.) */
+    coversPosts(did) { return coversPosts(scopes.get(did)); },
+    /** Does this account's sign-in cover everything Raku does (the whole "Raku" set)? */
+    coversAll(did) { return coversRaku(scopes.get(did)); },
 
     // Call straight from a click, before anything that waits: browsers only allow a new window then.
     // Returns the window, or null when it was blocked.
@@ -305,8 +299,9 @@ export function createAuth(getLib, { storage, loc = globalThis.location, win = g
       return body.token;
     },
 
-    // Writes one record (com.atproto.repo.putRecord): saving again with the same key replaces it.
-    async putRecord(did, { collection, rkey, record }) {
+    // Writes one record (com.atproto.repo.putRecord): saving again with the same key replaces it. validate: false skips the
+    // server's lexicon check (tile posts, as the Foundry writes them); left out, the server decides as before.
+    async putRecord(did, { collection, rkey, record, validate }) {
       if (!sessions.has(did) && !(await restore(did))) throw new SignInNeeded('signed out');
       const session = sessions.get(did);
       let res;
@@ -314,7 +309,7 @@ export function createAuth(getLib, { storage, loc = globalThis.location, win = g
         res = await session.fetchHandler('/xrpc/com.atproto.repo.putRecord', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ repo: did, collection, rkey, record }),
+          body: JSON.stringify({ repo: did, collection, rkey, record, ...(validate === false ? { validate: false } : {}) }),
         });
       } catch (err) {
         if (/token|session|refresh|revoked|auth/i.test(String(err && (err.name + ' ' + err.message)))) { forget(did, 'ran-out'); throw new SignInNeeded(String(err.message)); }
@@ -324,7 +319,7 @@ export function createAuth(getLib, { storage, loc = globalThis.location, win = g
       if (res.status === 401) { forget(did, 'ran-out'); throw new SignInNeeded(body.message || 'unauthorized'); }
       if (res.status === 403 || body.error === 'ScopeMissingError' || /scope/i.test(String(body.error || ''))) {
         scopes.set(did, '');                    // the server says this sign-in doesn't cover it: ask again
-        throw Object.assign(new Error('This sign-in no longer allows saving this game.'), { code: 'scope' });
+        throw Object.assign(new Error('This sign-in no longer allows this. Sign in again to approve “Raku”.'), { code: 'scope' });
       }
       if (!res.ok) throw new Error(body.message || body.error || `The server answered ${res.status}`);
       return { uri: body.uri, cid: body.cid };

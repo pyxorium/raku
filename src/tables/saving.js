@@ -160,7 +160,7 @@ export function createSaver({ table, kit, auth, host, notify, keepForReturn, onS
           return;
         }
         const waiting = new AbortController();
-        status.replaceChildren(`Approve ${table.name}'s permission in the small window… `,
+        status.replaceChildren(`Approve “Raku” in the small window… `,
           h('button', { type: 'button', class: 'linkish', onclick: () => waiting.abort() }, 'Cancel'));
         setBusy(true);
         try {
@@ -172,7 +172,7 @@ export function createSaver({ table, kit, auth, host, notify, keepForReturn, onS
           status.textContent = err?.message || "Couldn't sign in.";
           return;
         }
-        if (!auth.covers(account.did, table.id)) { setBusy(false); status.textContent = `${table.name}'s permission wasn't given, so Raku can't save this match.`; return; }
+        if (!auth.covers(account.did, table.id)) { setBusy(false); status.textContent = `“Raku” wasn't approved, so Raku can't save this match.`; return; }
       }
       if (always) auth.accounts.setAlways(who.did, table.id, true);
       save(who, made.record, job, { status, setBusy });
@@ -186,7 +186,7 @@ export function createSaver({ table, kit, auth, host, notify, keepForReturn, onS
       h('h2', {}, `Save this match to ${at(account.handle)}?`),
       notice ? h('p', { class: 'rk-notice' }, notice) : null,
       h('p', {}, text(account, job.result, job.seat)),
-      covered ? null : h('p', { class: 'rk-ask' }, `${table.name} asks for its own permission the first time you save: a small window from your account server opens to approve it.`),
+      covered ? null : h('p', { class: 'rk-ask' }, `This sign-in needs “Raku” approved again: a small window from your account server opens when you save.`),
       details(made.record),
       job.account ? h('p', { class: 'rk-other small' }, `${at(account.handle)} is the account sitting at this table, so the match is saved there.`)
         : h('p', { class: 'rk-other' }, h('button', { type: 'button', class: 'linkish', onclick: () => choose(account, job) }, others.length ? 'Use another account' : 'Use another account (sign in)')),

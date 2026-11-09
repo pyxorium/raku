@@ -145,10 +145,10 @@ export function roomsRelayUrl(loc = globalThis.location) {
   const v = new URLSearchParams(loc.search || '').get('roomsRelay');
   return v && /^wss?:\/\/[^\s]+$/.test(v) ? v : ROOMS.relay;
 }
-/** Does a sign-in's permissions cover rooms? The server expands the set into the pass (rpc:…join?aud=…). */
+/** Does a sign-in's permissions cover rooms (the pass for the rooms relay)? Every form a grant comes in (readGrant). */
 export function coversRooms(scope) {
-  const s = ` ${String(scope || '')} `;
-  return s.includes(` ${ROOMS.scope} `) || s.includes(` rpc:${ROOMS.join}?`) || s.includes(` rpc:${ROOMS.join} `);
+  const g = readGrant(scope);
+  return g.rpc === '*' || g.rpc.has(ROOMS.join);
 }
 /** The room's house tile: the shelf keeps it for the Rooms card (as a table keeps its player tile). */
 export const isRoomHouse = (did, rkey) => ROOMS.house.uri === `at://${did}/${COLLECTION}/${rkey}`;
@@ -185,13 +185,18 @@ export function newTableId() {
   return [...b].map((x) => 'abcdefghijkmnopqrstuvwxyz23456789'[x % 33]).join('');
 }
 
-// ---------- signing in and saving (stage 4, claude/raku-stage4-plan.md) ----------
-// Browsing never needs a sign-in. Signing in is only for saving match results from the tables, and each
-// game's permission set is asked the first time you save at that game (Q36): the first sign-in asks for
-// your account plus that table's set; another game adds its own with one short Authorize. Several
-// accounts can be signed in on this browser, one of them current (Q38).
+// ---------- signing in and saving (stage 4, claude/raku-stage4-plan.md; one sign-in since Nov 2026) ----------
+// Browsing never needs a sign-in. Since claude/raku-write-posts-plan.md (WP3 to WP7, owner Nov 8 2026) a sign-in asks
+// once for everything Raku does: one permission set, "Raku" (cafe.thunderbird.authRaku, published from thunderbird.cafe;
+// lexicons/ in this repo): saving match results, the Daisy lounge, joining rooms, and posting tiles. (Before, each
+// game, the lounge and Rooms asked for their own set the first time; the names are kept below, for the Daisy and
+// Seven-Up pages and rooms-lab, and so an older grant still reads correctly.) Several accounts can be signed in on
+// this browser, one of them current (Q38).
+export const RAKU_SET = 'cafe.thunderbird.authRaku';
+export const RAKU_SCOPE = `atproto include:${RAKU_SET}`;
 export const SIGNIN = Object.freeze({
-  clientId: `${SITE.origin}/oauth.json`,       // changing it signs everyone out
+  // Changing it signs everyone out (WP5, Nov 2026: it was /oauth.json; the new address made every sign-in ask for "Raku").
+  clientId: `${SITE.origin}/client-metadata.json`,
   redirectUri: `${SITE.origin}/`,
   handleResolver: 'https://bsky.social',        // as the Foundry, Seven-Up and Daisy
   windowName: 'raku-signin',
@@ -201,39 +206,74 @@ export const SIGNIN = Object.freeze({
   alwaysKey: 'raku-always',                    // localStorage: "Always" choices, per account and game (Q37)
   returnKey: 'raku-signin-return',             // sessionStorage: what to pick up after "Sign in in this tab instead" (Q41)
 });
-// Shown beside "Sign in to save matches" and in the account menu (Q43).
-// Since step 5b (Q53) it also names the lounge, which only asks when you turn mingling on.
-// Since rooms (RR8, owner Oct 29) it names rooms too, shorter.
-export const SIGNIN_PROMISE = `Signing in lets ${SITE.host} save your match results, show your handle in rooms, and, if you choose to mingle, show you in a game's lounge. Each asks for its own permission the first time. Raku doesn't touch your posts, likes, follows or anything else.`;
+// Shown beside sign-in, in the account menu and on the About page (Q43; since WP11, Nov 2026: one sign-in, tile posts).
+export const SIGNIN_PROMISE = "Signing in lets Raku save your match results, show you in rooms and game lounges, and post tiles from your accounts. It asks once, for all of these. Raku doesn't touch your Bluesky posts, likes, follows or anything else.";
 export const recordLink = (uri) => `https://pdsls.dev/${uri}`;
 
-/** The permissions for a sign-in: your account, plus the sets of the given tables (ids). */
-export function scopeFor(tableIds = []) {
-  const sets = [...new Set(tableIds)].map((id) => TABLES[id] && TABLES[id].scope).filter(Boolean);
-  return ['atproto', ...sets].join(' ');
+/** Everything Raku asks for, at every sign-in (client-metadata.json's scope too): the one set, "Raku". */
+export const fullScope = () => RAKU_SCOPE;
+/** What the "Raku" set holds: the same lists as lexicons/cafe.thunderbird.authRaku.json (test/publish-lexicons.test.mjs
+ *  checks they agree). The records Raku writes, and the methods it asks passes for. */
+export function rakuSet() {
+  const lounges = Object.values(TABLES).filter((t) => t.lounge).map((t) => t.lounge);
+  return {
+    repo: [...Object.values(TABLES).map((t) => t.collection), ...lounges.map((L) => L.collection), TILE_POSTS.collection],
+    rpc: [...lounges.map((L) => L.enter), ROOMS.join],
+  };
 }
-/** Everything Raku may ever ask for (oauth.json's scope): every approved table's set, their lounges' sets, and Rooms. */
-export const fullScope = () => [scopeFor(Object.keys(TABLES)), ...Object.values(TABLES).map((t) => t.lounge && t.lounge.scope).filter(Boolean), ROOMS.scope].join(' ');
-/** Does a sign-in's permissions cover a table's lounge? The server expands the set into the record and the pass. */
+// The sets Raku knows by name, and what each holds: an account's server usually hands back the plain permissions, but a
+// grant can also still name a set.
+function knownSets() {
+  const name = (s) => String(s).replace(/^include:/, '').split('?')[0];
+  const sets = { [RAKU_SET]: rakuSet(), [name(ROOMS.scope)]: { repo: [], rpc: [ROOMS.join] } };
+  for (const t of Object.values(TABLES)) {
+    sets[name(t.scope)] = { repo: [t.collection], rpc: [] };
+    if (t.lounge) sets[name(t.lounge.scope)] = { repo: [t.lounge.collection], rpc: [t.lounge.enter] };
+  }
+  return sets;
+}
+/**
+ * What a sign-in's granted permissions (its token's scope) allow: { repo, rpc }, each a Set of NSIDs, or '*' for any.
+ * Reads every form a server writes (the probe, Nov 8 2026: Bluesky hands back the grouped form):
+ *   repo:<nsid>[?action=…]   repo?collection=<nsid>&collection=<nsid>…   repo:*
+ *   rpc:<lxm>?aud=…          rpc?lxm=<lxm>&lxm=<lxm>&aud=…               rpc:*?aud=…
+ *   include:<set>[?aud=…]    (a set Raku knows by name)                  transition:generic (everything)
+ * Actions and audiences are left to the account's server, which refuses what the grant doesn't allow.
+ */
+export function readGrant(scope) {
+  const grant = { repo: new Set(), rpc: new Set() };
+  const add = (kind, list) => { if (grant[kind] === '*') return; if (list.includes('*')) grant[kind] = '*'; else list.forEach((v) => v && grant[kind].add(v)); };
+  const sets = knownSets();
+  for (const tok of String(scope || '').split(/\s+/).filter(Boolean)) {
+    if (tok === 'transition:generic') { grant.repo = '*'; grant.rpc = '*'; continue; }
+    const m = /^(repo|rpc|include)(?::([^?]*))?(?:\?(.*))?$/.exec(tok);
+    if (!m) continue;
+    const [, kind, pos, query] = m;
+    const params = new URLSearchParams(query || '');
+    if (kind === 'include') { const s = sets[pos]; if (s) { add('repo', s.repo); add('rpc', s.rpc); } continue; }
+    const named = pos !== undefined && pos !== '' ? [decodeURIComponent(pos)] : params.getAll(kind === 'repo' ? 'collection' : 'lxm');
+    add(kind, named);
+  }
+  return grant;
+}
+const has = (g, kind, nsid) => g[kind] === '*' || g[kind].has(nsid);
+/** Does a sign-in's permissions cover saving at this table? */
+export function coversTable(scope, table) { return !!table && has(readGrant(scope), 'repo', table.collection); }
+/** Does a sign-in's permissions cover a table's lounge? The record and the pass, both. */
 export function coversLounge(scope, table) {
   const L = table && table.lounge;
   if (!L) return false;
-  const s = ` ${String(scope || '')} `;
-  if (s.includes(` ${L.scope} `)) return true;
-  const col = L.collection.replace(/\./g, '\\.');
-  return new RegExp(`\\srepo:(\\*|${col})(\\?[^\\s]*)?\\s`).test(s) && s.includes(` rpc:${L.enter}`);
+  const g = readGrant(scope);
+  return has(g, 'repo', L.collection) && has(g, 'rpc', L.enter);
 }
-/** Does a sign-in's permissions (its token's scope) cover saving at this table? The account's server
- *  expands a set into plain permissions (repo:<collection>), so either form counts. */
-export function coversTable(scope, table) {
-  const s = ` ${String(scope || '')} `;
-  if (!table) return false;
-  if (s.includes(` ${table.scope} `)) return true;
-  const esc = table.collection.replace(/\./g, '\\.');
-  return new RegExp(`\\srepo:(\\*|${esc})(\\?[^\\s]*)?\\s`).test(s);
+/** Does a sign-in's permissions cover writing tile posts? */
+export function coversPosts(scope) { return has(readGrant(scope), 'repo', TILE_POSTS.collection); }
+/** Does a sign-in's permissions cover everything in "Raku"? (A sign-in from before WP5 doesn't, nor a refused one.) */
+export function coversRaku(scope) {
+  const g = readGrant(scope);
+  const s = rakuSet();
+  return s.repo.every((c) => has(g, 'repo', c)) && s.rpc.every((l) => has(g, 'rpc', l));
 }
-/** Which tables a sign-in's permissions cover (ids). */
-export const tablesCovered = (scope) => Object.keys(TABLES).filter((id) => coversTable(scope, TABLES[id]));
 
 /** The sign-in description file, published at SIGNIN.clientId (made by vite.config.js on build). */
 export function oauthMetadata() {
@@ -354,6 +394,7 @@ export const FOLLOWING = Object.freeze({ perAccount: 10, max: 60, keepMs: 5 * 60
 // the owner's accounts (`always`: thunderbird.cafe, pyxorium.com) and the shelf's are always read too, so the
 // source still works when the relay doesn't answer. The newest few posts of each account, a few accounts at a time.
 export const TILE_POSTS = Object.freeze({
+  collection: 'cafe.thunderbird.tile.post',
   relay: 'https://relay1.us-east.bsky.network', relayPage: 100, relayMs: 8000,
   always: Object.freeze(['did:plc:6vxjigxrqizmbo56gojxico3', 'did:plc:rqbqpaaluty5v47jwciowpik']),
   maxAccounts: 500, perAccount: 10, max: 100, atOnce: 4, accountMs: 10000, keepMs: 5 * 60 * 1000,

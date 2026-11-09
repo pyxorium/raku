@@ -62,12 +62,12 @@ export function sitAs({ auth, table, host, say = () => {}, keepForReturn = () =>
     }
     const ac = new AbortController();
     const line = status || ((t) => say(t));
-    line(`Approve "Play ${table.name}" in the small window from @${acct.handle}'s account server…`);
+    line(`Approve "Raku" in the small window from @${acct.handle}'s account server…`);
     auth.signIn(acct.handle, auth.scopeFor(acct.did, id), { signal: ac.signal })
       .then((did) => {
         line('');
         const now = auth.current();
-        if (!now || now.did !== did || !auth.covers(did, id)) { line(`"Play ${table.name}" wasn't approved, so Raku can't seat you.`); return; }
+        if (!now || now.did !== did || !auth.covers(did, id)) { line(`"Raku" wasn't approved, so Raku can't seat you.`); return; }
         d?.close();
         done(now);
       })
@@ -77,7 +77,7 @@ export function sitAs({ auth, table, host, say = () => {}, keepForReturn = () =>
   function dialog() { return openDialog(host, { label: purpose === 'sit' ? 'Sign in to sit at the table' : 'Sign in to open a table' }); }
   function heading() { return h('h2', {}, purpose === 'open' ? 'Sign in to open a table' : 'Sign in to take a seat'); }
   function intro() {
-    return `Playing someone else needs a sign-in, so they see your real, checked handle (playing the bot doesn't). The first time, your account server asks you to approve "Play ${table.name}": saving the ${table.name} matches you finish, and nothing else.`;
+    return `Playing someone else needs a sign-in, so they see your real, checked handle (playing the bot doesn't). Your account server asks you once to approve one permission, "Raku": saving your matches, rooms, game lounges and tile posts.`;
   }
 
   // The dialog: "Continue as @x" for the current account (when it needs Daisy's permission), or the form.
@@ -90,7 +90,7 @@ export function sitAs({ auth, table, host, say = () => {}, keepForReturn = () =>
       scope: (who) => auth.scopeFor(auth.didForHandle(who), id),
       onDone: () => {
         const a = auth.current();
-        if (!a || !auth.covers(a.did, id)) { status.textContent = `"Play ${table.name}" wasn't approved, so Raku can't seat you.`; return; }
+        if (!a || !auth.covers(a.did, id)) { status.textContent = `"Raku" wasn't approved, so Raku can't seat you.`; return; }
         d.close();
         done(a);
       },

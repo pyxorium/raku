@@ -60,7 +60,9 @@ Plans and decisions: `claude/raku-plan.md` in the Web Tile Foundry project.
 
 ## Stage 4 (Oct 20 2026): signing in and saving
 
-Decisions: `claude/raku-stage4-plan.md` (Q35 to Q43).
+Decisions: `claude/raku-stage4-plan.md` (Q35 to Q43). **Since Nov 2026 Raku asks once, for one permission, "Raku":
+see "One sign-in, and writing tile posts" below.** The per-game permissions described here are history (the saving,
+Always and several accounts still work as written).
 
 - **Browsing and playing never need a sign-in.** Signing in is only for saving match results from the
   tables. Raku's promise, shown beside every sign-in: "Signing in lets raku.lexicographer.space save your
@@ -382,7 +384,7 @@ opened for everyone, for small meetups among friends) come from the Rooms lab:
   guest asks for something, you decide."; 0.12.0: Expand, below; 0.13.0: the call bar and the floating room window, below), not copied. The Rooms lab page on thunderbird.cafe retired once this passed
   its two-computer test (Oct 29): it now says "Rooms have moved to Raku", and the rooms relay lets in only Raku. Updating rooms = a new tag in rooms-lab, the new
   tag here, `npm install`. `test/rooms.test.mjs` checks that Raku's own names for the room's servers
-  (`ROOMS` in `src/config.js`: the relay, the "Rooms" permission set, the connection helpers, the pinned house tile)
+  (`ROOMS` in `src/config.js`: the relay, the "Rooms" permission set (since Nov 2026 inside "Raku"), the connection helpers, the pinned house tile)
   are still rooms-lab's.
 - **A room is a tab**, `raku:room` (`src/room-tab.js`): the Rooms card in the first screen's "Tables and rooms" row
   opens it (New room, or paste an invite). The room code never goes into Raku's address: this browser tab keeps it
@@ -635,6 +637,46 @@ Decisions: `claude/raku-expand-plan.md`, "After C" (AU1 to AU6, and the sound te
   `playCard` in `src/discover.js`; the quiet start (`quiet`) in `playInPost`, `src/app.js`; the menu row and
   `switchButton` in `src/account-menu.js`. Unit tests: `test/play-here.test.mjs`. Browser: `test/browser/check_posts.py`.
 
+## One sign-in, and writing tile posts (Nov 2026)
+
+Decisions: `claude/raku-write-posts-plan.md` (WP1 to WP13; the mockup `claude/raku-write-posts-mockup.html`).
+
+- **One sign-in for everything (WP3 to WP7).** Every sign-in asks for `atproto include:cafe.thunderbird.authRaku`
+  (`RAKU_SCOPE` in `src/config.js`): one permission set, titled **"Raku"** on the account server's approval screen
+  ("Lets Raku save your match results, show you in rooms and game lounges, and post tiles from your account. Nothing
+  else in your account is changed."). It covers the records Raku writes (`cafe.thunderbird.sevenup.match`,
+  `cafe.thunderbird.daisy.match`, `cafe.thunderbird.daisy.lounge`, `cafe.thunderbird.tile.post`) and the passes it
+  asks for (`cafe.thunderbird.daisy.lounge.enter`, `cafe.thunderbird.rooms.join`, any audience: Raku still asks for
+  each pass addressed to the exact relay). No more per-game, lounge or Rooms windows. The set lives in this repo:
+  `lexicons/cafe.thunderbird.authRaku.json`, published from thunderbird.cafe by `scripts/publish-lexicons.mjs`
+  (`node scripts/publish-lexicons.mjs --dry-run`, then without; the app password from `$env:BSKY_APP_PASSWORD`;
+  `lexicons-published.json` keeps what was published); the Wix TXT record `_lexicon` (at thunderbird.cafe's top)
+  names its home. `test/publish-lexicons.test.mjs` checks the set lists exactly what `config.js` writes and asks for.
+- **Reading a grant:** `readGrant` in `src/config.js` reads every form a server writes, including the grouped form
+  Bluesky hands back (`repo?collection=…&collection=…`, `rpc?lxm=…&aud=*`, found in the probe, Nov 8 2026);
+  `coversTable`, `coversLounge`, `coversRooms`, `coversPosts` and `coversRaku` all follow from it. A grant missing
+  something (refused, or older) asks for "Raku" again from the click.
+- **The sign-in address changed** (WP5): `client-metadata.json` (it was `oauth.json`; the build writes it from
+  `SIGNIN.clientId`), so every sign-in made before asks again once.
+- **The promise** (WP11): "Signing in lets Raku save your match results, show you in rooms and game lounges, and post
+  tiles from your accounts. It asks once, for all of these. Raku doesn't touch your Bluesky posts, likes, follows or
+  anything else." (the account menu, the sign-in dialogs, the About page).
+- **Post on a tile's tab (WP8 A, WP1):** beside the address box, only when the tile belongs to one of the accounts
+  signed in on this browser (the icon alone on a phone). **Write a post** in Tile posts' header (WP8 C): signed out,
+  "Sign in to post" first; then your signed-in accounts' tiles, newest first, by account, hidden ones left out.
+- **The post box (WP9):** the tile, Your words (300, counted by graphemes), More (alt text, the tile's description as
+  the hint; a language box), **From** (any of your signed-in accounts, starting on the tile's own, WP2), **Post to
+  Raku**. The record is the lexicon's (the tile's exact version, a TID key, `validate: false`), read back from the
+  account's server. After posting (WP10) you stay where you are: "Posted to Tile posts.", the address, See it in Tile
+  posts (a new tab), Close; the post shows in Tile posts at once. A failed write keeps your words; a failed read-back
+  says "It may still have been posted; look in Tile posts before trying again."
+- Who can post which tile lives in Raku's buttons: a record can't show that two accounts are one person's, so Tile
+  posts shows every valid post, whatever tool wrote it (the hide list handles abuse).
+- Code: `src/tile-post-write.js` (no DOM: the record, writing, reading back, your tiles), `src/post-box.js` (the box
+  and Write a post), `src/tile-posts.js` (`add`: a post written here shows at once). Unit tests:
+  `test/tile-post-write.test.mjs`, `test/auth.test.mjs`, `test/publish-lexicons.test.mjs`. Browser:
+  `test/browser/check_write.py` (below).
+
 ## Try it
 
 ```
@@ -694,7 +736,9 @@ and open http://127.0.0.1:5181/.
 | `src/room-tab.js`, `src/room-words.js` | rooms step 1: the room tab hosting rooms-lab's room (the join screen, invites, one room at a time, the rejoin after a reload); the words and links, tested in Node |
 | `src/style.css` | the look: raku pottery, turquoise, always dark |
 | `public/` | `CNAME`, `robots.txt`, the icon (`icon.svg`, and `favicon.ico`, `favicon-32.png`, `apple-touch-icon.png` for other sites); stage 6: `card.png` (the link card) and `banner.png`; stage 9: `manifest.webmanifest`, the app icons, `sw.js` and `offline.html` |
-| `.github/workflows/deploy.yml` | test, build, check the policy is on the page and `oauth.json` names Raku's address, publish to GitHub Pages |
+| `.github/workflows/deploy.yml` | test, build, check the policy is on the page and the sign-in file (`client-metadata.json`) names Raku's address, publish to GitHub Pages |
+| `lexicons/`, `scripts/publish-lexicons.mjs`, `lexicons-published.json` | Raku's one permission set, "Raku", and its publish script (Nov 2026) |
+| `src/tile-post-write.js`, `src/post-box.js` | writing tile posts: the record and writing it (no DOM), the post box and Write a post |
 
 ## Browser checks (in the chat sandbox)
 
@@ -720,6 +764,12 @@ Recent tiles (appmosphe.re's order, hidden ones, checked handles, blurred and ic
 Following (order, hidden ones, "New"), search from the box and from Discover (nothing sent while typing, one request
 with only the words), a word with a dot as a handle first, Tile news from a stand-in feed with a post linking a tile,
 hand-picked posts mixed in by date, loading the next batch on scroll (and More without IntersectionObserver), labels, replies with their thread, the link message (Cancel, Escape, Open with no opener), a post's address in the box, the phone.
+
+`check_write.py` (40 checks, Nov 2026: writing tile posts and the one sign-in) needs only `servers.mjs` and a bundle
+with the stand-in sign-in (which expands "Raku" into the grouped form Bluesky hands back); everything outside is a
+Playwright route. `check_signin.py`, `check_lounge.py` and `check_room.py` were written for the per-game permissions
+and still expect that wording: update them the next time they're run (they need the site's game files, the loader
+replica and the relays staged).
 
 `check_posts.py` (152 checks, tile posts, Play here, round C and Autoplay) runs the same way as `check_discover.py`, with the loader replica
 running too (`node test/browser/loader-replica.mjs <tiles-loading-server folder>`, port 80): posts from several accounts in order

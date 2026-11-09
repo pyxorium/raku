@@ -5,7 +5,7 @@
 //     quietly leaves the lounge and comes back when it's in front again (setVisible);
 //   - the account is Raku's current account (the top bar); switching accounts leaves the lounge (Q54);
 //   - turning mingling on: the explanation first, then (when this browser hasn't approved it) one window for
-//     the account, "Play Daisy" and "Daisy lounge" together (Q54);
+//     Raku's one permission, "Raku" (since Nov 2026; before, "Play Daisy" and "Daisy lounge" together, Q54);
 //   - an invitation both said yes to: the tab goes to the table (raku:table/daisy/<id>) at the given seat;
 //   - step 5b-2: while the tab isn't in front, the page stays connected as "away" (not listed, can't be
 //     invited) and the relay may say "someone" arrived (never who): onSignal() puts the quiet mark on the tab.
@@ -93,7 +93,7 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, onSigna
     panel.dataset.state = state;
     who.hidden = state !== 'here';
     retryBtn.hidden = !['needs-signin', 'idle', 'replaced'].includes(state);
-    retryBtn.textContent = state === 'needs-signin' ? 'Approve “Daisy lounge”' : 'Rejoin the lounge';
+    retryBtn.textContent = state === 'needs-signin' ? 'Approve “Raku”' : 'Rejoin the lounge';
     if (state === 'unsupported') note(WEB_TEXT);
     else if (state === 'off') note(!account ? WAIT_TEXT : auth.coversLounge(account.did, table.id) ? OFF_TEXT_READY : OFF_TEXT);
     else if (state === 'joining') note(`Joining the lounge as @${account.handle}…`);
@@ -117,7 +117,7 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, onSigna
     try { has = await hasLoungeRecord(account.did); } catch { return; }
     if (n !== setting || !has) return;
     mingling = true;
-    if (!auth.coversLounge(account.did, table.id)) setState('needs-signin', `You mingle as @${account.handle}, but this browser hasn't approved “Daisy lounge” yet.`);
+    if (!auth.coversLounge(account.did, table.id)) setState('needs-signin', `You mingle as @${account.handle}, but this browser hasn't approved “Raku” for it yet.`);
     else join();
   }
   async function hasLoungeRecord(did) {
@@ -146,7 +146,7 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, onSigna
     const details = h('div', { class: 'rk-details' },
       h('p', {}, "While you mingle and Daisy's start screen is the tab in front, other mingling Daisy players who ask can see you and invite you to a game, and you can see and invite them (in Raku or on Daisy's own page). Players who have blocked you, or whom you've blocked, never see each other."),
       h('p', {}, "While Daisy's tab isn't in front, Raku shows a small mark when someone arrives in the lounge. It never says who. Your arrival can show the same mark to other minglers."),
-      approved ? null : h('p', {}, 'Mingling needs ', h('b', {}, 'one additional authorization'), ' from your account, ', h('b', {}, '“Daisy lounge”'), " (only this first time): a lounge record in your account (it only says that you've chosen to mingle, not whether you're here or signed in) and a pass that proves to Daisy's relay who you are. Turning mingling off deletes the record."),
+      approved ? null : h('p', {}, 'Mingling uses Raku’s permission, ', h('b', {}, '“Raku”'), ", approved again for this sign-in: a lounge record in your account (it only says that you've chosen to mingle, not whether you're here or signed in) and a pass that proves to Daisy's relay who you are. Turning mingling off deletes the record."),
       signIn || !account ? h('p', { class: 'rk-promise' }, SIGNIN_PROMISE) : null);
     const head = [h('h2', {}, 'Turn on mingling?'), h('p', { class: 'rk-lede' }, 'Other mingling Daisy players can see you and invite you while this tab is in front.')];
     const notNow = h('button', { type: 'button', onclick: () => d.close() }, 'Not now');
@@ -174,7 +174,7 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, onSigna
     if (!a) return;
     account = { did: a.did, handle: a.handle };
     if (!canMingleAs(a.did)) { mingling = false; setState('unsupported'); return; }
-    if (!auth.coversLounge(a.did, table.id)) { setState('off', "“Daisy lounge” wasn't approved, so mingling stays off."); return; }
+    if (!auth.coversLounge(a.did, table.id)) { setState('off', "“Raku” wasn't approved, so mingling stays off."); return; }
     await writeRecord();
   }
   // From the Continue press: a window first if this browser hasn't approved "Daisy lounge" for the account.
@@ -190,12 +190,12 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, onSigna
     const popup = auth.openWindow();
     if (!popup) { say('The sign-in window was blocked. Allow pop-ups for this page, then try again.'); return false; }
     const ac = new AbortController();
-    say(`Approve “Daisy lounge” in the small window from @${account.handle}'s account server…`);
+    say(`Approve “Raku” in the small window from @${account.handle}'s account server…`);
     if (btn) btn.disabled = true;
     try {
       const did = await auth.signIn(account.handle, auth.loungeScopeFor(account.did, table.id), { signal: ac.signal });
-      if (did !== account.did) { say(`That was a different account. Approve “Daisy lounge” as @${account.handle}.`); return false; }
-      if (!auth.coversLounge(did, table.id)) { say("“Daisy lounge” wasn't approved, so mingling stays off."); return false; }
+      if (did !== account.did) { say(`That was a different account. Approve “Raku” as @${account.handle}.`); return false; }
+      if (!auth.coversLounge(did, table.id)) { say("“Raku” wasn't approved, so mingling stays off."); return false; }
       say('');
       return true;
     } catch (err) {
@@ -227,7 +227,7 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, onSigna
       setState('off');
     } catch (err) {
       console.warn('[raku] lounge off', err);
-      setState('needs-signin', `Couldn't delete the lounge record: approve “Daisy lounge” as @${account.handle}, then turn mingling off again.`);
+      setState('needs-signin', `Couldn't delete the lounge record: approve “Raku” as @${account.handle}, then turn mingling off again.`);
     } finally { sw.disabled = false; }
   }
   async function retry() {
@@ -261,7 +261,7 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, onSigna
       } catch (err) {
         console.warn('[raku] lounge pass', err);
         if (ws === socket) { leaving = true; socket.close(); }
-        setState('needs-signin', `Couldn't get a lounge pass for @${account.handle}: approve “Daisy lounge” again.`);
+        setState('needs-signin', `Couldn't get a lounge pass for @${account.handle}: approve “Raku” again.`);
       }
     };
     socket.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } if (ws === socket && m && typeof m.type === 'string') onMessage(m); };
@@ -304,7 +304,7 @@ export function mountDaisyLounge(host, { table, auth, resolver, onTable, onSigna
         if (m.why === 'AccountType') { mingling = false; setState('unsupported'); }
         else if (m.why === 'NoLoungeRecord') { mingling = false; setState('off', 'Your account has no lounge record any more, so mingling is off.'); }
         else if (m.why === 'NotReady') setState('unavailable', "The lounge isn't open right now. Try again later.");
-        else setState('needs-signin', "The relay didn't accept this page's lounge pass: approve “Daisy lounge” again.");
+        else setState('needs-signin', "The relay didn't accept this page's lounge pass: approve “Raku” again.");
         break;
       case 'idle': leaving = true; setState('idle', 'You left the lounge after 10 minutes untouched. Touch the page, or press Rejoin, to come back.'); break;
       case 'replaced': leaving = true; setState('replaced', `@${account.handle} is mingling in another window now.`); break;

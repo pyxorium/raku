@@ -14,6 +14,7 @@ const ACCOUNTS = {
   'thunderbird.cafe': 'did:plc:6vxjigxrqizmbo56gojxico3',
   'thunderbirdwine.bsky.social': 'did:plc:joer5rzmwgec3dkr4srfmq45',
   'colorado.atprotocol.space': 'did:plc:ro563p5faldqu44apudq44k4',     // a third player (stage 5: "full")
+  'pyxorium.com': 'did:plc:rqbqpaaluty5v47jwciowpik',                  // a second account of the owner's (writing posts, WP2)
 };
 const PDS = 'https://pds.fakepds.net';
 const SETS = {
@@ -24,7 +25,11 @@ const SETS = {
   // Rooms (rooms step 1): the pass for the rooms relay only
   'include:cafe.thunderbird.rooms.authJoin?aud=did:web:relay.rooms.thunderbird.cafe%23rooms_relay': 'rpc:cafe.thunderbird.rooms.join?aud=did:web:relay.rooms.thunderbird.cafe%23rooms_relay',
 };
-const expand = (scope) => String(scope || '').split(' ').filter(Boolean).map((s) => SETS[s] || s).join(' ');
+// "Raku" (claude/raku-write-posts-plan.md, WP3): expanded in the grouped form Bluesky handed back in the probe (Nov 8 2026).
+// localStorage standin-partial: the server leaves tile posts out (a refused or older grant, for the "approve again" path).
+SETS['include:cafe.thunderbird.authRaku'] = 'repo?collection=cafe.thunderbird.daisy.lounge&collection=cafe.thunderbird.daisy.match&collection=cafe.thunderbird.sevenup.match&collection=cafe.thunderbird.tile.post rpc?lxm=cafe.thunderbird.daisy.lounge.enter&lxm=cafe.thunderbird.rooms.join&aud=*';
+const expandOne = (s) => (s === 'include:cafe.thunderbird.authRaku' && localStorage.getItem('standin-partial') ? SETS[s].replace('&collection=cafe.thunderbird.tile.post', '') : SETS[s] || s);
+const expand = (scope) => String(scope || '').split(' ').filter(Boolean).map(expandOne).join(' ');
 
 export class LoginContinuedInParentWindowError extends Error {
   constructor() { super('Login continued in parent window'); this.code = 'LOGIN_CONTINUED_IN_PARENT_WINDOW'; }

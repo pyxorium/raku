@@ -2,9 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseTarget } from '../src/address.js';
-import { TALKS_TO, EXCEPTION, MESSAGES_LINE } from '../src/about-page.js';
+import { TALKS_TO, EXCEPTION, MESSAGES_LINE, NO_ACCOUNT_LINE } from '../src/about-page.js';
 import { TYPEAHEAD_URL } from '../src/typeahead.js';
-import { PLC_DIRECTORY, HIDE_LIST_URL, SEARCH, RECENT, TILE_LOAD_DOMAIN, TABLES, ROOMS, MADE_BY, SOURCE_CODE, BLOG_POST, TILE_POPUPS } from '../src/config.js';
+import { SIGNIN_PROMISE, PLC_DIRECTORY, HIDE_LIST_URL, SEARCH, RECENT, TILE_LOAD_DOMAIN, TABLES, ROOMS, MADE_BY, SOURCE_CODE, BLOG_POST, TILE_POPUPS } from '../src/config.js';
 
 test('the About page has its own address', () => {
   assert.deepEqual(parseTarget('raku:about'), { ok: true, kind: 'about', uri: 'raku:about' });
@@ -36,4 +36,10 @@ test('the Messages line says when the button shows, and the page links to the bl
   assert.match(MESSAGES_LINE, /If it sends anything, a Messages button appears on its tab/);
   assert.match(MESSAGES_LINE, /At a table, the Messages button in the table’s bar/);
   assert.equal(BLOG_POST, 'https://thunderbird.cafe/blog/raku/');
+});
+
+test("\"You don't need an account\" repeats the sign-in promise word for word (WP11)", () => {
+  assert.ok(NO_ACCOUNT_LINE.endsWith(SIGNIN_PROMISE));
+  assert.match(NO_ACCOUNT_LINE, /^Browsing, searching, joining a room with a typed name, and playing the tables against the bot need no sign-in\. /);
+  assert.match(NO_ACCOUNT_LINE, /post tiles from your accounts\. It asks once/);
 });

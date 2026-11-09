@@ -1,0 +1,16 @@
+{
+  "lexicon": 1,
+  "id": "cafe.thunderbird.authRaku",
+  "description": "Raku's one permission (raku.lexicographer.space), asked once when you sign in: saving match results, the Daisy lounge, joining rooms, and posting tiles. Requested as include:cafe.thunderbird.authRaku.",
+  "defs": {
+    "main": {
+      "type": "permission-set",
+      "title": "Raku",
+      "detail": "Lets Raku save your match results, show you in rooms and game lounges, and post tiles from your account. Nothing else in your account is changed.",
+      "permissions": [
+        { "type": "permission", "resource": "repo", "collection": ["cafe.thunderbird.sevenup.match", "cafe.thunderbird.daisy.match", "cafe.thunderbird.daisy.lounge", "cafe.thunderbird.tile.post"] },
+        { "type": "permission", "resource": "rpc", "lxm": ["cafe.thunderbird.daisy.lounge.enter", "cafe.thunderbird.rooms.join"], "aud": "*" }
+      ]
+    }
+  }
+}
