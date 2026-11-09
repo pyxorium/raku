@@ -26,7 +26,8 @@ import { readPost, threadContext, whenText, groupThreads, ago } from './posts.js
 import { postCard, threadCard } from './post-card.js';
 import { searchAppmosphere, localMatches } from './search.js';
 import { createTilePosts, tileState } from './tile-posts.js';
-import { expandMotion } from './play-here.js';
+import { expandMotion, createAutoplayWatch, autoplaySize } from './play-here.js';
+import { switchButton } from './account-menu.js';
 import { createExpanded } from './expand-view.js';
 
 const SEARCH_KEEP_MS = 5 * 60 * 1000;
@@ -226,7 +227,7 @@ export function drawDiscover(ctx, { source = null, query = '' } = {}) {
   for (const s of others) right.append(preview(ctx, s, uriFor(s)));
   right.append(h('div', { class: 'dv-about' },
     h('p', {}, `Search looks at your shelf first, here in this browser, then asks ${SEARCH.name}.`),
-    h('p', {}, 'Nothing on this page runs until you ask: a tile starts when you open its card or press Play here.'),
+    h('p', {}, 'Nothing on this page runs until you ask: a tile starts when you open its card or press Play here, or, if you turn on Autoplay, when its post has been on screen a moment.'),
     h('p', {}, h('button', { type: 'button', class: 'linkish', onclick: () => tabs.go(tab.id, ABOUT_URI) }, 'About Raku \u2192'))));
 }
 
@@ -493,6 +494,11 @@ function drawTilePosts(ctx, into) {
   const { discover, alive } = ctx;
   const head = h('div', { class: 'dv-head' }, h('h1', {}, 'Tile posts'), h('p', { class: 'sub' }, SOURCES.posts.blurb));
   const refresh = h('button', { type: 'button', class: 'dv-refresh', title: 'Look again now' }, icon('reload', 16), 'Refresh');
+  // Autoplay (AU5): the switch beside Refresh, the same choice as the account menu's.
+  const { autoplay } = ctx;
+  const autoSwitch = autoplay ? switchButton(autoplay, 'Autoplay') : null;
+  const autoLabel = autoplay ? h('label', { class: 'dv-autoplay', title: 'Start a post\u2019s tile once it\u2019s been on screen a moment' }, h('span', {}, 'Autoplay'), autoSwitch) : null;
+  if (autoLabel) head.append(autoLabel);
   head.append(refresh);
   const status = h('p', { class: 'dv-status' }, 'Looking for tile posts…');
   const note = h('p', { class: 'dv-status tp-note', hidden: true });
@@ -504,8 +510,10 @@ function drawTilePosts(ctx, into) {
   into.append(head, status, note, list, empty);
   // PH2: the tile playing in a post stops when this page goes (another page in the tab, or the tab closed) or redraws.
   const { p, player } = ctx;
+  const auto = autoplay ? autoplayFor(ctx, list, autoSwitch) : null;
+  ctx.auto = auto;
   const before = p.dispose;
-  p.dispose = () => { player.stop(); if (before) before(); };
+  p.dispose = () => { player.stop(); if (auto) auto.dispose(); if (before) before(); };
   const fill = async (fresh) => {
     refresh.disabled = true;
     status.hidden = false;
@@ -520,6 +528,7 @@ function drawTilePosts(ctx, into) {
     if (!alive()) return;
     refresh.disabled = false;
     if (player.current && list.contains(player.current)) player.stop();
+    if (auto) auto.clear();
     list.replaceChildren(...r.items.map((post) => tilePostCard(ctx, post)));
     const words = [];
     if (!r.relayOk) words.push("Couldn't reach the network just now, showing accounts you know.");
@@ -531,6 +540,49 @@ function drawTilePosts(ctx, into) {
   };
   refresh.addEventListener('click', () => fill(true));
   fill(false);
+}
+
+/**
+ * Autoplay on Tile posts (claude/raku-expand-plan.md, "After C", AU1 to AU6): watches the tile posts' slots and starts the
+ * newest to be about two-thirds on screen for a moment (play-here.js createAutoplayWatch), when the switch is on. It
+ * never takes over from a tile you started or clicked yourself (one with the keys, or expanded), never restarts one you
+ * stopped with its × (while you stay on this page), and never starts one over 25 MB (AU4). Reduced motion doesn't
+ * matter here (AU6). Each playCard registers itself (add).
+ */
+function autoplayFor(ctx, list, autoSwitch) {
+  const { autoplay, player, p } = ctx;
+  const cards = new Map();                // slot → the card's autoplay side: { canAuto(), startAuto(), touched(), stopAuto() }
+  const declined = new Set();             // slots stopped with their × after starting by themselves
+  let lastPointer = 'mouse';              // "Click" or "Tap" in the label (AU3): from the last pointer seen, not the screen's kind
+  const onPointer = (e) => { lastPointer = e.pointerType === 'touch' ? 'touch' : 'mouse'; };
+  document.addEventListener('pointerdown', onPointer, true);
+  const busyByHand = () => { const cur = player.current; const c = cur && cards.get(cur); return !!(cur && (!c || c.touched())); };
+  const watch = createAutoplayWatch({
+    canStart: (slot) => {
+      const c = cards.get(slot);
+      return autoplay.on && !!c && slot.isConnected && p.el.classList.contains('front') && !declined.has(slot)
+        && player.current !== slot && !busyByHand() && c.canAuto();
+    },
+    start: (slot) => cards.get(slot)?.startAuto(),
+  });
+  const io = typeof IntersectionObserver === 'function'
+    ? new IntersectionObserver((entries) => { for (const en of entries) watch.update(en.target, en.isIntersecting ? en.intersectionRatio + 0.005 : 0); },
+      { threshold: [0, 0.25, 0.5, 0.66, 0.75, 0.9, 1] })
+    : null;
+  const unsubscribe = autoplay.onChange((on) => {
+    if (autoSwitch) autoSwitch.setAttribute('aria-checked', on ? 'true' : 'false');
+    if (on) watch.recheck();
+    else { const c = player.current && cards.get(player.current); if (c && !c.touched()) player.stop(); }   // off: an untouched one stops
+  });
+  return {
+    add(slot, side) { cards.set(slot, side); if (io) io.observe(slot); },
+    // a tile stopped (scrolled away, ×, another started): one already showing may start now (after settling)
+    settle() { if (autoplay.on) watch.recheck(); },
+    decline(slot) { declined.add(slot); },
+    get pointer() { return lastPointer; },
+    clear() { if (io) io.disconnect(); watch.stop(); cards.clear(); declined.clear(); },
+    dispose() { this.clear(); unsubscribe(); document.removeEventListener('pointerdown', onPointer, true); },
+  };
 }
 
 /** One tile post as a card (post.css's look): author, time, text, then the tile's card or "This tile can't be shown." */
@@ -603,6 +655,9 @@ function playCard(ctx, t) {
   let over = null, play = null, stopBtn = null, expandBtn = null, hint = null, hintTimer = null;
   let view = null;           // the expanded view, while open (expand-view.js)
   let place = null;          // the place now, after a trip ({ name, by, travelled, backTo, tab })
+  // Autoplay (AU2, AU3): phase says what the slot shows; byItself: started by Autoplay; touched: clicked or tapped since
+  // (or started by hand), so it has had the keys.
+  let phase = 'wait', byItself = false, touched = false;
   const clear = () => {
     for (const x of [over, play, stopBtn, expandBtn, hint]) if (x) x.remove();
     over = play = stopBtn = expandBtn = hint = null;
@@ -614,15 +669,18 @@ function playCard(ctx, t) {
   const by = () => (byLine.textContent || '').replace(/^by @/, '') || null;
   function banner() {
     clear();
+    phase = 'wait';
     if (!tile) return;
     const v = player.verdict(tile.d.declaredBytes, t.uri);
     if (v === 'refuse') { panel(h('p', {}, `This tile is too large to open (${formatBytes(tile.d.declaredBytes)}).`)); return; }
     play = h('button', { type: 'button', class: 'tp-play', 'aria-label': `Play ${name()} here`, onclick: () => press() }, icon('play', 16), 'Play here');
     slot.append(play);
+    phase = 'banner';
   }
   function press() {
     if (player.verdict(tile.d.declaredBytes, t.uri) === 'ask') {
       clear();
+      phase = 'ask';
       panel(h('p', {}, `This tile is large (${formatBytes(tile.d.declaredBytes)}). Play anyway?`),
         h('div', { class: 'tp-row' },
           h('button', { type: 'button', class: 'go', onclick: () => { player.allow(t.uri); start(); } }, 'Play anyway'),
@@ -631,9 +689,12 @@ function playCard(ctx, t) {
     }
     start();
   }
-  function start() {
+  function start({ quiet = false } = {}) {
     showPlace(null);
-    player.play({ slot, uri: t.uri, did: t.did, pds: tile.pds, d: tile.d, onState, expand: () => expand(), expanded: () => !!view });
+    byItself = quiet;
+    touched = !quiet;
+    phase = 'starting';
+    player.play({ slot, uri: t.uri, did: t.did, pds: tile.pds, d: tile.d, onState, expand: () => expand(), expanded: () => !!view, quiet });
   }
   function showPlace(info) {
     place = info && info.travelled ? info : null;
@@ -682,16 +743,23 @@ function playCard(ctx, t) {
   }
 
   function onState(kind, detail) {
-    if (kind === 'keys') { if (slot.classList.contains('playing')) slot.classList.toggle('keys', !!detail); return; }
+    if (kind === 'keys') {
+      if (slot.classList.contains('playing')) slot.classList.toggle('keys', !!detail);
+      if (detail && !touched) { touched = true; if (hint) { hint.remove(); hint = null; } }   // AU3: clicked or tapped: the keys, the ring
+      return;
+    }
     if (kind === 'place') { showPlace(detail); return; }
     if (kind === 'note') { if (view) view.note(detail); else say(detail); return; }
     if (kind === 'stopped' || kind === 'error') {
       if (view) collapse({ instant: true });
       showPlace(null);
+      byItself = false; touched = false;
+      if (kind === 'stopped') setTimeout(() => ctx.auto?.settle(), 0);
     }
     if (kind === 'stopped') { banner(); return; }
     if (kind === 'error') {
       clear();
+      phase = 'error';
       panel(h('p', {}, detail || "Couldn't load this tile."), h('div', { class: 'tp-row' }, h('button', { type: 'button', class: 'go', onclick: () => start() }, 'Try again')));
       return;
     }
@@ -706,10 +774,19 @@ function playCard(ctx, t) {
       slot.classList.add('playing');
       // EX2: expand in the corner of the playing tile, left of the × and the card's new-tab button
       expandBtn = h('button', { type: 'button', class: 'card-btn tp-expand', title: 'Expand', 'aria-label': `Expand ${name()}`, onclick: () => expand() }, icon('expand', 16));
-      stopBtn = h('button', { type: 'button', class: 'card-btn tp-stop', title: 'Stop', 'aria-label': `Stop ${name()}`, onclick: () => player.stop(slot) }, icon('close', 16));
-      hint = h('span', { class: 'tp-keys-hint', 'aria-hidden': 'true' }, 'Keys go to the tile');
-      slot.append(expandBtn, stopBtn, hint);
-      hintTimer = setTimeout(() => { if (hint) hint.classList.add('gone'); }, PLAY_HERE.hintMs);
+      // (× also tells Autoplay not to start this one again while you stay on this page)
+      stopBtn = h('button', { type: 'button', class: 'card-btn tp-stop', title: 'Stop', 'aria-label': `Stop ${name()}`, onclick: () => { ctx.auto?.decline(slot); player.stop(slot); } }, icon('close', 16));
+      phase = 'playing';
+      if (byItself && !touched) {
+        // AU3: started by itself: no keys and (the browser's hold) no sound until clicked or tapped; the label stays till then
+        const verb = ctx.auto && ctx.auto.pointer === 'touch' ? 'Tap' : 'Click';
+        hint = h('span', { class: 'tp-keys-hint tp-auto-hint', 'aria-hidden': 'true' }, `${verb} to play with keys and sound`);
+        slot.append(expandBtn, stopBtn, hint);
+      } else {
+        hint = h('span', { class: 'tp-keys-hint', 'aria-hidden': 'true' }, 'Keys go to the tile');
+        slot.append(expandBtn, stopBtn, hint);
+        hintTimer = setTimeout(() => { if (hint) hint.classList.add('gone'); }, PLAY_HERE.hintMs);
+      }
     }
   }
   return {
@@ -725,6 +802,12 @@ function playCard(ctx, t) {
       const cid = bannerCid(d.manifest);
       if (cid) kit.picture(slot, { pds, did: t.did, cid, alt });
       banner();
+      // Autoplay: this card may start by itself when its banner shows Play here and it isn't over 25 MB (AU4)
+      if (ctx.auto) ctx.auto.add(slot, {
+        canAuto: () => phase === 'banner' && autoplaySize(d.declaredBytes) && player.verdict(d.declaredBytes, t.uri) === 'start',
+        startAuto: () => start({ quiet: true }),
+        touched: () => touched || !!view,
+      });
     },
   };
 }

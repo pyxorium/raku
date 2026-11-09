@@ -365,6 +365,10 @@ export const TILE_POSTS = Object.freeze({
 // linear, chosen with the real maze; a plain fade with reduced motion, EX8); noteMs: how long a note ("The way is blocked.") shows in the
 // expanded view.
 export const PLAY_HERE = Object.freeze({ awayMs: 3000, hintMs: 2500, expand: 'window', expandMs: 400, expandEase: 'linear', noteMs: 5000 });
+// Autoplay (claude/raku-expand-plan.md, "After C", AU1 to AU6): off by default, remembered in this browser under key;
+// a tile post's tile starts by itself once share (about two-thirds) of it is on screen and has stayed so settleMs (AU2);
+// it stops as Play here does (awayMs above). Over LIMITS.askBytes it never starts by itself (AU4).
+export const AUTOPLAY = Object.freeze({ key: 'raku-autoplay', share: 0.66, settleMs: 1000 });
 // Recent tiles (stage 6c, Q106 to Q110): appmosphe.re's list of every tile it has seen, newest first by each
 // tile's createdAt, 30 a page (?page=N), shown in appmosphe.re's own order. Cards only; pictures are
 // appmosphe.re's copies (/img/), drawn as ordinary pictures straight from appmosphe.re (Q122: its /img/ answers

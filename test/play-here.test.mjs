@@ -143,3 +143,87 @@ test('round C: the expand and full-screen icons, the timings', () => {
   assert.equal(PLAY_HERE.expandEase, 'linear');
   assert.ok(PLAY_HERE.noteMs >= 3000);
 });
+
+// ---------- Autoplay (claude/raku-expand-plan.md, "After C", AU1 to AU6) ----------
+import { createAutoplaySetting, createAutoplayWatch, autoplaySize } from '../src/play-here.js';
+import { AUTOPLAY } from '../src/config.js';
+
+const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), m }; };
+
+test('AU1: Autoplay is off by default, remembered in this browser, and tells both switches when it changes', () => {
+  const store = memStore();
+  const a = createAutoplaySetting({ storage: store });
+  assert.equal(a.on, false);
+  const seen = [];
+  const off = a.onChange((on) => seen.push(on));
+  a.set(true);
+  assert.equal(a.on, true);
+  assert.equal(store.m.get(AUTOPLAY.key), 'on');
+  assert.equal(createAutoplaySetting({ storage: store }).on, true, 'a new visit remembers it');
+  a.set(true);
+  assert.deepEqual(seen, [true], 'no news when nothing changed');
+  off(); a.set(false);
+  assert.deepEqual(seen, [true], 'unsubscribed');
+  const broken = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } };
+  const b = createAutoplaySetting({ storage: broken });
+  assert.equal(b.on, false);
+  b.set(true);
+  assert.equal(b.on, true, 'without storage: for this visit only');
+});
+
+function fakeTimers() {
+  let now = 0; const list = [];
+  return {
+    setTimer: (f, ms) => { const t = { at: now + ms, f }; list.push(t); return t; },
+    clearTimer: (t) => { const i = list.indexOf(t); if (i >= 0) list.splice(i, 1); },
+    advance(ms) { now += ms; for (const t of list.filter((x) => x.at <= now).sort((x, y) => x.at - y.at)) { list.splice(list.indexOf(t), 1); t.f(); } },
+  };
+}
+
+test('AU2: a tile starts once about two-thirds of it is on screen and has stayed so a moment; scrolling past starts nothing', () => {
+  assert.equal(AUTOPLAY.share, 0.66);
+  assert.equal(AUTOPLAY.settleMs, 1000);
+  const T = fakeTimers(); const started = [];
+  const w = createAutoplayWatch({ canStart: () => true, start: (id) => started.push(id), ...T });
+  w.update('a', 0.4); T.advance(2000);
+  assert.deepEqual(started, [], 'less than two-thirds: nothing');
+  w.update('a', 0.8); T.advance(600); w.update('a', 0.3); T.advance(1000);
+  assert.deepEqual(started, [], 'scrolled past before it settled: nothing');
+  w.update('b', 0.9); T.advance(999);
+  assert.deepEqual(started, []);
+  T.advance(1);
+  assert.deepEqual(started, ['b'], 'settled: it starts');
+  w.update('b', 1); T.advance(2000);
+  assert.deepEqual(started, ['b'], 'staying in view starts it only once');
+  w.update('c', 0.7); T.advance(1000);
+  assert.deepEqual(started, ['b', 'c'], 'the newest to qualify takes over');
+});
+
+test('AU2, AU5: nothing starts while the page says no; turned on, tiles already showing start after settling', () => {
+  const T = fakeTimers(); const started = []; let ok = false;
+  const w = createAutoplayWatch({ canStart: () => ok, start: (id) => started.push(id), ...T });
+  w.update('a', 0.9); T.advance(1500);
+  assert.deepEqual(started, [], 'off (or not ready): nothing');
+  ok = true; w.recheck(); T.advance(999);
+  assert.deepEqual(started, []);
+  T.advance(1);
+  assert.deepEqual(started, ['a']);
+  w.update('z', 0.9); w.stop(); T.advance(2000);
+  assert.deepEqual(started, ['a'], 'leaving the page: nothing left waiting');
+  assert.equal(w.pending, 0);
+});
+
+test('AU4: over 25 MB never starts by itself', () => {
+  assert.equal(autoplaySize(3e6), true);
+  assert.equal(autoplaySize(LIMITS.askBytes), true);
+  assert.equal(autoplaySize(LIMITS.askBytes + 1), false);
+  assert.equal(autoplaySize(undefined), true, 'no size declared: as Play here (the tab rule) treats it');
+});
+
+test('Autoplay: the wording on Discover and the About page', async () => {
+  const fs = await import('node:fs');
+  const src = fs.readFileSync(new URL('../src/discover.js', import.meta.url), 'utf8');
+  assert.match(src, /or, if you turn on Autoplay, when its post has been on screen a moment/);
+  assert.match(PLAY_LINE, /if you turn on Autoplay/);
+  assert.match(PLAY_LINE, /off unless you turn it on/);
+});

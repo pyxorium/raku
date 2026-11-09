@@ -614,6 +614,27 @@ Decisions: `claude/raku-expand-plan.md` (EX1 to EX8, and D; mockup `claude/raku-
   `clipInset`, `wayPlan`, `createTrail`, `tabFor`) in `src/play-here.js`. Unit tests: `test/play-here.test.mjs`.
   Browser: `test/browser/check_posts.py`.
 
+### Autoplay (Nov 2026): tile posts' tiles starting by themselves, if you turn it on
+
+Decisions: `claude/raku-expand-plan.md`, "After C" (AU1 to AU6, and the sound test).
+
+- **Off by default** (AU1), remembered in this browser (`AUTOPLAY.key`, `raku-autoplay`). **The switch** (AU5): in
+  Tile posts' header beside Refresh, and a line in the account menu (signed in or not); the same choice.
+- **When** (AU2): a tile post's tile starts once about two-thirds of it is on screen (`AUTOPLAY.share`) and has stayed
+  so a moment (`settleMs`, 1 s): scrolling quickly past starts nothing. It stops as Play here does (3 s out of view).
+  One at a time: the newest to qualify takes over, but never from a tile you started or clicked yourself, or one
+  expanded. A tile you stopped with its × doesn't start again by itself while you stay on the page; when a tile stops,
+  one already showing may start.
+- **Before you touch it** (AU3): it takes no keys, and browsers hold back its sound (tried in Edge, Nov 8: a framed
+  tile like Raku's is held silent until clicked inside). A label stays at its bottom left, "Click to play with keys
+  and sound" ("Tap…" after a touch), until it's clicked or tapped; then the keys and the ring. Expanding it gives it
+  the keys too.
+- **Big tiles** (AU4): over 25 MB never start by themselves; they keep Play here and its question.
+- **Reduced motion** (AU6): doesn't turn it off (you turned it on); expanding still fades.
+- Code: `createAutoplaySetting`, `createAutoplayWatch`, `autoplaySize` in `src/play-here.js`; `autoplayFor` and
+  `playCard` in `src/discover.js`; the quiet start (`quiet`) in `playInPost`, `src/app.js`; the menu row and
+  `switchButton` in `src/account-menu.js`. Unit tests: `test/play-here.test.mjs`. Browser: `test/browser/check_posts.py`.
+
 ## Try it
 
 ```
@@ -657,7 +678,7 @@ and open http://127.0.0.1:5181/.
 | `src/discover.js` | stage 6: the Discover page (sources, Tile news, Tile posts, Recent tiles, Following, search results, previews; Make a tile) |
 | `src/following.js` | the newest tiles of the accounts on your shelf, and "New since your last visit" |
 | `src/tile-posts.js` | tile posts (Nov 2026): finding the accounts (the relay, and its fallback), reading and checking `cafe.thunderbird.tile.post` records, newest first |
-| `src/play-here.js` | Play here (Nov 2026): the size rule, one tile at a time, the out-of-view timer; round C: how expanding moves, where a portal leads, the trail of places in a post (the frame itself is `playInPost` in `app.js`) |
+| `src/play-here.js` | Play here (Nov 2026): the size rule, one tile at a time, the out-of-view timer; round C: how expanding moves, where a portal leads, the trail of places in a post; Autoplay: the remembered choice and when a tile starts by itself (the frame itself is `playInPost` in `app.js`) |
 | `src/expand-view.js` | round C: a tile post's tile expanded to Raku's window (the bar, the tile pinned and moved, never reloaded) |
 | `src/recent.js` | stage 6c: Recent tiles, appmosphe.re's list read carefully and moderated |
 | `src/marks.js` | stage 6c: when you last visited Following and Recent tiles (this device only) |
@@ -700,7 +721,7 @@ Following (order, hidden ones, "New"), search from the box and from Discover (no
 with only the words), a word with a dot as a handle first, Tile news from a stand-in feed with a post linking a tile,
 hand-picked posts mixed in by date, loading the next batch on scroll (and More without IntersectionObserver), labels, replies with their thread, the link message (Cancel, Escape, Open with no opener), a post's address in the box, the phone.
 
-`check_posts.py` (129 checks, tile posts, Play here and round C) runs the same way as `check_discover.py`, with the loader replica
+`check_posts.py` (152 checks, tile posts, Play here, round C and Autoplay) runs the same way as `check_discover.py`, with the loader replica
 running too (`node test/browser/loader-replica.mjs <tiles-loading-server folder>`, port 80): posts from several accounts in order
 (the relay's, the owner's, the shelf's), the author and time, the tile's card with its banner described by the post's
 `alt` (or the tile's description), a hidden account (its server not asked) and a hidden tile, a deleted and a changed
@@ -719,7 +740,10 @@ card's line, its new-tab button opening the way taken, its Back to), the expande
 it, another tab coming to the front, the window opening and closing (400 ms, linear; an old test switch ignored) and
 reduced motion's fade, the
 phone (the bar in two rows, the tile edge to edge), the installed window with its title bar folded away (the bar's
-buttons clear of the window's own, also after the window is resized, the bar moving the window).
+buttons clear of the window's own, also after the window is resized, the bar moving the window)); Autoplay: off by default, the two switches, a tile showing starting by itself, quiet (no keys,
+its label) until clicked, not taking over a clicked one, × meaning not again, never over 25 MB, scrolling past
+starting nothing, remembered, expanding giving the keys, turned off stopping it, the wording, reduced motion, the
+phone's "Tap".
 
 `check_daisy.py` (63 checks, stage 5) bundles and starts everything itself (Raku's page with the stand-in
 sign-in, the loader replica, daisy-tiles' stand-in relay, and the site's Daisy page bundled with a stand-in

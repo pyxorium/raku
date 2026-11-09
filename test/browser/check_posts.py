@@ -16,6 +16,10 @@
 # Stay here, a large place's question, a dormant way); shrinking back after a trip ("Now in" on the card, the new-tab
 # button opening the way taken); stopping resetting it; the phone (the bar in two rows, the tile edge to edge); the
 # installed window with its title bar folded away (the bar's buttons clear of the window's own).
+# Autoplay (claude/raku-expand-plan.md, "After C", AU1 to AU6): off by default; the two switches; a tile showing
+# starting by itself, quiet (no keys, its label) until clicked; not taking over a clicked one; × meaning not again; never
+# over 25 MB; scrolling past starting nothing; remembered; expanding giving the keys; turned off stopping it; the wording;
+# reduced motion; the phone's "Tap".
 # Everything outside is a Playwright route (the account directory, the relay, account servers, Bluesky's public API
 # and its picture server, the hide list). Tiles aren't run here (check_page.py does that).
 # Usage: python3 test/browser/check_posts.py <work folder>   (servers.mjs and the loader replica already running, as for
@@ -724,6 +728,110 @@ with sync_playwright() as pw:
     page.click('.tp-x-close')
     check('...and × closes it there', wait_for(lambda: page.query_selector('.tp-x') is None, page=page))
     ctx10.close()
+
+    # ================= Autoplay (claude/raku-expand-plan.md, "After C", AU1 to AU6) =================
+    playing_post = lambda: page.evaluate("() => { const f = document.querySelector('.tile-post iframe.tp-frame'); return f ? f.closest('.tile-post').querySelector('.post-text').textContent : null; }")
+    has_keys = lambda: page.evaluate('() => !!document.activeElement && document.activeElement.classList.contains("tp-frame")')
+    def centre(text):
+        page.eval_on_selector(post_sel(text), 'e => e.scrollIntoView({ block: "center" })')
+    ctx11 = new_ctx()
+    page = ctx11.new_page()
+    aerrors = []
+    page.on('pageerror', lambda e: aerrors.append(str(e)))
+    page.goto(PLAY_URL); page.wait_for_selector('.discover')
+    W1 = post_sel('A tile with ways')
+    wait_for(lambda: page.is_visible(f'{W1} .tp-play'), page=page)
+    page.wait_for_timeout(2500)
+    check('AU1: Autoplay is off by default: nothing starts by itself', frames() == 0)
+    sw = '.dv-head .dv-autoplay .rk-switch'
+    check('AU5: the switch in Tile posts\' header, beside Refresh: "Autoplay", off', page.is_visible(sw) and page.get_attribute(sw, 'aria-checked') == 'false'
+          and page.inner_text('.dv-head .dv-autoplay') == 'Autoplay' and page.evaluate("() => document.querySelector('.dv-autoplay').nextElementSibling.classList.contains('dv-refresh')"))
+    page.click('.account-btn')
+    msw = '.account-menu .acct-autoplay .rk-switch'
+    check('AU5: and a line in the account menu (signed out too), off', page.is_visible(msw) and page.get_attribute(msw, 'aria-checked') == 'false'
+          and 'Autoplay tile posts' in page.inner_text('.acct-autoplay'))
+    page.keyboard.press('Escape')
+    page.click(sw)
+    started = wait_for(lambda: frames() == 1, 8, page=page)
+    first = playing_post()
+    check('AU2: turned on, a tile already showing starts by itself after a moment (one at a time)', started and first in ('A tile with ways', 'A second tile'), str(first))
+    FS = post_sel(first)
+    lab = wait_for(lambda: page.is_visible(f'{FS} .tp-auto-hint') and page.inner_text(f'{FS} .tp-auto-hint'), 20, page=page)
+    check('AU3: its label: "Click to play with keys and sound", which stays', lab == 'Click to play with keys and sound', str(lab))
+    page.wait_for_timeout(3000)
+    check('AU3: it takes no keys (no ring) while untouched', not has_keys() and not page.eval_on_selector(f'{FS} .tp-slot', 's => s.classList.contains("keys")')
+          and page.is_visible(f'{FS} .tp-auto-hint'))
+    page.click('.account-btn')
+    check('AU5: the account menu\'s switch says on too', page.get_attribute(msw, 'aria-checked') == 'true')
+    page.keyboard.press('Escape')
+    box = page.eval_on_selector(f'{FS} .tp-slot', 's => { const r = s.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }')
+    page.mouse.click(box[0], box[1])
+    check('AU3: clicked: the keys and the ring, the label gone', wait_for(lambda: has_keys(), page=page) and wait_for(lambda: page.query_selector(f'{FS} .tp-auto-hint') is None, page=page)
+          and page.eval_on_selector(f'{FS} .tp-slot', 's => s.classList.contains("keys")'))
+    # a tile you've clicked isn't taken over
+    other = 'A second tile' if first == 'A tile with ways' else 'A tile with ways'
+    page.evaluate("() => document.querySelector('.pane.front').scrollBy(0, 60)")
+    page.wait_for_timeout(2000)
+    check('...a tile you\'ve clicked isn\'t taken over by another one showing', playing_post() == first, str(playing_post()))
+    # × : not again while you stay
+    page.click(f'{FS} .tp-stop')
+    wait_for(lambda: page.is_visible(f'{FS} .tp-play'), page=page)
+    page.eval_on_selector(FS, """p => { window.__again = false; new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes)
+      if (n.classList && n.classList.contains('tp-frame')) window.__again = true; }).observe(p.querySelector('.tp-slot'), { childList: true }); }""")
+    page.wait_for_timeout(2500)
+    check('stopped with its ×: it doesn\'t start again by itself while you stay on the page', not page.evaluate('window.__again') and playing_post() != first, str(playing_post()))
+    # the large one never starts by itself (AU4)
+    page.click(f'{post_sel(playing_post())} .tp-stop') if playing_post() else None
+    centre('A large tile')
+    page.wait_for_timeout(3000)
+    LG = post_sel('A large tile')
+    check('AU4: a tile over 25 MB never starts by itself: Play here and its question as before', playing_post() != 'A large tile' and page.is_visible(f'{LG} .tp-play'), str(playing_post()))
+    # scrolling to a filler: it starts; scrolled past quickly: nothing
+    centre('Filler 2')
+    check('AU2: scrolled to another post, it starts by itself there', wait_for(lambda: playing_post() == 'Filler 2', 8, page=page), str(playing_post()))
+    centre('Filler 4'); page.wait_for_timeout(300); centre('Filler 2')
+    page.wait_for_timeout(2000)
+    check('...scrolled past another quickly: that one didn\'t start', playing_post() == 'Filler 2', str(playing_post()))
+    # remembered in this browser
+    page.reload(); page.wait_for_selector('.discover')
+    check('AU1: remembered in this browser: still on after a reload, and a tile starts by itself', page.get_attribute(sw, 'aria-checked') == 'true' and wait_for(lambda: frames() == 1, 10, page=page))
+    first = playing_post(); FS = post_sel(first)
+    wait_for(lambda: page.is_visible(f'{FS} .tp-auto-hint'), 20, page=page)
+    page.click(f'{FS} .tp-expand')
+    check('expanding a tile that started by itself gives it the keys (the label goes)', wait_for(lambda: page.is_visible('.tp-x'), page=page) and wait_for(lambda: has_keys(), page=page)
+          and page.query_selector(f'{FS} .tp-auto-hint') is None)
+    page.click('.tp-x-close'); wait_for(lambda: page.query_selector('.tp-x') is None, page=page)
+    page.click(f'{FS} .tp-stop'); wait_for(lambda: frames() == 0, page=page)
+    page.wait_for_timeout(200)
+    # (any tile starting meanwhile is untouched) turning it off stops an untouched one
+    centre('Filler 3')
+    wait_for(lambda: playing_post() == 'Filler 3', 8, page=page)
+    page.click('.account-btn'); page.click(msw); page.keyboard.press('Escape')
+    check('turned off (from the account menu): an untouched tile stops; the header\'s switch says off', wait_for(lambda: frames() == 0, page=page) and page.get_attribute(sw, 'aria-checked') == 'false')
+    page.wait_for_timeout(2000)
+    check('...and nothing starts by itself any more', frames() == 0)
+    check('the wording on Discover says so', 'if you turn on Autoplay, when its post has been on screen a moment' in page.inner_text('.dv-right'))
+    page.goto(RAKU + '#t=raku%3Aabout&a=0'); page.wait_for_selector('.about')
+    check('...and the About page', 'if you turn on Autoplay' in page.inner_text('.about') and 'off unless you turn it on' in page.inner_text('.about'))
+    check('no page errors with Autoplay', not aerrors, str(aerrors))
+    ctx11.close()
+    # AU6: reduced motion doesn't stop it; a phone says "Tap"
+    ctx12 = new_ctx(reduced_motion='reduce')
+    ctx12.add_init_script("try { localStorage.setItem('raku-autoplay', 'on'); } catch {}")
+    page = ctx12.new_page(); page.goto(PLAY_URL); page.wait_for_selector('.discover')
+    check('AU6: with reduced motion, Autoplay (turned on) still starts tiles', wait_for(lambda: frames() == 1, 10, page=page))
+    ctx12.close()
+    ctx13 = new_ctx(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True, device_scale_factor=2)
+    ctx13.add_init_script("try { localStorage.setItem('raku-autoplay', 'on'); } catch {}")
+    page = ctx13.new_page(); page.goto(PLAY_URL); page.wait_for_selector('.discover')
+    page.tap('.dv-head h1')
+    wait_for(lambda: frames() == 1, 10, page=page)
+    first = playing_post(); FS = post_sel(first)
+    lab = wait_for(lambda: page.is_visible(f'{FS} .tp-auto-hint') and page.inner_text(f'{FS} .tp-auto-hint'), 20, page=page)
+    check('phone: an auto-started tile says "Tap to play with keys and sound"', lab == 'Tap to play with keys and sound', str(lab))
+    check('...the header (switch and Refresh) fits the width', page.evaluate('document.documentElement.scrollWidth <= innerWidth') and page.is_visible(sw))
+    page.screenshot(path=str(OUT / 'autoplay-phone.png'))
+    ctx13.close()
     state['play'] = False
     b.close()
 

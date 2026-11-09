@@ -52,7 +52,7 @@ import { groupThreads } from './posts.js';
 import { createRooms } from './room-tab.js';
 import { setLeaveWarning } from './signin-ui.js';
 import { isInstalled } from './app-shell.js';
-import { playVerdict, createOneAtATime, wayPlan, createTrail, tabFor } from './play-here.js';
+import { playVerdict, createOneAtATime, wayPlan, createTrail, tabFor, createAutoplaySetting } from './play-here.js';
 
 export function mountRaku(root, { mothership, resolver, moderation, files, shelf, auth, storage = null, session = null, returned = null, keepForReturn = () => {}, loc = globalThis.location, hist = globalThis.history, tableDeps = {}, install = null }) {
   const kit = createCardKit({ files });
@@ -126,7 +126,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   }
   // "Sign in in this tab instead" (Q41): what to pick up afterwards, with the open tabs.
   const keep = (info) => keepForReturn({ ...info, hash: tabs.toHash() });
-  const menu = createAccountMenu({ auth, moderation, keepForReturn: keep, say: (t) => say(t), onAbout: () => goAbout(), install });
+  // Autoplay (AU1, AU5): one choice for this browser, shown in the account menu and Tile posts' header.
+  const autoplay = createAutoplaySetting({ storage });
+  const menu = createAccountMenu({ auth, moderation, keepForReturn: keep, say: (t) => say(t), onAbout: () => goAbout(), install, autoplay });
   let pendingReturn = returned && returned.pending ? returned.pending : null;
   const stage = h('main', { class: 'stage' });
   const sheetList = h('ul', { class: 'sheet-list' });
@@ -394,7 +396,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   function pageContext(p, tab) {
     const mine = p.attempt;
     return {
-      p, tab, kit, shelf, tabs, resolver, moderation, openNew, say, drawChrome, discover, linkMessage, player,
+      p, tab, kit, shelf, tabs, resolver, moderation, openNew, say, drawChrome, discover, linkMessage, player, autoplay,
       alive: () => mine === p.attempt,
       status: (kind, text, ...actions) => status(p, kind, text, ...actions),
       hideStatus: () => hideStatus(p),
@@ -716,9 +718,10 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   // onState(kind, detail): 'starting' | 'slow' | 'playing' | 'keys' (detail: true/false) | 'stopped' | 'error' (detail: words)
   //   | 'place' (detail: { name, by, travelled, backTo, tab }: the place now, after a trip or Back) | 'note' (detail: words)
   // expand(): the slot expanded to Raku's window (a promise, once it has grown); expanded(): whether it is.
-  function playInPost({ slot, uri, did, pds, d, onState, expand = null, expanded = () => false }) {
+  // quiet (Autoplay, AU3): started by itself, so it takes no keys until it is clicked or tapped (or expanded).
+  function playInPost({ slot, uri, did, pds, d, onState, expand = null, expanded = () => false, quiet = false }) {
     const pane = { post: true, el: slot, slot, frame: null, ways: null, attempt: 0, arrival: null, timers: [], observer: null, state: 'loading', failed: null,
-      onState, expand, expanded, inView: true, big: false, screen: null, tripStarted: null, trip: 0,
+      onState, expand, expanded, quiet, inView: true, big: false, screen: null, tripStarted: null, trip: 0,
       trail: createTrail({ uri, did, pds, d, name: d.name, by: null }) };
     postSlots.start(slot, () => endPost(pane));
     playing = pane;
@@ -760,7 +763,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
         if (first) pane.onState('playing');
         if (pane.screen) { const s = pane.screen; pane.timers.push(setTimeout(() => { if (alive() && pane.screen === s) revealScreen(pane, 0); }, pane.ways ? WAYS.helloMs : WAYS.plainMs)); }
         // PH4: the keys at once, as a tab gives them (RW10), twice as its page settles
-        else for (const ms of KEYS_AFTER_MS) pane.timers.push(setTimeout(() => { if (alive() && !pane.screen) focusPost(pane); }, ms));
+        else if (!pane.quiet) for (const ms of KEYS_AFTER_MS) pane.timers.push(setTimeout(() => { if (alive() && !pane.screen) focusPost(pane); }, ms));
       },
     });
     const tile = new Tile(mothership, place.uri, d.manifest, loader);
@@ -792,7 +795,12 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     focusTile(pane);
   }
   // The ring (PH4): on while the tile's frame holds the keys. Focus moving into a frame blurs Raku's window.
-  const keysToPost = () => { if (playing) playing.onState('keys', document.activeElement === playing.frame); };
+  const keysToPost = () => {
+    if (!playing) return;
+    const has = document.activeElement === playing.frame;
+    if (has) playing.quiet = false;          // (an auto-started tile, clicked or tapped: it has the keys now, AU3)
+    playing.onState('keys', has);
+  };
   addEventListener('blur', () => setTimeout(keysToPost, 0));
   addEventListener('focus', () => setTimeout(keysToPost, 0));
   document.addEventListener('focusin', keysToPost);

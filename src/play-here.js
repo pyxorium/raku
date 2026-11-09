@@ -12,8 +12,10 @@
 //   EX8  when the system asks for reduced motion, a plain fade instead
 //   D    travel inside the post (EX6, EX7): a portal's signpost read as a tab reads it (wayPlan); the places passed
 //        through in this post kept in a small trail, so "Back to …" arrives at the portal left by (createTrail)
+// Autoplay ("After C", AU1 to AU6): the remembered choice (createAutoplaySetting) and when a tile starts by itself
+//   (createAutoplayWatch, autoplaySize)
 
-import { LIMITS, PLAY_HERE } from './config.js';
+import { LIMITS, PLAY_HERE, AUTOPLAY } from './config.js';
 import { sizeVerdict } from './tiles.js';
 
 /** What pressing Play does for a tile of this size: 'start' | 'ask' | 'refuse'. `ok`: tiles already let through. */
@@ -121,3 +123,61 @@ export function tabFor(trail, wayUri) {
   if (at.way && at.way.did && at.way.rkey) return { uri: wayUri(at.way.did, at.way.rkey), state: at.way.door ? { door: at.way.door } : null };
   return { uri: at.uri, state: null };
 }
+
+// ---------- Autoplay (claude/raku-expand-plan.md, "After C", AU1 to AU6) ----------
+/**
+ * The "Autoplay tiles" choice (AU1: off by default; remembered in this browser, as the post-app choice is; AU5: the
+ * switch is in Tile posts' header and the account menu, both reading and writing this). { on, set(on), onChange(fn) }.
+ */
+export function createAutoplaySetting({ storage = null, key = AUTOPLAY.key } = {}) {
+  let on = false;
+  try { on = storage?.getItem(key) === 'on'; } catch { on = false; }
+  const listeners = new Set();
+  return {
+    get on() { return on; },
+    set(value) {
+      const next = !!value;
+      if (next === on) return;
+      on = next;
+      try { storage?.setItem(key, on ? 'on' : 'off'); } catch { /* fine: this visit only */ }
+      for (const fn of [...listeners]) fn(on);
+    },
+    onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+  };
+}
+
+/**
+ * When a tile post's tile starts by itself (AU2): once about two-thirds of its box is on screen (share) and has stayed
+ * so for settleMs (scrolling quickly past starts nothing). update(id, ratio) as the page sees each tile; start(id) is
+ * called when one qualifies and canStart(id) agrees (the switch on, the tile ready and small enough, AU4, …); the newest
+ * to qualify takes over, as one at a time already does. recheck() after the switch is turned on: tiles already showing
+ * qualify after settling. Timers come in for the tests.
+ */
+export function createAutoplayWatch({ share = AUTOPLAY.share, settleMs = AUTOPLAY.settleMs, canStart, start,
+  setTimer = (f, ms) => setTimeout(f, ms), clearTimer = (t) => clearTimeout(t) }) {
+  const ratios = new Map();
+  const pending = new Map();
+  const cancel = (id) => { if (pending.has(id)) { clearTimer(pending.get(id)); pending.delete(id); } };
+  const arm = (id) => {
+    if (pending.has(id)) return;
+    pending.set(id, setTimer(() => {
+      pending.delete(id);
+      if ((ratios.get(id) || 0) >= share && canStart(id)) start(id);
+    }, settleMs));
+  };
+  return {
+    update(id, ratio) {
+      const was = ratios.get(id) || 0;
+      ratios.set(id, ratio);
+      if (ratio < share) cancel(id);
+      else if (was < share) arm(id);
+    },
+    recheck() { for (const [id, r] of ratios) if (r >= share) arm(id); },
+    forget(id) { cancel(id); ratios.delete(id); },
+    stop() { for (const id of [...pending.keys()]) cancel(id); ratios.clear(); },
+    get pending() { return pending.size; },
+  };
+}
+
+/** AU4: a tile over the size Raku asks about (25 MB) never starts by itself; it keeps Play here and its question. */
+export const autoplaySize = (bytes) => !(Number.isFinite(bytes) && bytes > LIMITS.askBytes);

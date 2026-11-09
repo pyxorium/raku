@@ -2,14 +2,14 @@
 // computer and between the Raku label and the address on a phone. It opens a menu (a sheet from the
 // bottom on a phone): the accounts signed in on this browser with a tick on the current one (choosing one
 // switches, no window: Q38), Add another account, the "Saves without asking" choices with Turn off (Q37),
-// Raku's sign-in promise (Q43), and Sign out; then "Install Raku" when the browser offers it (stage 9, S3);
-// last, a link to the About page (going public, Q134).
+// Raku's sign-in promise (Q43), and Sign out; then the Autoplay switch (claude/raku-expand-plan.md, AU5), "Install
+// Raku" when the browser offers it (stage 9, S3); last, a link to the About page (going public, Q134).
 import { SIGNIN_PROMISE, TABLES } from './config.js';
 import { h } from './cards.js';
 import { icon } from './icons.js';
 import { signInForm, avatarEl } from './signin-ui.js';
 
-export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbout = null, install = null }) {
+export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbout = null, install = null, autoplay = null }) {
   const button = h('button', { type: 'button', class: 'account-btn', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', onclick: () => toggle() });
   const panel = h('div', { class: 'account-menu', hidden: true, role: 'dialog', 'aria-label': 'Your accounts' });
   const avatars = new Map();             // did → avatar address (Bluesky's picture server), once known
@@ -54,6 +54,11 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
     const outcome = await install.prompt();
     if (outcome === 'accepted') say('Raku is installed. You’ll find it with your other apps.');
   } }, icon('install', 16), 'Install Raku: its own window and icon') : null);
+  // AU5: the same switch as in Tile posts' header (one choice for this browser; signed in or not).
+  const autoplayRow = () => (autoplay ? h('div', { class: 'acct-autoplay' },
+    h('span', { class: 'acct-autoplay-words' }, h('span', {}, 'Autoplay tile posts'),
+      h('span', { class: 'small' }, 'A post\u2019s tile starts once it\u2019s been on screen a moment; silent and without the keys until you click it.')),
+    switchButton(autoplay, 'Autoplay tile posts')) : null);
   const aboutRow = () => (onAbout ? h('button', { type: 'button', class: 'acct-about', onclick: () => { toggle(false); onAbout(); } }, icon('info', 16), 'About Raku: privacy and safety') : null);
   function drawPanel() {
     const list = auth.list();
@@ -64,6 +69,7 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
       const f = form({ label: 'Sign in' });
       parts.push(h('p', { class: 'small' }, 'Browsing never needs a sign-in. Signing in is only for saving match results from the tables.'), f.el,
         h('p', { class: 'rk-promise' }, SIGNIN_PROMISE), installRow(), aboutRow());
+      parts.splice(parts.length - 2, 0, autoplayRow());
       panel.replaceChildren(...parts.filter(Boolean));
       return f;
     }
@@ -87,7 +93,7 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
     parts.push(h('p', { class: 'rk-promise' }, SIGNIN_PROMISE));
     const cur = auth.current();
     if (cur) parts.push(h('button', { type: 'button', class: 'acct-out', onclick: async () => { const hd = cur.handle; await auth.signOut(cur.did); draw(); say(`Signed out @${hd}.`); } }, `Sign out @${cur.handle}`));
-    parts.push(installRow(), aboutRow());
+    parts.push(autoplayRow(), installRow(), aboutRow());
     panel.replaceChildren(...parts.filter(Boolean));
     return f;
   }
@@ -106,6 +112,14 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) { toggle(false); button.focus(); } });
   auth.onChange(() => draw());
   if (install) install.onChange(() => draw());
+  if (autoplay) autoplay.onChange(() => draw());
   draw();
   return { button, panel, toggle, draw };
+}
+
+/** An on/off switch for the Autoplay choice (AU5), drawn the same in the account menu and Tile posts' header. */
+export function switchButton(autoplay, label) {
+  const b = h('button', { type: 'button', class: 'rk-switch', role: 'switch', 'aria-label': label, 'aria-checked': autoplay.on ? 'true' : 'false',
+    onclick: () => autoplay.set(!autoplay.on) });
+  return b;
 }

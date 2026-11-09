@@ -32,7 +32,7 @@ export const TALKS_TO = Object.freeze([
 export const MESSAGES_LINE = 'A tile can only talk to Raku. If it sends anything, a Messages button appears on its tab and shows what it sent. At a table, the Messages button in the table’s bar shows everything passing between its tiles.';
 
 /** Play here (Nov 2026): when a tile runs on Discover. */
-export const PLAY_LINE = 'A tile runs only when you open it, or press Play here on a tile post; one plays in a post at a time, and it stops when you scroll away from it.';
+export const PLAY_LINE = 'A tile runs only when you open it, or press Play here on a tile post (or, if you turn on Autoplay, when a tile post has been on screen a moment: it is off unless you turn it on, a tile that starts by itself gets the keys only when you click it, and browsers hold back its sound until then); one plays in a post at a time, and it stops when you scroll away from it.';
 
 export const EXCEPTION = 'a tile can open a link in a new tab when you click it, and that link could carry information about what you did in the tile. It’s the same as clicking a link on any web page, so use the same care.';
 
