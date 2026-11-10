@@ -3,13 +3,14 @@
 // bottom on a phone): the accounts signed in on this browser with a tick on the current one (choosing one
 // switches, no window: Q38), Add another account, the "Saves without asking" choices with Turn off (Q37),
 // Raku's sign-in promise (Q43), and Sign out; then the Autoplay switch (claude/raku-expand-plan.md, AU5), "Install
-// Raku" when the browser offers it (stage 9, S3); last, a link to the About page (going public, Q134).
-import { SIGNIN_PROMISE, TABLES } from './config.js';
+// Raku" when the browser offers it (stage 9, S3); last, a link to the About page (going public, Q134). Above Autoplay,
+// the Look row and the Light style row (claude/raku-light-mode-plan.md, LM7, LM14).
+import { SIGNIN_PROMISE, TABLES, LIGHT_STYLES } from './config.js';
 import { h } from './cards.js';
 import { icon } from './icons.js';
 import { signInForm, avatarEl } from './signin-ui.js';
 
-export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbout = null, install = null, autoplay = null }) {
+export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbout = null, install = null, autoplay = null, look = null }) {
   const button = h('button', { type: 'button', class: 'account-btn', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', onclick: () => toggle() });
   const panel = h('div', { class: 'account-menu', hidden: true, role: 'dialog', 'aria-label': 'Your accounts' });
   const avatars = new Map();             // did → avatar address (Bluesky's picture server), once known
@@ -59,6 +60,31 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
     h('span', { class: 'acct-autoplay-words' }, h('span', {}, 'Autoplay tile posts'),
       h('span', { class: 'small' }, 'A post\u2019s tile starts once it\u2019s been on screen a moment; silent and without the keys until you click it.')),
     switchButton(autoplay, 'Autoplay tile posts')) : null);
+  // LM7: Match device · Light · Dark, the current one filled. LM14: the six light styles as round swatches (each its
+  // style's strip with a dot of its turquoise), shown only when light can appear; with Match device on a device that's
+  // dark now, a note says when it's used. A tap changes Raku at once.
+  const LOOKS = [['device', 'Match device'], ['light', 'Light'], ['dark', 'Dark']];
+  const lookRows = () => {
+    if (!look) return null;
+    const lookRow = h('div', { class: 'acct-look' }, h('span', { class: 'acct-look-label', id: 'acct-look-label' }, 'Look'),
+      h('div', { class: 'rk-seg', role: 'group', 'aria-labelledby': 'acct-look-label' }, ...LOOKS.map(([v, words]) =>
+        h('button', { type: 'button', class: 'rk-seg-btn', 'aria-pressed': look.look === v ? 'true' : 'false', 'data-focus-key': `look-${v}`,
+          onclick: () => look.setLook(v) }, words))));
+    if (look.look === 'dark') return h('div', { class: 'acct-looks' }, lookRow);
+    const chosen = LIGHT_STYLES.find((st) => st.id === look.style);
+    const swatches = LIGHT_STYLES.map((st) => {
+      const b = h('button', { type: 'button', class: 'rk-swatch', 'aria-pressed': st.id === look.style ? 'true' : 'false', 'aria-label': st.name,
+        title: st.name, 'data-focus-key': `style-${st.id}`, onclick: () => look.setStyle(st.id) });
+      b.style.setProperty('--sw-strip', st.strip);   // the style's own colours, from config.js (not the page's)
+      b.style.setProperty('--sw-dot', st.dot);
+      return b;
+    });
+    const styleRow = h('div', { class: 'acct-style' },
+      h('span', { class: 'acct-style-words', id: 'acct-style-label' }, 'Light style: ', h('b', {}, chosen ? chosen.name : '')),
+      h('div', { class: 'rk-swatches', role: 'group', 'aria-labelledby': 'acct-style-label' }, ...swatches),
+      look.look === 'device' && !look.deviceLight ? h('span', { class: 'small acct-style-note' }, 'Used when your device is light.') : null);
+    return h('div', { class: 'acct-looks' }, lookRow, styleRow);
+  };
   const aboutRow = () => (onAbout ? h('button', { type: 'button', class: 'acct-about', onclick: () => { toggle(false); onAbout(); } }, icon('info', 16), 'About Raku: privacy and safety') : null);
   function drawPanel() {
     const list = auth.list();
@@ -69,7 +95,7 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
       const f = form({ label: 'Sign in' });
       parts.push(h('p', { class: 'small' }, 'Browsing never needs a sign-in. Signing in is only for saving match results from the tables.'), f.el,
         h('p', { class: 'rk-promise' }, SIGNIN_PROMISE), installRow(), aboutRow());
-      parts.splice(parts.length - 2, 0, autoplayRow());
+      parts.splice(parts.length - 2, 0, lookRows(), autoplayRow());
       panel.replaceChildren(...parts.filter(Boolean));
       return f;
     }
@@ -93,7 +119,7 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
     parts.push(h('p', { class: 'rk-promise' }, SIGNIN_PROMISE));
     const cur = auth.current();
     if (cur) parts.push(h('button', { type: 'button', class: 'acct-out', onclick: async () => { const hd = cur.handle; await auth.signOut(cur.did); draw(); say(`Signed out @${hd}.`); } }, `Sign out @${cur.handle}`));
-    parts.push(autoplayRow(), installRow(), aboutRow());
+    parts.push(lookRows(), autoplayRow(), installRow(), aboutRow());
     panel.replaceChildren(...parts.filter(Boolean));
     return f;
   }
@@ -113,6 +139,12 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
   auth.onChange(() => draw());
   if (install) install.onChange(() => draw());
   if (autoplay) autoplay.onChange(() => draw());
+  // A new look draws the menu again; the button just pressed keeps the focus (keyboard, screen readers).
+  if (look) look.onChange(() => {
+    const was = panel.contains(document.activeElement) ? document.activeElement.getAttribute('data-focus-key') : null;
+    draw();
+    if (was) panel.querySelector(`[data-focus-key="${was}"]`)?.focus();
+  });
   draw();
   return { button, panel, toggle, draw };
 }

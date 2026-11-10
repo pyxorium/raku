@@ -363,7 +363,8 @@ Plan and decisions: `claude/raku-launch-plan.md` (Q133, Q134).
 Plan and decisions: `claude/raku-stage9-plan.md` (S1 to S5). Raku can be installed (Chrome and Edge on computers
 and Android; Add to Home Screen on an iPhone; Add to Dock in Safari on a Mac) and opens in its own window.
 
-- `public/manifest.webmanifest`: the name, its own window (`standalone`), the charcoal theme colour, `/` as start and
+- `public/manifest.webmanifest`: the name, its own window (`standalone`), a mid-tone theme colour (between the light and
+  dark looks, since Nov 2026; the page's own `theme-color` lines take over once it opens), `/` as start and
   scope, and the app icons: `icon-192.png` and `icon-512.png` (the pot on the rounded charcoal tile) and
   `icon-maskable-192.png` / `-512.png` (full-bleed charcoal, the pot inside Android's safe zone). The icon sheet's
   T2. `apple-touch-icon.png` is T2 too.
@@ -720,6 +721,27 @@ colour change, is a change to the names alone.
   run with each screenshot also photographed with the old style sheet on the same page (computed colours of every
   element identical); fresh loads of the old and new Raku compared screen by screen.
 
+## Light mode (Nov 2026)
+
+The second push of `claude/raku-light-mode-plan.md` (LM1 to LM17). Raku follows the device's light or dark setting; the
+account menu has a **Look** row (Match device · Light · Dark, starting at Match device) and, under it while light can
+appear, a **Light style** row of six swatches: Bisque, Porcelain, Celadon, Washi, Smoke and clay, and Clear (the
+default). Both are remembered in this browser (`raku-look`, `raku-light-style`).
+
+- `src/style.css`: `:root` is the dark look. The light styles follow it, keyed on `<html data-look="light"
+  data-light="…">`: Clear is the plain `:root[data-look="light"]` block, the other five override it. Smoke and clay
+  scopes the dark values to `.chrome`, `.toolbar` and `.tp-x-bar` and gives the menus in the bar their light values
+  back. **A new colour name needs a value in `:root` and in every light style** (`test/colours.test.mjs` checks that,
+  and that every word pair passes WCAG AA in every style).
+- `public/look.js`: loaded first in `<head>` (a file, because the page policy allows only Raku's own scripts); puts the
+  saved look on the page before the first paint and sets `color-scheme` and the two `theme-color` lines (each look's
+  strip; Smoke and clay's is dark). `src/look.js` does the same once Raku runs, follows the device live while the choice
+  is Match device, and redraws the bowl (`refreshBrandPots`). `test/look.test.mjs` runs `public/look.js` and the
+  offline page's look script against `src/look.js` in every case.
+- `src/config.js`: `LOOK` (keys, defaults) and `LIGHT_STYLES` (names, swatch colours, theme colours).
+- `public/offline.html`: its seven names in each style, its own look script in `<head>` (both scripts allowed by hash).
+- Browser check: `test/browser/check_look.py` (with the other browser checks, below).
+
 ## Try it
 
 ```
@@ -869,6 +891,16 @@ baked file falling back to appmosphe.re; a pick hidden since the bake removed; a
 swapped in (one picture); an unchanged pick asking appmosphe.re for nothing; an unreadable record leaving the baked
 card; a pick with no bake loading as before; a baked card opening its tile. 8 of its checks fail on the code before
 the bake.
+
+`check_look.py` (59 checks, Nov 2026: light mode) needs only `servers.mjs` (tiles needn't run: a small stand-in for
+`@dasl/tile-loader` is enough). Usage: `python3 test/browser/check_look.py <work folder>`. A dark device dark as
+before; the device turning light and back while Raku is open; the Look row and the Light style row (signed out and signed in, above
+Autoplay, the note on a dark device, six named buttons); each style chosen at once, by tap and by keyboard, the focus
+kept, remembered over a reload; Dark hiding the style row; the first paint already in the saved look with Raku's own
+script held back; Smoke and clay's dark top bar, address box and bowl with its menu light; the phone sheet (both rows on
+one line, no sideways scroll); the offline page in each look, following the device; `theme-color` throughout; nothing
+refused by the page policy. The first-paint checks fail without `public/look.js`, the bowl's after a reload without
+`refreshBrandPots` once the chrome is in place.
 
 `check_renderer.py` (81 checks, renderer tiles; since ways, a signpost's "Go to" taking that way to the maze's tile; since Nov 9, a test renderer adding handlers after `listen()` gets the record from the loading server's `data.js`: fails with the stock one) sets everything up itself, like `check_daisy.py`: a copy of this folder
 with a test pin in `RENDERERS`, bundled, Raku's page and the loader replica, and the real place renderer from a

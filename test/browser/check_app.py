@@ -191,7 +191,7 @@ with sync_playwright() as p:
     page.wait_for_selector('.about h1', timeout=10000)
     check('...and it looks after the page once reloaded', page.evaluate('!!navigator.serviceWorker.controller'))
     kept = page.evaluate("caches.keys().then(async (ks) => Promise.all(ks.map(async (k) => [k, (await (await caches.open(k)).keys()).map(r => new URL(r.url).pathname)])))")
-    check('...it keeps only the offline page', kept == [['raku-offline-v1', ['/offline.html']]], str(kept))
+    check('...it keeps only the offline page', kept == [['raku-offline-v2', ['/offline.html']]], str(kept))
 
     # the ground rule: only the navigation goes through the worker
     with page.expect_response(lambda r: r.url.endswith('/version.json')) as vr:
@@ -206,7 +206,7 @@ with sync_playwright() as p:
     check("...version.json doesn't", not vr.value.from_service_worker)
     check("...nor another server (plc.directory here)", not pr.value.from_service_worker)
     kept2 = page.evaluate("caches.keys().then(async (ks) => Promise.all(ks.map(async (k) => [k, (await (await caches.open(k)).keys()).length])))")
-    check('...and still nothing else kept after using Raku', kept2 == [['raku-offline-v1', 1]], str(kept2))
+    check('...and still nothing else kept after using Raku', kept2 == [['raku-offline-v2', 1]], str(kept2))
 
     # no install offer when installed
     page.evaluate(FAKE_OFFER)
@@ -262,13 +262,14 @@ with sync_playwright() as p:
     wctx.close()
 
     # offline
+    raku_bg = page.evaluate("getComputedStyle(document.body).backgroundColor")   # (light mode: the device's look; Playwright's default is light)
     ctx.set_offline(True)
     page.reload()
     check('offline: Raku\'s own page, "Raku needs the internet"', wait_for(lambda: page.inner_text('h1') == 'Raku needs the internet', 8))
     check('...with the agreed words and Try now', 'Raku will carry on by itself when you’re back online.' in page.inner_text('body') and page.inner_text('#again') == 'Try now')
     check('...the address (your tabs) kept', '#t=raku%3Aabout&a=0' in page.url, page.url)
     check('...its own policy refused nothing (style and script by hash)', page.evaluate('window.__csp') == [], str(page.evaluate('window.__csp')))
-    check('...dark like Raku', page.evaluate("getComputedStyle(document.body).backgroundColor") == 'rgb(23, 20, 17)')
+    check('...in Raku\'s own look', page.evaluate("getComputedStyle(document.body).backgroundColor") == raku_bg, raku_bg)
     page.screenshot(path=str(OUT / 'app-offline.png'))
     page.click('#again')
     check('Try now while still offline: the same page', (time.sleep(1) or True) and wait_for(lambda: page.inner_text('h1') == 'Raku needs the internet', 5))

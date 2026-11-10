@@ -26,10 +26,10 @@ test('the manifest: Raku in its own window, on its own address, linked from the 
   assert.equal(m.scope, '/');
   assert.equal(m.display, 'standalone');
   assert.deepEqual(m.display_override, ['window-controls-overlay'], 'S7: the tabs in the title bar where the browser allows it');
-  const theme = file('index.html').match(/<meta name="theme-color" content="([^"]+)">/)[1];
-  assert.equal(m.theme_color, theme, "the page's own theme colour");
-  assert.equal(m.background_color, '#171411', "Raku's stage colour (style.css --stage)");
-  assert.match(file('src/style.css'), /--stage: #171411;/);
+  // LM8 (claude/raku-light-mode-plan.md): mid-tone, so the moment the installed app opens sits between both looks; then
+  // the page's two theme-color lines (each look's strip) and public/look.js take over (test/look.test.mjs)
+  assert.equal(m.theme_color, '#6f655a', 'mid-tone (LM8)');
+  assert.equal(m.background_color, '#7d7367', 'mid-tone (LM8)');
   assert.match(file('index.html'), /<link rel="manifest" href="\/manifest\.webmanifest">/);
   assert.ok(!file('public/manifest.webmanifest').includes('http'), 'no outside addresses: an installed app is tied to this one');
 });
@@ -126,7 +126,7 @@ test("the page policy allows Raku's own worker and manifest, nothing else", () =
 function loadWorker() {
   const handlers = {};
   const cache = new Map();
-  const caches = new Map([['raku-offline-v0', new Map()], ['someone-else', new Map()]]);
+  const caches = new Map([['raku-offline-v1', new Map()], ['someone-else', new Map()]]);
   const fetched = [];
   let online = true;
   const sandbox = {
@@ -154,7 +154,7 @@ test('the worker keeps only the offline page, and clears only older pages of its
   assert.deepEqual([...w.cache.keys()], ['/offline.html']);
   assert.equal(w.cache.get('/offline.html').cache, 'reload', 'a fresh copy from the network');
   await w.run('activate', {});
-  assert.deepEqual([...w.caches.keys()].sort(), ['raku-offline-v1', 'someone-else']);
+  assert.deepEqual([...w.caches.keys()].sort(), ['raku-offline-v2', 'someone-else'], 'the older page goes (v1 before light mode)');
 });
 
 test("the ground rule: only navigations to Raku's own address, network first; everything else untouched", async () => {
@@ -197,13 +197,17 @@ test('the offline page: the agreed words, self-contained, its own style and scri
   const csp = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/)[1];
   const hash = (s) => `'sha256-${createHash('sha256').update(s).digest('base64')}'`;
   const style = html.match(/<style>([\s\S]*?)<\/style>/)[1];
-  const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+  // two scripts: the look in <head> (claude/raku-light-mode-plan.md, LM9) and coming back online at the end
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  assert.equal(scripts.length, 2);
   assert.ok(csp.includes(`style-src ${hash(style)}`), 'the style hash is current');
-  assert.ok(csp.includes(`script-src ${hash(script)}`), 'the script hash is current');
+  assert.ok(csp.includes(`script-src ${scripts.map(hash).join(' ')};`), 'the script hashes are current, and only they');
   assert.match(csp, /default-src 'none'/);
   assert.doesNotMatch(csp, /unsafe/);
   assert.doesNotMatch(html, /(src|href)="https?:/, 'nothing from outside');
   assert.ok(html.includes(RAKU_ICON), 'the same pot as the favicon');
+  const [look, script] = scripts;
+  assert.match(look, /localStorage\.getItem\('raku-look'\)/, 'the look first, before the first paint');
   assert.match(script, /addEventListener\('online', again\)/);
   assert.match(script, /location\.reload\(\)/, 'a reload keeps the address, and so the tabs');
 });

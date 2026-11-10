@@ -1,7 +1,8 @@
 /* Raku's look: option A2 (claude/raku-plan.md decision 13). Raku pottery: a charcoal bar with faint
-   crackle lines, and one accent colour, turquoise (the oxidized copper of raku glazes). Dark only for now.
-   Every colour of Raku's own is named on :root (the light-mode groundwork, claude/raku-light-mode-plan.md):
-   use a name, not a written-out colour. Written out on purpose, the same in any look, because they belong
+   crackle lines, and one accent colour, turquoise (the oxidized copper of raku glazes). :root is the dark look;
+   the light look's six styles follow it (claude/raku-light-mode-plan.md), chosen in the account menu.
+   Every colour of Raku's own is named on :root (the light-mode groundwork): use a name, not a written-out
+   colour; a new name needs a value in :root and in each light style. Written out on purpose, the same in any look, because they belong
    to the tiles' side: a tile frame's white, the tables' cream (.seat-*), Make a tile's type marks (.mk-cream,
    .mk-turquoise, .mk-copper, .mk-smoke) and the screen between places (.way-*). */
 
@@ -76,6 +77,420 @@
   --bar-h: 46px;
   --strip-h: 40px;
 }
+
+/* ----- the light look (claude/raku-light-mode-plan.md, LM12 to LM17) -----
+   Six light styles, used when the look is light (the device is light and the Look choice is "Match device", or
+   the choice is "Light"): src/look.js and public/look.js set data-look="light" and data-light="<style>" on <html>.
+   Clear is the default (LM13), so it is the plain [data-look="light"] block; the other five override it. Every
+   style names every colour of :root above (test/colours.test.mjs), with the values as built in
+   claude/raku-light-palette-tools/presets.py (LM15). Smoke and clay keeps today's dark top bar: the dark values
+   again, scoped to the bar, with what sits in the bar but belongs to the page (menus, the update line) light. */
+:root[data-look="light"] {   /* Clear, the default light style */
+  color-scheme: light;
+  --kiln: #e7e6e4;
+  --clay: #f7f6f6;
+  --well: #ffffff;
+  --stage: #f4f4f3;
+  --card: #ffffff;
+  --sunk: #f8f7f7;
+  --raised: #ffffff;
+  --shelf: #f3f2f2;
+  --pic: #e4e3e2;
+  --avatar: #dbd9d7;
+  --placeholder: #e2e1df;
+  --line: #b6b4af;
+  --edge: #d8d7d4;
+  --edge-soft: #cfcdc9;
+  --edge-strong: #bbb9b4;
+  --edge-faint: #e4e3e2;
+  --text: #161413;
+  --muted: #4d4742;
+  --faint: #665e57;
+  --ink-soft: #4a453f;
+  --ink-tool: #3a3631;
+  --ink-tab-on: #1c1a17;
+  --ink-mono: #45403b;
+  --ink-count: #0a4038;
+  --ink-quiet: #58524b;
+  --ink-table: #5e5750;
+  --glaze: #2d9b8e;
+  --glaze-btn: #2fa596;
+  --glaze-ink: #031410;
+  --glaze-light: #0d665b;
+  --update-bg: #e1f2ef;
+  --update-edge: #9fd3ca;
+  --warn: #8a5a14;
+  --warn-edge: #d9b77d;
+  --leave-edge: #d4b48a;
+  --dot: #a8a7a3;
+  --dot-busy: #888681;
+  --dot-bad: #b5523c;
+  --switch: #d3d2cf;
+  --switch-knob: #888681;
+  --switch-knob-on: #ffffff;
+  --pot-edge: #918e88;
+  --pot-body: #2fa596;
+  --pot-crackle: #0a4038;
+  --pot-rim: #5fc6b6;
+  --tint-rgb: 44, 41, 38;
+  --shadow-rgb: 55, 51, 47;
+  --glaze-rgb: 45, 155, 142;
+  --glaze-light-rgb: 13, 102, 91;
+  --warn-rgb: 138, 90, 20;
+  --stage-rgb: 244, 244, 243;
+  --kiln-rgb: 231, 230, 228;
+  --scrim-rgb: 49, 46, 43;
+  --cinema-rgb: 24, 23, 22;
+}
+:root[data-look="light"][data-light="bisque"] {   /* Bisque */
+  color-scheme: light;
+  --kiln: #e4dccf;
+  --clay: #f3ede3;
+  --well: #ffffff;
+  --stage: #ece5d9;
+  --card: #fbf8f2;
+  --sunk: #f4efe6;
+  --raised: #ffffff;
+  --shelf: #f1eadf;
+  --pic: #e6ded1;
+  --avatar: #ddd3c4;
+  --placeholder: #e2d9cb;
+  --line: #c9bead;
+  --edge: #ddd3c4;
+  --edge-soft: #d6ccbc;
+  --edge-strong: #c4b8a6;
+  --edge-faint: #e6ded2;
+  --text: #2a231d;
+  --muted: #625649;
+  --faint: #716455;
+  --ink-soft: #4a4036;
+  --ink-tool: #3a3129;
+  --ink-tab-on: #1f1915;
+  --ink-mono: #43392f;
+  --ink-count: #0f4a42;
+  --ink-quiet: #6b5f51;
+  --ink-table: #6f6355;
+  --glaze: #2b9186;
+  --glaze-btn: #2fa596;
+  --glaze-ink: #06201c;
+  --glaze-light: #1a6b62;
+  --update-bg: #dcefea;
+  --update-edge: #a9d6cc;
+  --warn: #8a5a14;
+  --warn-edge: #d9b77d;
+  --leave-edge: #d4b48a;
+  --dot: #b3a695;
+  --dot-busy: #8f8170;
+  --dot-bad: #b5523c;
+  --switch: #d6ccbc;
+  --switch-knob: #8a7d6c;
+  --switch-knob-on: #ffffff;
+  --pot-edge: #9c8a73;
+  --pot-body: #2fa596;
+  --pot-crackle: #1d5f56;
+  --pot-rim: #5cc4b4;
+  --tint-rgb: 60, 40, 20;
+  --shadow-rgb: 70, 50, 30;
+  --glaze-rgb: 43, 145, 134;
+  --glaze-light-rgb: 26, 107, 98;
+  --warn-rgb: 138, 90, 20;
+  --stage-rgb: 236, 229, 217;
+  --kiln-rgb: 228, 220, 207;
+  --scrim-rgb: 60, 48, 36;
+  --cinema-rgb: 30, 25, 20;
+}
+:root[data-look="light"][data-light="porcelain"] {   /* Porcelain */
+  color-scheme: light;
+  --kiln: #dee1e6;
+  --clay: #f2f3f5;
+  --well: #ffffff;
+  --stage: #eceef1;
+  --card: #fbfbfc;
+  --sunk: #f5f6f7;
+  --raised: #ffffff;
+  --shelf: #eff1f3;
+  --pic: #dfe3e7;
+  --avatar: #d3d8de;
+  --placeholder: #dce0e5;
+  --line: #b6bfc8;
+  --edge: #d3d8de;
+  --edge-soft: #cbd1d8;
+  --edge-strong: #bcc4cd;
+  --edge-faint: #dfe3e7;
+  --text: #1e2329;
+  --muted: #4b5768;
+  --faint: #5e6d82;
+  --ink-soft: #3a4350;
+  --ink-tool: #2d343e;
+  --ink-tab-on: #15191e;
+  --ink-mono: #363e4a;
+  --ink-count: #0d4d45;
+  --ink-quiet: #546173;
+  --ink-table: #586679;
+  --glaze: #279989;
+  --glaze-btn: #29a391;
+  --glaze-ink: #06201c;
+  --glaze-light: #106f65;
+  --update-bg: #dff0ee;
+  --update-edge: #a6d4ce;
+  --warn: #8a5a14;
+  --warn-edge: #d9b77d;
+  --leave-edge: #d4b48a;
+  --dot: #9ea5ad;
+  --dot-busy: #7a848f;
+  --dot-bad: #b5523c;
+  --switch: #cbd1d8;
+  --switch-knob: #7a848f;
+  --switch-knob-on: #ffffff;
+  --pot-edge: #7f8b99;
+  --pot-body: #29a391;
+  --pot-crackle: #0d4d45;
+  --pot-rim: #63c9ba;
+  --tint-rgb: 34, 40, 47;
+  --shadow-rgb: 43, 50, 59;
+  --glaze-rgb: 39, 153, 137;
+  --glaze-light-rgb: 16, 111, 101;
+  --warn-rgb: 138, 90, 20;
+  --stage-rgb: 236, 238, 241;
+  --kiln-rgb: 222, 225, 230;
+  --scrim-rgb: 40, 45, 52;
+  --cinema-rgb: 21, 23, 25;
+}
+:root[data-look="light"][data-light="celadon"] {   /* Celadon */
+  color-scheme: light;
+  --kiln: #dae2de;
+  --clay: #eef2f0;
+  --well: #ffffff;
+  --stage: #e8edeb;
+  --card: #f8f9f9;
+  --sunk: #f2f5f4;
+  --raised: #ffffff;
+  --shelf: #ecf1ef;
+  --pic: #dfe7e3;
+  --avatar: #d4ded9;
+  --placeholder: #dce4e1;
+  --line: #b7c8c0;
+  --edge: #d4ded9;
+  --edge-soft: #cbd7d1;
+  --edge-strong: #bdccc5;
+  --edge-faint: #dfe7e3;
+  --text: #1d2b27;
+  --muted: #45675f;
+  --faint: #4d6f69;
+  --ink-soft: #37534c;
+  --ink-tool: #2b403b;
+  --ink-tab-on: #141f1c;
+  --ink-mono: #334c46;
+  --ink-count: #0f4a40;
+  --ink-quiet: #50776d;
+  --ink-table: #4e716a;
+  --glaze: #309487;
+  --glaze-btn: #36a897;
+  --glaze-ink: #06201c;
+  --glaze-light: #17705f;
+  --update-bg: #dcefe6;
+  --update-edge: #a3d2c0;
+  --warn: #8a5a14;
+  --warn-edge: #d9b77d;
+  --leave-edge: #d4b48a;
+  --dot: #9fada6;
+  --dot-busy: #7b8e85;
+  --dot-bad: #b5523c;
+  --switch: #cbd7d1;
+  --switch-knob: #7b8e85;
+  --switch-knob-on: #ffffff;
+  --pot-edge: #80988d;
+  --pot-body: #36a897;
+  --pot-crackle: #0f4a40;
+  --pot-rim: #6dcbb5;
+  --tint-rgb: 33, 49, 45;
+  --shadow-rgb: 41, 61, 56;
+  --glaze-rgb: 48, 148, 135;
+  --glaze-light-rgb: 23, 112, 95;
+  --warn-rgb: 138, 90, 20;
+  --stage-rgb: 232, 237, 235;
+  --kiln-rgb: 218, 226, 222;
+  --scrim-rgb: 39, 53, 50;
+  --cinema-rgb: 20, 26, 24;
+}
+:root[data-look="light"][data-light="washi"] {   /* Washi */
+  color-scheme: light;
+  --kiln: #efe6cf;
+  --clay: #f8f4ea;
+  --well: #ffffff;
+  --stage: #f5f0e2;
+  --card: #fbf9f4;
+  --sunk: #f9f5ec;
+  --raised: #ffffff;
+  --shelf: #f7f2e6;
+  --pic: #f1e9d5;
+  --avatar: #ece0c6;
+  --placeholder: #f0e7d1;
+  --line: #e0cea3;
+  --edge: #ece0c6;
+  --edge-soft: #e8daba;
+  --edge-strong: #e2d0a7;
+  --edge-faint: #f1e9d5;
+  --text: #402e21;
+  --muted: #79583e;
+  --faint: #8c6548;
+  --ink-soft: #5b422f;
+  --ink-tool: #473324;
+  --ink-tab-on: #221811;
+  --ink-mono: #543d2b;
+  --ink-count: #174f47;
+  --ink-quiet: #835f44;
+  --ink-table: #8a6447;
+  --glaze: #349688;
+  --glaze-btn: #3aa594;
+  --glaze-ink: #06201c;
+  --glaze-light: #217166;
+  --update-bg: #e4f0e6;
+  --update-edge: #b5d7c4;
+  --warn: #8a5a14;
+  --warn-edge: #d9b77d;
+  --leave-edge: #d4b48a;
+  --dot: #c1b08b;
+  --dot-busy: #a99360;
+  --dot-bad: #b5523c;
+  --switch: #e8daba;
+  --switch-knob: #a99360;
+  --switch-knob-on: #ffffff;
+  --pot-edge: #ba9f5e;
+  --pot-body: #3aa594;
+  --pot-crackle: #174f47;
+  --pot-rim: #6ec7b6;
+  --tint-rgb: 54, 39, 28;
+  --shadow-rgb: 67, 49, 35;
+  --glaze-rgb: 52, 150, 136;
+  --glaze-light-rgb: 33, 113, 102;
+  --warn-rgb: 138, 90, 20;
+  --stage-rgb: 245, 240, 226;
+  --kiln-rgb: 239, 230, 207;
+  --scrim-rgb: 58, 44, 34;
+  --cinema-rgb: 27, 22, 19;
+}
+:root[data-look="light"][data-light="smoke"],
+:root[data-look="light"][data-light="smoke"] .chrome .account-menu,
+:root[data-look="light"][data-light="smoke"] .chrome .update-line,
+:root[data-look="light"][data-light="smoke"] .chrome .openin-menu,
+:root[data-look="light"][data-light="smoke"] .chrome .rk-ta-list {   /* Smoke and clay: the pages, and the menus in the top bar */
+  color-scheme: light;
+  --kiln: #e4ded7;
+  --clay: #f3f0ed;
+  --well: #ffffff;
+  --stage: #efebe7;
+  --card: #faf9f7;
+  --sunk: #f6f4f1;
+  --raised: #ffffff;
+  --shelf: #f2eeeb;
+  --pic: #e9e3dd;
+  --avatar: #e0d9d1;
+  --placeholder: #e7e0da;
+  --line: #ccbfb3;
+  --edge: #e0d9d1;
+  --edge-soft: #dad1c8;
+  --edge-strong: #d0c4b9;
+  --edge-faint: #e9e3dd;
+  --text: #2a231d;
+  --muted: #695849;
+  --faint: #786653;
+  --ink-soft: #514438;
+  --ink-tool: #3f352c;
+  --ink-tab-on: #1e1915;
+  --ink-mono: #4b3f34;
+  --ink-count: #0f4a42;
+  --ink-quiet: #756252;
+  --ink-table: #7b6756;
+  --glaze: #2c968a;
+  --glaze-btn: #2fa596;
+  --glaze-ink: #06201c;
+  --glaze-light: #196c61;
+  --update-bg: #dcefea;
+  --update-edge: #a9d6cc;
+  --warn: #8a5a14;
+  --warn-edge: #d9b77d;
+  --leave-edge: #d4b48a;
+  --dot: #b0a69b;
+  --dot-busy: #938576;
+  --dot-bad: #b5523c;
+  --switch: #dad1c8;
+  --switch-knob: #938576;
+  --switch-knob-on: #ffffff;
+  --pot-edge: #2f2922;
+  --pot-body: #2fa596;
+  --pot-crackle: #0f4a42;
+  --pot-rim: #7fd6c8;
+  --tint-rgb: 48, 40, 33;
+  --shadow-rgb: 60, 50, 42;
+  --glaze-rgb: 44, 150, 138;
+  --glaze-light-rgb: 25, 108, 97;
+  --warn-rgb: 138, 90, 20;
+  --stage-rgb: 239, 235, 231;
+  --kiln-rgb: 228, 222, 215;
+  --scrim-rgb: 53, 45, 39;
+  --cinema-rgb: 25, 23, 20;
+}
+:root[data-look="light"][data-light="smoke"] .chrome,
+:root[data-look="light"][data-light="smoke"] .toolbar,
+:root[data-look="light"][data-light="smoke"] .tp-x-bar {   /* Smoke and clay: the top bar, the phone's toolbar and an expanded post's bar stay dark (as :root) */
+  color-scheme: dark;
+  --kiln: #26211d;
+  --clay: #3a322b;
+  --well: #1f1a16;
+  --stage: #171411;
+  --card: #221d19;
+  --sunk: #1d1916;
+  --raised: #2a241f;
+  --shelf: #2d2722;
+  --pic: #2d2722;
+  --avatar: #3a322b;
+  --placeholder: #332b25;
+  --line: #52463b;
+  --edge: #3a322b;
+  --edge-soft: #3f362e;
+  --edge-strong: #4a3f35;
+  --edge-faint: #2d2722;
+  --text: #efe6d8;
+  --muted: #b9ad9c;
+  --faint: #8d8172;
+  --ink-soft: #d8ccbb;
+  --ink-tool: #e8dcc9;
+  --ink-tab-on: #fff4e6;
+  --ink-mono: #d6cbbb;
+  --ink-count: #d9f5f0;
+  --ink-quiet: #a99c8a;
+  --ink-table: #9d917f;
+  --glaze: #3fb8a8;
+  --glaze-btn: #2fa596;
+  --glaze-ink: #06201c;
+  --glaze-light: #7fd6c8;
+  --update-bg: #1f2b28;
+  --update-edge: #2f4a44;
+  --warn: #e6b36a;
+  --warn-edge: #6b5631;
+  --leave-edge: #6a5236;
+  --dot: #6b5d50;
+  --dot-busy: #8a7a68;
+  --dot-bad: #7a3b2e;
+  --switch: #2f2924;
+  --switch-knob: #8a7d6c;
+  --switch-knob-on: #fff;
+  --pot-edge: #26211d;
+  --pot-body: #2fa596;
+  --pot-crackle: #1f1a16;
+  --pot-rim: #7fd6c8;
+  --tint-rgb: 255, 255, 255;
+  --shadow-rgb: 0, 0, 0;
+  --glaze-rgb: 63, 184, 168;
+  --glaze-light-rgb: 127, 214, 200;
+  --warn-rgb: 230, 179, 106;
+  --stage-rgb: 23, 20, 17;
+  --kiln-rgb: 38, 33, 29;
+  --scrim-rgb: 15, 12, 10;
+  --cinema-rgb: 12, 10, 8;
+}
+/* ----- end of the light look ----- */
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--stage); color: var(--text); }
@@ -827,6 +1242,29 @@ a { color: var(--glaze-light); }
 .acct-autoplay { display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 12px; padding: 10px 0 0; border-top: 1px solid var(--edge); }
 .acct-autoplay-words { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
 .acct-autoplay + .acct-install, .acct-autoplay + .acct-about { margin-top: 8px; padding-top: 8px; border-top: 0; }
+/* The Look row and the Light style row, above Autoplay (claude/raku-light-mode-plan.md, LM7, LM14): a joined three-part
+   choice, the current part filled turquoise like the switch's "on"; six round swatches in each style's own colours
+   (--sw-strip, --sw-dot, set from config.js), the chosen one ringed. */
+.acct-looks { display: grid; gap: 10px; width: 100%; margin-top: 12px; padding: 10px 0 0; border-top: 1px solid var(--edge); }
+.acct-looks + .acct-autoplay { margin-top: 10px; padding-top: 0; border-top: 0; }
+.acct-look { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }
+.rk-seg { display: inline-flex; flex: none; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.rk-seg-btn { min-height: 34px; padding: 4px 11px; border: 0; border-left: 1px solid var(--line); background: rgba(var(--tint-rgb),.04);
+  color: var(--text); font-size: 13px; white-space: nowrap; cursor: pointer; }
+.rk-seg-btn:first-child { border-left: 0; }
+.rk-seg-btn:hover { background: rgba(var(--tint-rgb),.09); }
+.rk-seg-btn[aria-pressed="true"] { background: var(--glaze-btn); color: var(--glaze-ink); font-weight: 600; }
+.rk-seg-btn:focus-visible { outline-offset: -3px; }
+.acct-style { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; font-size: 14px; }
+.acct-style-words b { font-weight: 600; }
+.rk-swatches { display: flex; flex: none; gap: 7px; }
+.rk-swatch { position: relative; width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--sw-strip); cursor: pointer; }
+.rk-swatch::after { content: ''; position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px;
+  border-radius: 50%; background: var(--sw-dot); }
+.rk-swatch:hover { border-color: var(--glaze); }
+.rk-swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--raised), 0 0 0 4px var(--glaze); }
+.acct-style-note { flex-basis: 100%; }
 .tp-auto-hint { background: rgba(var(--stage-rgb),.88); color: var(--text); padding: 3px 11px; font-size: 12.5px; }
 
 /* Round C (claude/raku-expand-plan.md, EX1 to EX8; from claude/raku-expand-mockup.html): a playing tile's expand button,

@@ -6,10 +6,37 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-VVfUbPXE0iozG7qRXkR8u5YA5ecdpAnIfMla9tgjBvk='; script-src 'sha256-JRFYETIiFvqV3ADW5CeZ38Vb2FejHiVtg1JK08ZiYQM='; connect-src 'self'; img-src data:; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-b8XwDG+PX6ra5Rbh4jOTqrGyj8VNJu10H/cKebMcbEY='; script-src 'sha256-NC7ABQ6uX1AN8puaEFhl69Gl+QGcV858NhT217U4bXE=' 'sha256-JRFYETIiFvqV3ADW5CeZ38Vb2FejHiVtg1JK08ZiYQM='; connect-src 'self'; img-src data:; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
-  <meta name="color-scheme" content="dark">
-  <meta name="theme-color" content="#26211d">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#e7e6e4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#26211d" media="(prefers-color-scheme: dark)">
+  <script>
+  // The look Raku shows (claude/raku-light-mode-plan.md, LM9): the saved Look and Light style, as public/look.js reads them.
+  (function () {
+    var THEMES = { bisque: '#e4dccf', porcelain: '#dee1e6', celadon: '#dae2de', washi: '#efe6cf', smoke: '#26211d', clear: '#e7e6e4' };
+    var look = null, style = null;
+    try { look = localStorage.getItem('raku-look'); style = localStorage.getItem('raku-light-style'); } catch (e) { /* the defaults */ }
+    if (look !== 'light' && look !== 'dark') look = 'device';
+    if (!Object.prototype.hasOwnProperty.call(THEMES, style)) style = 'clear';
+    var device = null;
+    try { device = matchMedia('(prefers-color-scheme: light)'); } catch (e) { /* dark */ }
+    function apply() {
+      var mode = look === 'light' || (look === 'device' && device && device.matches) ? 'light' : 'dark';
+      var shown = mode === 'light' ? THEMES[style] : '#26211d';
+      document.documentElement.setAttribute('data-look', mode);
+      document.documentElement.setAttribute('data-light', style);
+      document.querySelector('meta[name="color-scheme"]').setAttribute('content', mode);
+      var metas = document.querySelectorAll('meta[name="theme-color"]');
+      for (var i = 0; i < metas.length; i++) {
+        var isLight = /light/.test(metas[i].getAttribute('media') || '');
+        metas[i].setAttribute('content', look === 'device' ? (isLight ? THEMES[style] : '#26211d') : shown);
+      }
+    }
+    apply();
+    if (device && device.addEventListener) device.addEventListener('change', apply);
+  })();
+</script>
   <title>Raku</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cg%20transform%3D%22translate%2832%2032%29%20scale%281.6%29%20translate%28-32%20-34%29%22%3E%3Cpath%20d%3D%22M14%2044c0-13%208-24%2018-24s18%2011%2018%2024c0%204-8%206-18%206s-18-2-18-6z%22%20fill%3D%22none%22%20stroke%3D%22%2326211d%22%20stroke-width%3D%222.2%22%20stroke-linejoin%3D%22round%22/%3E%3Cellipse%20cx%3D%2232%22%20cy%3D%2221%22%20rx%3D%229%22%20ry%3D%223%22%20fill%3D%22none%22%20stroke%3D%22%2326211d%22%20stroke-width%3D%222.2%22/%3E%3Cpath%20d%3D%22M14%2044c0-13%208-24%2018-24s18%2011%2018%2024c0%204-8%206-18%206s-18-2-18-6z%22%20fill%3D%22%232fa596%22/%3E%3Cpath%20d%3D%22M22%2030l6%206-3%207M38%2027l-4%208%207%205%22%20stroke%3D%22%231f1a16%22%20stroke-width%3D%222%22%20fill%3D%22none%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3Cellipse%20cx%3D%2232%22%20cy%3D%2221%22%20rx%3D%229%22%20ry%3D%223%22%20fill%3D%22%237fd6c8%22/%3E%3C/g%3E%3C/svg%3E">
   <style>
@@ -22,6 +49,68 @@
     --glaze-btn: #2fa596;
     --glaze-ink: #06201c;
     --glaze-light: #7fd6c8;
+  }
+  /* The light look's six styles (LM9), the same names and values as in src/style.css; the script above puts the
+     saved Look and Light style (or the device's setting and Clear) on <html>, as public/look.js does for Raku. */
+  :root[data-look="light"] {   /* Clear, the default light style */
+    color-scheme: light;
+    --stage: #f4f4f3;
+    --text: #161413;
+    --muted: #4d4742;
+    --glaze: #2d9b8e;
+    --glaze-btn: #2fa596;
+    --glaze-ink: #031410;
+    --glaze-light: #0d665b;
+  }
+  :root[data-look="light"][data-light="bisque"] {   /* Bisque */
+    color-scheme: light;
+    --stage: #ece5d9;
+    --text: #2a231d;
+    --muted: #625649;
+    --glaze: #2b9186;
+    --glaze-btn: #2fa596;
+    --glaze-ink: #06201c;
+    --glaze-light: #1a6b62;
+  }
+  :root[data-look="light"][data-light="porcelain"] {   /* Porcelain */
+    color-scheme: light;
+    --stage: #eceef1;
+    --text: #1e2329;
+    --muted: #4b5768;
+    --glaze: #279989;
+    --glaze-btn: #29a391;
+    --glaze-ink: #06201c;
+    --glaze-light: #106f65;
+  }
+  :root[data-look="light"][data-light="celadon"] {   /* Celadon */
+    color-scheme: light;
+    --stage: #e8edeb;
+    --text: #1d2b27;
+    --muted: #45675f;
+    --glaze: #309487;
+    --glaze-btn: #36a897;
+    --glaze-ink: #06201c;
+    --glaze-light: #17705f;
+  }
+  :root[data-look="light"][data-light="washi"] {   /* Washi */
+    color-scheme: light;
+    --stage: #f5f0e2;
+    --text: #402e21;
+    --muted: #79583e;
+    --glaze: #349688;
+    --glaze-btn: #3aa594;
+    --glaze-ink: #06201c;
+    --glaze-light: #217166;
+  }
+  :root[data-look="light"][data-light="smoke"] {   /* Smoke and clay */
+    color-scheme: light;
+    --stage: #efebe7;
+    --text: #2a231d;
+    --muted: #695849;
+    --glaze: #2c968a;
+    --glaze-btn: #2fa596;
+    --glaze-ink: #06201c;
+    --glaze-light: #196c61;
   }
   html, body { margin: 0; height: 100%; background: var(--stage); color: var(--text); }
   body { font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; padding: 24px 16px; box-sizing: border-box; }

@@ -110,9 +110,12 @@ export function brandPot() {
   img.draggable = false;
   return img;
 }
-/** Redraws every pot beside the Raku label in the page's current --pot-… colours (for a change of look). */
+/** Redraws every pot beside the Raku label in the --pot-… colours where it sits (for a change of look, and once in
+ *  place: Smoke and clay's top bar keeps the dark colours while the page is light). */
 export function refreshBrandPots(doc = document) {
-  const src = potPicture(potColours(doc.documentElement));
-  for (const img of doc.querySelectorAll('img.brand-pot')) if (img.src !== src) img.src = src;
+  for (const img of doc.querySelectorAll('img.brand-pot')) {
+    const src = potPicture(potColours(img));
+    if (img.src !== src) img.src = src;
+  }
 }
 export const ICON_WITH_PIP = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">${RAKU_ICON}<circle cx="51" cy="13" r="11" fill="#7fffe9" stroke="#26211d" stroke-width="4"/></svg>`)}`;

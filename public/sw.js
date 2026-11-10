@@ -10,7 +10,9 @@
 // account servers, Bluesky, plc.directory, appmosphe.re, typeahead, the hide list and Raku's own files and
 // version.json pass straight through; relays are WebSockets, which service workers never see.
 
-const CACHE = 'raku-offline-v1';
+// v2 (Nov 2026, light mode): the offline page follows the look, so an installed Raku's worker installs afresh and keeps
+// the new page (a worker file that's unchanged byte for byte is never installed again).
+const CACHE = 'raku-offline-v2';
 const OFFLINE = '/offline.html';
 
 self.addEventListener('install', (event) => {

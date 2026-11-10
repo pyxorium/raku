@@ -38,7 +38,8 @@ import { WAY_UP, readWays, entranceFor, readWayMessage, statusMessage, arriveMes
 import { describeTile, sizeVerdict, createPathLoader, blobCidOf } from './tiles.js';
 import { formatBytes, NetError } from './net.js';
 import { sniffPicture } from './moderation.js';
-import { icon, ICON_WITH_PIP, brandPot } from './icons.js';
+import { icon, ICON_WITH_PIP, brandPot, refreshBrandPots } from './icons.js';
+import { createLookSetting } from './look.js';
 import { h, createCardKit, bannerCid } from './cards.js';
 import { drawYourShelf, drawAccountTiles, drawShelfTeaser } from './shelf-pages.js';
 import { attachTypeahead } from './typeahead.js';
@@ -137,7 +138,10 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   const keep = (info) => keepForReturn({ ...info, hash: tabs.toHash() });
   // Autoplay (AU1, AU5): one choice for this browser, shown in the account menu and Tile posts' header.
   const autoplay = createAutoplaySetting({ storage });
-  const menu = createAccountMenu({ auth, moderation, keepForReturn: keep, say: (t) => say(t), onAbout: () => goAbout(), install, autoplay });
+  // The look (claude/raku-light-mode-plan.md): Match device / Light / Dark and the light style, in the account menu;
+  // public/look.js put the saved choice on the page before the first paint, this keeps it (and follows the device).
+  const look = createLookSetting({ storage, doc: root.ownerDocument });
+  const menu = createAccountMenu({ auth, moderation, keepForReturn: keep, say: (t) => say(t), onAbout: () => goAbout(), install, autoplay, look });
   let pendingReturn = returned && returned.pending ? returned.pending : null;
   const stage = h('main', { class: 'stage' });
   const sheetList = h('ul', { class: 'sheet-list' });
@@ -160,6 +164,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
         h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn, shelfBtn, discoverBtn), form, postBtn, openIn, testMark, menu.button),
       updateLine, noteLine, menu.panel),
     callSlot, stage, toolbar, sheet);
+  // The bowls are drawn before they're in the page: now in place, each takes its own colours (Smoke and clay's dark bar).
+  refreshBrandPots(root.ownerDocument);
   // Links out of Raku (a post, a link in a post): Raku says where they go and opens them on a click.
   const linkMessage = createLinkMessage(root, { storage });
   // Writing tile posts (claude/raku-write-posts-plan.md): the post box over the stage. "See it in Tile posts" opens Tile
