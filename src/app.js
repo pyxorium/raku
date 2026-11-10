@@ -38,7 +38,7 @@ import { WAY_UP, readWays, entranceFor, readWayMessage, statusMessage, arriveMes
 import { describeTile, sizeVerdict, createPathLoader, blobCidOf } from './tiles.js';
 import { formatBytes, NetError } from './net.js';
 import { sniffPicture } from './moderation.js';
-import { icon, ICON_WITH_PIP, RAKU_ICON_URL } from './icons.js';
+import { icon, ICON_WITH_PIP, brandPot } from './icons.js';
 import { h, createCardKit, bannerCid } from './cards.js';
 import { drawYourShelf, drawAccountTiles, drawShelfTeaser } from './shelf-pages.js';
 import { attachTypeahead } from './typeahead.js';
@@ -74,8 +74,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
 
   // ---------- the frame of the page ----------
   // The pot beside the Raku label (stage 9, S8: everywhere the label shows). In the installed window with the
-  // tabs in the title bar, the pot and the label are a handle for moving the window.
-  const pot = () => h('img', { class: 'brand-pot', src: RAKU_ICON_URL, alt: '', width: 18, height: 18, draggable: 'false' });
+  // tabs in the title bar, the pot and the label are a handle for moving the window. Its picture is drawn in the
+  // named --pot-… colours (light-mode groundwork, claude/raku-light-mode-plan.md).
+  const pot = () => brandPot();
   const brand = h('span', { class: 'brand' }, pot(), SITE.name, SITE.lab ? h('span', { class: 'lab' }, ' (lab)') : null);
   const strip = h('div', { class: 'tabstrip', role: 'tablist', 'aria-label': 'Open tabs' });
   const newTabBtn = h('button', { class: 'newtab', type: 'button', title: 'New tab', 'aria-label': 'New tab', onclick: () => openNew() }, icon('plus', 18));

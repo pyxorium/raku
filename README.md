@@ -702,6 +702,24 @@ Decisions: `claude/raku-write-posts-plan.md` (WP1 to WP13; the mockup `claude/ra
   `test/tile-post-write.test.mjs`, `test/auth.test.mjs`, `test/publish-lexicons.test.mjs`. Browser:
   `test/browser/check_write.py` (below).
 
+## Named colours (light-mode groundwork, Nov 2026)
+
+Step 1 of a light mode (`claude/raku-light-mode-plan.md`): nothing looks different. Every colour of Raku's own is
+named on `:root` in `src/style.css` (56 names: surfaces, lines, words, turquoise, warnings, small things, the
+bowl beside the Raku label, and see-through colours written `rgba(var(--tint-rgb), .06)`), so a later look, or any
+colour change, is a change to the names alone.
+
+- Use a name, never a written-out colour, in a rule. `test/colours.test.mjs` fails on a written-out colour outside
+  `:root`, on a name used but not defined (or defined and never used), on a see-through `--…-rgb` out of step with
+  its colour, and on `public/offline.html` (its own small `:root`, the same names and values) drifting.
+- Written out on purpose, the same in any look (the tiles' side): a tile frame's white (`.tile-frame`, `.tp-frame`),
+  the tables' cream (`.seat-*`), Make a tile's type marks (`.mk-cream` and the others), the screen between places (`.way-*`).
+- The bowl beside the Raku label is a picture drawn in the `--pot-…` colours (`brandPot`, `potPicture`, `potColours`
+  and, for a change of look, `refreshBrandPots` in `src/icons.js`). The tab and app icons stay as they are in any look.
+- Checked when built: every declaration in the old and new `style.css` comes out the same colour; Raku's browser checks
+  run with each screenshot also photographed with the old style sheet on the same page (computed colours of every
+  element identical); fresh loads of the old and new Raku compared screen by screen.
+
 ## Try it
 
 ```
@@ -760,7 +778,7 @@ and open http://127.0.0.1:5181/.
 | `src/about-page.js` | the About page: what Raku keeps, who it talks to, how tiles are kept in their box, installing Raku |
 | `src/app-shell.js` | stage 9: installed or not, the service worker's registration, the update rule, the install offer, the tabs in the title bar |
 | `src/room-tab.js`, `src/room-words.js` | rooms step 1: the room tab hosting rooms-lab's room (the join screen, invites, one room at a time, the rejoin after a reload); the words and links, tested in Node |
-| `src/style.css` | the look: raku pottery, turquoise, always dark |
+| `src/style.css` | the look: raku pottery, turquoise, dark only for now; every colour named on `:root` (light-mode groundwork) |
 | `public/` | `CNAME`, `robots.txt`, the icon (`icon.svg`, and `favicon.ico`, `favicon-32.png`, `apple-touch-icon.png` for other sites); stage 6: `card.png` (the link card) and `banner.png`; stage 9: `manifest.webmanifest`, the app icons, `sw.js` and `offline.html` |
 | `.github/workflows/deploy.yml` | test, build, check the policy is on the page and the sign-in file (`client-metadata.json`) names Raku's address, publish to GitHub Pages |
 | `lexicons/`, `scripts/publish-lexicons.mjs`, `lexicons-published.json` | Raku's one permission set, "Raku", and its publish script (Nov 2026) |

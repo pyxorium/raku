@@ -66,7 +66,53 @@ export function icon(name, size = 22) {
 // outline; the sheet's option B, claude/raku-icon-sheet.html) with a turquoise pip in the corner, for the browser
 // tab while a tab has a quiet mark (step 5b-2). A data: address (the page policy allows data: pictures).
 // test/app.test.mjs checks this is the same drawing as public/icon.svg.
-export const RAKU_ICON = '<g transform="translate(32 32) scale(1.6) translate(-32 -34)"><path d="M14 44c0-13 8-24 18-24s18 11 18 24c0 4-8 6-18 6s-18-2-18-6z" fill="none" stroke="#26211d" stroke-width="2.2" stroke-linejoin="round"/><ellipse cx="32" cy="21" rx="9" ry="3" fill="none" stroke="#26211d" stroke-width="2.2"/><path d="M14 44c0-13 8-24 18-24s18 11 18 24c0 4-8 6-18 6s-18-2-18-6z" fill="#2fa596"/><path d="M22 30l6 6-3 7M38 27l-4 8 7 5" stroke="#1f1a16" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><ellipse cx="32" cy="21" rx="9" ry="3" fill="#7fd6c8"/></g>';
-/** The pot alone, as a picture: beside the Raku label at the top (stage 9, S8). */
-export const RAKU_ICON_URL = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">${RAKU_ICON}</svg>`)}`;
+// The pot's five shapes, each with the named colour that paints it beside the Raku label (the light-mode
+// groundwork, claude/raku-light-mode-plan.md: `part` is the --pot-… name in src/style.css). The tab and app
+// icons are drawn from the same shapes with the colours as written here, the same in any look.
+const POT_BODY = 'M14 44c0-13 8-24 18-24s18 11 18 24c0 4-8 6-18 6s-18-2-18-6z';
+const POT_PARTS = [
+  { tag: 'path', part: 'edge', attrs: { d: POT_BODY, fill: 'none', stroke: '#26211d', 'stroke-width': '2.2', 'stroke-linejoin': 'round' } },
+  { tag: 'ellipse', part: 'edge', attrs: { cx: '32', cy: '21', rx: '9', ry: '3', fill: 'none', stroke: '#26211d', 'stroke-width': '2.2' } },
+  { tag: 'path', part: 'body', attrs: { d: POT_BODY, fill: '#2fa596' } },
+  { tag: 'path', part: 'crackle', attrs: { d: 'M22 30l6 6-3 7M38 27l-4 8 7 5', stroke: '#1f1a16', 'stroke-width': '2', fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' } },
+  { tag: 'ellipse', part: 'rim', attrs: { cx: '32', cy: '21', rx: '9', ry: '3', fill: '#7fd6c8' } },
+];
+const POT_TRANSFORM = 'translate(32 32) scale(1.6) translate(-32 -34)';
+/** Which shape takes which named colour, and the colour written on it (test/app.test.mjs matches src/style.css). */
+export const POT_PAINT = POT_PARTS.map(({ part, attrs }) => ({ part, paint: attrs.fill !== 'none' ? 'fill' : 'stroke', colour: attrs.fill !== 'none' ? attrs.fill : attrs.stroke }));
+const drawPot = (colours = {}) => `<g transform="${POT_TRANSFORM}">${POT_PARTS.map(({ tag, part, attrs }) => {
+  const paint = attrs.fill !== 'none' ? 'fill' : 'stroke';
+  const a = { ...attrs, [paint]: colours[part] || attrs[paint] };
+  return `<${tag} ${Object.entries(a).map(([k, v]) => `${k}="${v}"`).join(' ')}/>`;
+}).join('')}</g>`;
+export const RAKU_ICON = drawPot();
+const HEX = /^#[0-9a-f]{3,8}$/i;
+/** The pot beside the Raku label as a picture (data: address), its colours given by part ({ edge, body, … }). */
+export function potPicture(colours = {}) {
+  const safe = Object.fromEntries(Object.entries(colours).filter(([, v]) => HEX.test(v)));
+  return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">${drawPot(safe)}</svg>`)}`;
+}
+/** The named --pot-… colours as the page has them now (none yet, e.g. before the style sheet: the drawing's own). */
+export function potColours(root = globalThis.document?.documentElement) {
+  if (!root || typeof getComputedStyle !== 'function') return {};
+  const cs = getComputedStyle(root);
+  return Object.fromEntries(POT_PAINT.map(({ part }) => [part, cs.getPropertyValue(`--pot-${part}`).trim()]).filter(([, v]) => v));
+}
+/** The pot beside the Raku label (stage 9, S8): a picture drawn in the named --pot-… colours. A picture rather than
+ *  drawing in the page, so it looks exactly as before (an inline drawing shifted the anti-aliasing of nearby text
+ *  in the groundwork's pixel check). A later look redraws it with refreshBrandPots(). */
+export function brandPot() {
+  const img = document.createElement('img');
+  img.className = 'brand-pot';
+  img.src = potPicture(potColours());
+  img.alt = '';
+  img.width = 18; img.height = 18;   // as before; the style sheet sets 18 or 16 px
+  img.draggable = false;
+  return img;
+}
+/** Redraws every pot beside the Raku label in the page's current --pot-… colours (for a change of look). */
+export function refreshBrandPots(doc = document) {
+  const src = potPicture(potColours(doc.documentElement));
+  for (const img of doc.querySelectorAll('img.brand-pot')) if (img.src !== src) img.src = src;
+}
 export const ICON_WITH_PIP = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">${RAKU_ICON}<circle cx="51" cy="13" r="11" fill="#7fffe9" stroke="#26211d" stroke-width="4"/></svg>`)}`;

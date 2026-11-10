@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import vm from 'node:vm';
 import { SITE, pageCsp } from '../src/config.js';
-import { RAKU_ICON, RAKU_ICON_URL } from '../src/icons.js';
+import { RAKU_ICON, POT_PAINT, potPicture } from '../src/icons.js';
 import { watchTitleBar, isInstalled, registerWorker, fetchBuild, createUpdateCheck, createInstallOffer, CHECK_EVERY_MS, START_WINDOW_MS, RELOAD_KEY, VERSION_URL, WORKER_URL } from '../src/app-shell.js';
 import { INSTALL_STEPS, INSTALL_INTRO, INSTALL_KEEPS } from '../src/about-page.js';
 
@@ -58,7 +58,17 @@ test("the favicon (S5: B): the pot alone, and the signal pip's copy is the same 
   assert.match(RAKU_ICON, /stroke="#26211d" stroke-width="2\.2"/, 'the thin charcoal outline');
   assert.match(RAKU_ICON, /M22 30l6 6-3 7M38 27l-4 8 7 5/, 'both cracks (owner: one crack loses the crackle)');
   assert.equal(pngHasAlpha('public/favicon-32.png'), true, 'see-through around the pot');
-  assert.ok(decodeURIComponent(RAKU_ICON_URL).includes(RAKU_ICON), 'S8: the pot beside the Raku label is the same drawing');
+  // S8 (and the light-mode groundwork): the pot beside the Raku label is a picture of the same drawing, in the named
+  // --pot-… colours, which start as the colours written on the drawing: so it looks exactly the same.
+  const plain = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">${RAKU_ICON}</svg>`)}`;
+  assert.equal(potPicture(), plain, 'with no colours given: the icon itself');
+  const css = file('src/style.css');
+  const named = Object.fromEntries(POT_PAINT.map(({ part }) => [part, css.match(new RegExp(`--pot-${part}: (#[0-9a-f]+);`))[1]]));
+  for (const { part, colour } of POT_PAINT) assert.equal(named[part], colour, `--pot-${part} is ${colour}, as drawn`);
+  assert.equal(potPicture(named), plain, 'in the named colours: the same picture, character for character');
+  const other = decodeURIComponent(potPicture({ edge: '#111111', body: '#222222', crackle: '#333333', rim: '#444444' }));
+  assert.ok(other.includes('stroke="#111111"') && other.includes('fill="#222222"') && other.includes('stroke="#333333"') && other.includes('fill="#444444"'), 'other colours paint the right shapes');
+  assert.ok(!decodeURIComponent(potPicture({ body: 'red" onload="x' })).includes('onload'), 'only colours like #2fa596 are used');
 });
 
 test('S7: the title-bar mode keeps a grip free and keeps clear of the window buttons', () => {
