@@ -1255,8 +1255,15 @@ a { color: var(--glaze-light); }
 .rk-seg-btn:hover { background: rgba(var(--tint-rgb),.09); }
 .rk-seg-btn[aria-pressed="true"] { background: var(--glaze-btn); color: var(--glaze-ink); font-weight: 600; }
 .rk-seg-btn:focus-visible { outline-offset: -3px; }
-.acct-style { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; font-size: 14px; }
-.acct-style-words b { font-weight: 600; }
+/* LM18: two lines that never move: "Light style:", the palette bar (strip, page, card, words, turquoise words: --band per
+   part, set from config.js) and the name on one line; the swatches always on the next. A previewed name (pointing at a
+   swatch, or tabbing to it) is lighter until you move away. */
+.acct-style { display: grid; grid-template-columns: 1fr; justify-items: start; gap: 8px; font-size: 14px; }
+.acct-style-words { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.acct-style-name { font-weight: 600; }
+.acct-style-name.preview { color: var(--faint); font-weight: 400; font-style: italic; }
+.rk-bar { display: inline-flex; flex: none; width: 76px; height: 14px; border-radius: 7px; overflow: hidden; border: 1px solid var(--line); }
+.rk-bar-band { flex: 1; background: var(--band); }
 .rk-swatches { display: flex; flex: none; gap: 7px; }
 .rk-swatch { position: relative; width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 1px solid var(--line);
   background: var(--sw-strip); cursor: pointer; }
@@ -1264,7 +1271,6 @@ a { color: var(--glaze-light); }
   border-radius: 50%; background: var(--sw-dot); }
 .rk-swatch:hover { border-color: var(--glaze); }
 .rk-swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--raised), 0 0 0 4px var(--glaze); }
-.acct-style-note { flex-basis: 100%; }
 .tp-auto-hint { background: rgba(var(--stage-rgb),.88); color: var(--text); padding: 3px 11px; font-size: 12.5px; }
 
 /* Round C (claude/raku-expand-plan.md, EX1 to EX8; from claude/raku-expand-mockup.html): a playing tile's expand button,

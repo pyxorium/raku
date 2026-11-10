@@ -52,6 +52,9 @@ def new_page(browser, scheme='dark', width=1280, height=820, saved=None):
     page.on('pageerror', lambda e: errors.append(str(e)))
     return ctx, page, errors
 
+def label(page):   # "Light style: <name>" as read on screen (the palette bar between them has no words)
+    return ' '.join(page.locator('.acct-style-words').inner_text().split())
+
 def open_menu(page):
     if page.locator('.account-menu').is_hidden(): page.click('.account-btn')
     page.wait_for_selector('.account-menu .acct-look')
@@ -72,7 +75,7 @@ with sync_playwright() as p:
     order = page.evaluate("() => [...document.querySelector('.account-menu').children].map((e) => e.className)")
     check('the rows sit directly above Autoplay (signed out)', 'acct-looks' in order and order.index('acct-looks') + 1 == order.index('acct-autoplay'), order)
     check('the Light style row shows (light can appear), with Clear chosen and the note for a dark device',
-          page.locator('.acct-style-words').inner_text() == 'Light style: Clear'
+          label(page) == 'Light style: Clear'
           and page.locator('.rk-swatch[aria-pressed="true"]').get_attribute('aria-label') == 'Clear'
           and page.locator('.acct-style-note').inner_text() == 'Used when your device is light.')
     labels = page.locator('.rk-swatch').evaluate_all('(els) => els.map((e) => e.getAttribute("aria-label"))')
@@ -102,7 +105,7 @@ with sync_playwright() as p:
         page.click(f'.rk-swatch[aria-label="{NAMES[sid]}"]')
         s = state(page)
         check(f'{NAMES[sid]}: a tap changes Raku at once (stage, strip, theme-color, label)', s['light'] == sid and s['stage'] == hexrgb(STAGE[sid]) and s['kiln'] == hexrgb(KILN[sid])
-              and s['themes'] == [KILN[sid]] * 2 and page.locator('.acct-style-words').inner_text() == f'Light style: {NAMES[sid]}', s)
+              and s['themes'] == [KILN[sid]] * 2 and label(page) == f'Light style: {NAMES[sid]}', s)
         page.screenshot(path=str(OUT / f'look-03-{sid}-menu.png'))
     page.click('.rk-swatch[aria-label="Washi"]')
     check('the swatch keeps the focus, and is ringed', page.evaluate("() => document.activeElement?.getAttribute('aria-label')") == 'Washi'
@@ -226,6 +229,56 @@ with sync_playwright() as p:
         if scheme == 'dark' and not saved:
             page.emulate_media(color_scheme='light')
             check('offline page follows the device live', wait_for(lambda: page.evaluate('document.documentElement.dataset.look') == 'light'))
+        ctx.close()
+
+    # 9. LM18: the Light style row never moves: two lines, the palette bar before the name, a preview while pointing.
+    BAR = {'bisque': ['#e4dccf', '#ece5d9', '#fbf8f2', '#2a231d', '#1a6b62'], 'porcelain': ['#dee1e6', '#eceef1', '#fbfbfc', '#1e2329', '#106f65'],
+           'celadon': ['#dae2de', '#e8edeb', '#f8f9f9', '#1d2b27', '#17705f'], 'washi': ['#efe6cf', '#f5f0e2', '#fbf9f4', '#402e21', '#217166'],
+           'smoke': ['#26211d', '#efebe7', '#faf9f7', '#2a231d', '#196c61'], 'clear': ['#e7e6e4', '#f4f4f3', '#ffffff', '#161413', '#0d665b']}
+    GEO = """() => { const r = (e) => e.getBoundingClientRect();
+      return { row: Math.round(r(document.querySelector('.acct-style')).height),
+               sw: [...document.querySelectorAll('.rk-swatch')].map((e) => [Math.round(r(e).left), Math.round(r(e).top)]),
+               bar: Math.round(r(document.querySelector('.rk-bar')).left),
+               bands: [...document.querySelectorAll('.rk-bar-band')].map((e) => getComputedStyle(e).backgroundColor) }; }"""
+    for width, tag in [(1280, 'computer'), (360, 'phone')]:
+        ctx, page, errors = new_page(browser, 'light', width=width, height=820 if width > 400 else 740)
+        page.goto(RAKU); page.wait_for_selector('.account-btn')
+        open_menu(page)
+        page.locator('.acct-looks').scroll_into_view_if_needed()
+        geos = {}
+        for sid in ['bisque', 'porcelain', 'celadon', 'washi', 'smoke', 'clear']:
+            page.click(f'.rk-swatch[aria-label="{NAMES[sid]}"]')
+            page.mouse.move(2, 2)   # away from the swatches, so nothing is previewed
+            geos[sid] = page.evaluate(GEO)
+            check(f'{tag}, {NAMES[sid]}: the palette bar shows its strip, page, card, words and turquoise words', geos[sid]['bands'] == [hexrgb(c) for c in BAR[sid]], geos[sid]['bands'])
+            if sid in ('porcelain', 'smoke'): page.screenshot(path=str(OUT / f'look-09-{tag}-{sid}.png'))
+        same = {(g['row'], tuple(map(tuple, g['sw']))) for g in geos.values()}
+        check(f'{tag}: tapping all six styles, the swatches never move (and stay on one line)', len(same) == 1
+              and len({t for _, t in geos['clear']['sw']}) == 1, geos)
+        check(f'{tag}: the palette bar stays in one place for every style', len({g['bar'] for g in geos.values()}) == 1, [g['bar'] for g in geos.values()])
+        lab = page.locator('.acct-style-words').bounding_box(); sw0 = page.locator('.rk-swatch').first.bounding_box()
+        check(f'{tag}: two lines: the swatches below the label', sw0['y'] >= lab['y'] + lab['height'] - 1, (lab, sw0))
+        if width > 400:
+            page.hover('.rk-swatch[aria-label="Washi"]')
+            pre = page.evaluate(GEO)
+            check('pointing at Washi (Clear chosen): its name, lighter, and its bar', label(page) == 'Light style: Washi'
+                  and page.locator('.acct-style-name.preview').count() == 1 and pre['bands'] == [hexrgb(c) for c in BAR['washi']], (label(page), pre['bands']))
+            check('…and nothing moves while previewing', (pre['row'], pre['sw'], pre['bar']) == (geos['clear']['row'], geos['clear']['sw'], geos['clear']['bar']))
+            page.screenshot(path=str(OUT / 'look-09-preview-washi.png'))
+            page.mouse.move(2, 2)
+            check('moving away brings back the chosen style', label(page) == 'Light style: Clear' and page.locator('.acct-style-name.preview').count() == 0
+                  and page.evaluate(GEO)['bands'] == [hexrgb(c) for c in BAR['clear']])
+            page.focus('.rk-swatch[aria-label="Porcelain"]')
+            check('tabbing to Porcelain previews it too', label(page) == 'Light style: Porcelain' and page.locator('.acct-style-name.preview').count() == 1)
+            page.keyboard.press('Shift+Tab')
+            check('…and tabbing on to Bisque previews Bisque', label(page) == 'Light style: Bisque')
+            page.keyboard.press('Enter')
+            check('Enter chooses it: not a preview any more', state(page)['light'] == 'bisque' and label(page) == 'Light style: Bisque'
+                  and page.locator('.acct-style-name.preview').count() == 0)
+            check('the bar is hidden from screen readers; the swatches are a group named "Light style"',
+                  page.locator('.rk-bar').get_attribute('aria-hidden') == 'true' and page.locator('.rk-swatches').get_attribute('aria-label') == 'Light style'
+                  and page.locator('.rk-swatch[title]').count() == 0)
+        check(f'no page errors ({tag}, the row)', not errors, errors)
         ctx.close()
     browser.close()
 

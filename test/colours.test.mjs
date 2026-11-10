@@ -52,8 +52,9 @@ test('style.css: every name used is defined, and every colour name is used', () 
   const defined = new Set([...root.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
   const body = rules.map((r) => r.body).join('\n');
   const used = new Set([...body.matchAll(/var\((--[\w-]+)/g)].map((m) => m[1]));
-  // set from code, not on :root: round C's --wco-right (src/app-shell.js); a swatch's own colours (src/account-menu.js)
-  const missing = [...used].filter((n) => !defined.has(n) && !['--wco-right', '--sw-strip', '--sw-dot'].includes(n));
+  // set from code, not on :root: round C's --wco-right (src/app-shell.js); a swatch's own colours and the palette bar's
+  // (src/account-menu.js, from config.js)
+  const missing = [...used].filter((n) => !defined.has(n) && !['--wco-right', '--sw-strip', '--sw-dot', '--band'].includes(n));
   assert.deepEqual(missing, [], 'used but not on :root');
   const rgbUsed = new Set([...body.matchAll(/rgba\(var\((--[\w-]+-rgb)\)/g)].map((m) => m[1]));
   // the --pot-… colours are read by src/icons.js, which draws the bowl beside the Raku label in them

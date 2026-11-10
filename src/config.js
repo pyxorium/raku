@@ -414,16 +414,17 @@ export const AUTOPLAY = Object.freeze({ key: 'raku-autoplay', share: 0.66, settl
 // browser under key (starting at Match device); the light style under styleKey (starting at Clear). public/look.js and
 // public/offline.html read the same keys and keep their own copy of the styles' theme colours (test/look.test.mjs).
 // dark: the dark look's strip (--kiln), its theme-color. Each light style: strip (its --kiln, drawn in its swatch; Smoke and
-// clay's is the dark strip it keeps, LM17), dot (its --glaze-btn) and theme (its theme-color: Smoke and clay's is dark).
+// clay's is the dark strip it keeps, LM17), dot (its --glaze-btn) and theme (its theme-color: Smoke and clay's is dark); with the
+// strip, page (--stage), card (--card), words (--text) and turq (--glaze-light) are the palette bar beside its name (LM18).
 export const LOOK = Object.freeze({ key: 'raku-look', styleKey: 'raku-light-style', looks: Object.freeze(['device', 'light', 'dark']),
   defaultLook: 'device', defaultStyle: 'clear', dark: '#26211d' });
 export const LIGHT_STYLES = Object.freeze([
-  { id: 'bisque', name: 'Bisque', strip: '#e4dccf', dot: '#2fa596', theme: '#e4dccf' },
-  { id: 'porcelain', name: 'Porcelain', strip: '#dee1e6', dot: '#29a391', theme: '#dee1e6' },
-  { id: 'celadon', name: 'Celadon', strip: '#dae2de', dot: '#36a897', theme: '#dae2de' },
-  { id: 'washi', name: 'Washi', strip: '#efe6cf', dot: '#3aa594', theme: '#efe6cf' },
-  { id: 'smoke', name: 'Smoke and clay', strip: '#26211d', dot: '#2fa596', theme: '#26211d' },
-  { id: 'clear', name: 'Clear', strip: '#e7e6e4', dot: '#2fa596', theme: '#e7e6e4' },
+  { id: 'bisque', name: 'Bisque', strip: '#e4dccf', dot: '#2fa596', theme: '#e4dccf', page: '#ece5d9', card: '#fbf8f2', words: '#2a231d', turq: '#1a6b62' },
+  { id: 'porcelain', name: 'Porcelain', strip: '#dee1e6', dot: '#29a391', theme: '#dee1e6', page: '#eceef1', card: '#fbfbfc', words: '#1e2329', turq: '#106f65' },
+  { id: 'celadon', name: 'Celadon', strip: '#dae2de', dot: '#36a897', theme: '#dae2de', page: '#e8edeb', card: '#f8f9f9', words: '#1d2b27', turq: '#17705f' },
+  { id: 'washi', name: 'Washi', strip: '#efe6cf', dot: '#3aa594', theme: '#efe6cf', page: '#f5f0e2', card: '#fbf9f4', words: '#402e21', turq: '#217166' },
+  { id: 'smoke', name: 'Smoke and clay', strip: '#26211d', dot: '#2fa596', theme: '#26211d', page: '#efebe7', card: '#faf9f7', words: '#2a231d', turq: '#196c61' },
+  { id: 'clear', name: 'Clear', strip: '#e7e6e4', dot: '#2fa596', theme: '#e7e6e4', page: '#f4f4f3', card: '#ffffff', words: '#161413', turq: '#0d665b' },
 ].map((s) => Object.freeze(s)));
 // Recent tiles (stage 6c, Q106 to Q110): appmosphe.re's list of every tile it has seen, newest first by each
 // tile's createdAt, 30 a page (?page=N), shown in appmosphe.re's own order. Cards only; pictures are

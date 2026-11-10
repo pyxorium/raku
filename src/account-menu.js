@@ -4,7 +4,7 @@
 // switches, no window: Q38), Add another account, the "Saves without asking" choices with Turn off (Q37),
 // Raku's sign-in promise (Q43), and Sign out; then the Autoplay switch (claude/raku-expand-plan.md, AU5), "Install
 // Raku" when the browser offers it (stage 9, S3); last, a link to the About page (going public, Q134). Above Autoplay,
-// the Look row and the Light style row (claude/raku-light-mode-plan.md, LM7, LM14).
+// the Look row and the Light style row (claude/raku-light-mode-plan.md, LM7, LM14, LM18).
 import { SIGNIN_PROMISE, TABLES, LIGHT_STYLES } from './config.js';
 import { h } from './cards.js';
 import { icon } from './icons.js';
@@ -62,8 +62,11 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
     switchButton(autoplay, 'Autoplay tile posts')) : null);
   // LM7: Match device · Light · Dark, the current one filled. LM14: the six light styles as round swatches (each its
   // style's strip with a dot of its turquoise), shown only when light can appear; with Match device on a device that's
-  // dark now, a note says when it's used. A tap changes Raku at once.
+  // dark now, a note says when it's used. A tap changes Raku at once. LM18: two lines that never move ("Light style:",
+  // a palette bar, the name; the swatches always on the line below); pointing at a swatch with the mouse, or tabbing to it,
+  // shows its name (lighter) and its bar until you move away. The bar sits before the name, so it stays put too.
   const LOOKS = [['device', 'Match device'], ['light', 'Light'], ['dark', 'Dark']];
+  const BANDS = ['strip', 'page', 'card', 'words', 'turq'];   // the palette bar: strip, page, card, words, turquoise words
   const lookRows = () => {
     if (!look) return null;
     const lookRow = h('div', { class: 'acct-look' }, h('span', { class: 'acct-look-label', id: 'acct-look-label' }, 'Look'),
@@ -71,17 +74,30 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
         h('button', { type: 'button', class: 'rk-seg-btn', 'aria-pressed': look.look === v ? 'true' : 'false', 'data-focus-key': `look-${v}`,
           onclick: () => look.setLook(v) }, words))));
     if (look.look === 'dark') return h('div', { class: 'acct-looks' }, lookRow);
-    const chosen = LIGHT_STYLES.find((st) => st.id === look.style);
+    const chosen = LIGHT_STYLES.find((st) => st.id === look.style) || LIGHT_STYLES[LIGHT_STYLES.length - 1];
+    const bands = BANDS.map(() => h('span', { class: 'rk-bar-band' }));
+    const bar = h('span', { class: 'rk-bar', 'aria-hidden': 'true' }, ...bands);
+    const name = h('b', { class: 'acct-style-name' });
+    // the style's own colours, from config.js (not the page's), set through the CSSOM like the swatches'
+    const show = (st, preview) => {
+      bands.forEach((band, i) => band.style.setProperty('--band', st[BANDS[i]]));
+      name.textContent = st.name;
+      name.classList.toggle('preview', !!preview);
+    };
+    show(chosen, false);
     const swatches = LIGHT_STYLES.map((st) => {
       const b = h('button', { type: 'button', class: 'rk-swatch', 'aria-pressed': st.id === look.style ? 'true' : 'false', 'aria-label': st.name,
-        title: st.name, 'data-focus-key': `style-${st.id}`, onclick: () => look.setStyle(st.id) });
-      b.style.setProperty('--sw-strip', st.strip);   // the style's own colours, from config.js (not the page's)
+        'data-focus-key': `style-${st.id}`, onclick: () => look.setStyle(st.id),
+        onpointerenter: (e) => { if (e.pointerType === 'mouse') show(st, st.id !== chosen.id); },
+        onpointerleave: (e) => { if (e.pointerType === 'mouse') show(chosen, false); },
+        onfocus: () => show(st, st.id !== chosen.id), onblur: () => show(chosen, false) });
+      b.style.setProperty('--sw-strip', st.strip);
       b.style.setProperty('--sw-dot', st.dot);
       return b;
     });
     const styleRow = h('div', { class: 'acct-style' },
-      h('span', { class: 'acct-style-words', id: 'acct-style-label' }, 'Light style: ', h('b', {}, chosen ? chosen.name : '')),
-      h('div', { class: 'rk-swatches', role: 'group', 'aria-labelledby': 'acct-style-label' }, ...swatches),
+      h('span', { class: 'acct-style-words' }, 'Light style:', bar, name),
+      h('div', { class: 'rk-swatches', role: 'group', 'aria-label': 'Light style' }, ...swatches),
       look.look === 'device' && !look.deviceLight ? h('span', { class: 'small acct-style-note' }, 'Used when your device is light.') : null);
     return h('div', { class: 'acct-looks' }, lookRow, styleRow);
   };

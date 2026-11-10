@@ -131,6 +131,10 @@ test('the styles\' colours in config.js, public/look.js and the offline page are
     assert.equal(s.strip, strip, `${s.name}: its swatch is its strip`);
     assert.equal(s.theme, strip, `${s.name}: its theme-color is its strip`);
     assert.equal(s.dot, val(body, '--glaze-btn'), `${s.name}: its swatch's dot is its turquoise`);
+    // LM18: the palette bar beside its name: strip, page, card, words, turquoise words
+    for (const [k, n] of [['page', '--stage'], ['card', '--card'], ['words', '--text'], ['turq', '--glaze-light']]) {
+      assert.equal(s[k], val(body, n), `${s.name}: its palette bar's ${k} is its ${n}`);
+    }
   }
   const themes = Object.fromEntries(LIGHT_STYLES.map((s) => [s.id, s.theme]));
   for (const [where, code] of [['public/look.js', file('public/look.js')], ['offline.html', file('public/offline.html')]]) {

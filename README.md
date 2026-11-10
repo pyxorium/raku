@@ -726,7 +726,9 @@ colour change, is a change to the names alone.
 The second push of `claude/raku-light-mode-plan.md` (LM1 to LM17). Raku follows the device's light or dark setting; the
 account menu has a **Look** row (Match device · Light · Dark, starting at Match device) and, under it while light can
 appear, a **Light style** row of six swatches: Bisque, Porcelain, Celadon, Washi, Smoke and clay, and Clear (the
-default). Both are remembered in this browser (`raku-look`, `raku-light-style`).
+default). Both are remembered in this browser (`raku-look`, `raku-light-style`). The Light style row is two lines that
+never move: "Light style:", a palette bar (the style's strip, page, card, words and turquoise words) and the name, with the
+swatches always on the line below; pointing at a swatch, or tabbing to it, shows its name and bar before you choose (LM18).
 
 - `src/style.css`: `:root` is the dark look. The light styles follow it, keyed on `<html data-look="light"
   data-light="…">`: Clear is the plain `:root[data-look="light"]` block, the other five override it. Smoke and clay
@@ -738,7 +740,8 @@ default). Both are remembered in this browser (`raku-look`, `raku-light-style`).
   strip; Smoke and clay's is dark). `src/look.js` does the same once Raku runs, follows the device live while the choice
   is Match device, and redraws the bowl (`refreshBrandPots`). `test/look.test.mjs` runs `public/look.js` and the
   offline page's look script against `src/look.js` in every case.
-- `src/config.js`: `LOOK` (keys, defaults) and `LIGHT_STYLES` (names, swatch colours, theme colours).
+- `src/config.js`: `LOOK` (keys, defaults) and `LIGHT_STYLES` (names, swatch, palette bar and theme colours; `test/look.test.mjs`
+  checks them against `style.css`).
 - `public/offline.html`: its seven names in each style, its own look script in `<head>` (both scripts allowed by hash).
 - Browser check: `test/browser/check_look.py` (with the other browser checks, below).
 
@@ -892,14 +895,16 @@ swapped in (one picture); an unchanged pick asking appmosphe.re for nothing; an 
 card; a pick with no bake loading as before; a baked card opening its tile. 8 of its checks fail on the code before
 the bake.
 
-`check_look.py` (59 checks, Nov 2026: light mode) needs only `servers.mjs` (tiles needn't run: a small stand-in for
+`check_look.py` (86 checks, Nov 2026: light mode) needs only `servers.mjs` (tiles needn't run: a small stand-in for
 `@dasl/tile-loader` is enough). Usage: `python3 test/browser/check_look.py <work folder>`. A dark device dark as
 before; the device turning light and back while Raku is open; the Look row and the Light style row (signed out and signed in, above
 Autoplay, the note on a dark device, six named buttons); each style chosen at once, by tap and by keyboard, the focus
 kept, remembered over a reload; Dark hiding the style row; the first paint already in the saved look with Raku's own
 script held back; Smoke and clay's dark top bar, address box and bowl with its menu light; the phone sheet (both rows on
 one line, no sideways scroll); the offline page in each look, following the device; `theme-color` throughout; nothing
-refused by the page policy. The first-paint checks fail without `public/look.js`, the bowl's after a reload without
+refused by the page policy; the Light style row (LM18): tapping all six styles at computer and phone width, the swatches
+and the palette bar never move, each bar in its style's colours, pointing and tabbing previewing a style and moving away
+putting the chosen one back, the bar hidden from screen readers. The first-paint checks fail without `public/look.js`, the bowl's after a reload without
 `refreshBrandPots` once the chrome is in place.
 
 `check_renderer.py` (81 checks, renderer tiles; since ways, a signpost's "Go to" taking that way to the maze's tile; since Nov 9, a test renderer adding handlers after `listen()` gets the record from the loading server's `data.js`: fails with the stock one) sets everything up itself, like `check_daisy.py`: a copy of this folder
