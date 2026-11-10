@@ -216,6 +216,31 @@ export const opensOutside = (kind) => OPENS_OUTSIDE.includes(kind);
 export const opensHere = (r, renderers = RENDERERS) => !!r && !!r.ok
   && (!opensOutside(r.kind) || (r.kind === 'record' && !!rendererFor(r.collection, renderers)));
 
+// ---- a tile post's own page (claude/raku-post-links-plan.md, SL1) ----
+// A tile post (cafe.thunderbird.tile.post, the lexicon in pyxorium/tile-posts) opens in a tab of its own, at its own
+// AT URI, drawn by Raku (discover.js drawTilePostPage):
+//   at://<did or handle>/cafe.thunderbird.tile.post/<rkey>    kind 'tile-post'
+// The whole collection (no key) still opens the link message. A PDSls / Taproot link to a post lands here too (its
+// AT URI is read back below). The links Raku hands out use the author's DID (tilePostUri), so a new handle doesn't break them.
+export const TILE_POST_COLLECTION = 'cafe.thunderbird.tile.post';
+export const tilePostUri = (actor, rkey) => `at://${actor}/${TILE_POST_COLLECTION}/${rkey}`;
+function tilePost(s) {
+  const m = s.match(/^at:\/\/([^/?#\s]+)\/cafe\.thunderbird\.tile\.post\/([^/?#\s]+)\/?$/i);
+  if (!m) return null;
+  let actor, rkey;
+  try { actor = decodeURIComponent(m[1]); rkey = decodeURIComponent(m[2]); } catch { return null; }
+  const a = account(actor);
+  if (!a.ok) return a;
+  if (!isRkey(rkey)) return fail("That tile post's key isn't valid.");
+  return { ok: true, kind: 'tile-post', actor: a.actor, rkey, uri: tilePostUri(a.actor, rkey) };
+}
+
+/**
+ * The link "Copy link" and "Share via…" hand out (SL2): Raku's own address with one tab, the one given, in front.
+ * Never the page's own address, which carries every open tab (tabs.js toHash). `origin` for tests.
+ */
+export const shareLink = (uri, origin = SITE.origin) => `${origin}/#t=${encodeURIComponent(uri)}&a=0`;
+
 // at://<actor>/<collection>[/<rkey>] for a collection that isn't tiles (posts are parsePost's). → a target or null
 function otherRecord(s) {
   const m = s.match(/^at:\/\/([^/?#\s]+)\/([^/?#\s]+)(?:\/([^/?#\s]+))?\/?$/i);
@@ -277,7 +302,8 @@ function looksLikeWords(s) {
  * lexicographer.space / appmosphe.re link to an account), Discover, a post (stage 6), or words to search
  * for; since the open-links round, a record or collection that isn't tiles, and links from PDSls, Taproot and
  * profile pages; since ways, a way taken (raku:way/…). → { ok, kind: 'tile' | 'shelf' | 'account' | 'table' |
- * 'discover' | 'search' | 'post' | 'record' | 'collection' | 'way', uri, … }. 'post', 'record' and 'collection' open outside Raku (opensOutside), never in a tab.
+ * 'discover' | 'search' | 'post' | 'record' | 'collection' | 'way' | 'tile-post', uri, … }. 'post', 'record' and 'collection' open
+ * outside Raku (opensOutside), never in a tab; a tile post (Nov 2026, SL1) opens in its own tab.
  */
 export function parseTarget(input, { inner = false } = {}) {
   const s = String(input || '').trim();
@@ -315,6 +341,9 @@ export function parseTarget(input, { inner = false } = {}) {
   if (profile) return profile;
   // A record or collection that isn't tiles (OL1, OL5): the link message.
   if (/^at:\/\//i.test(s)) {
+    // A tile post (SL1): its own page, in a tab.
+    const tp = tilePost(s.replace(/^at:\/\//i, 'at://'));
+    if (tp) return tp;
     const other = otherRecord(s.replace(/^at:\/\//i, 'at://'));
     if (other) return other;
   }

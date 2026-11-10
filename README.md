@@ -703,6 +703,28 @@ Decisions: `claude/raku-write-posts-plan.md` (WP1 to WP13; the mockup `claude/ra
   `test/tile-post-write.test.mjs`, `test/auth.test.mjs`, `test/publish-lexicons.test.mjs`. Browser:
   `test/browser/check_write.py` (below).
 
+## A page for each tile post, Copy link and Share (Nov 2026)
+
+`claude/raku-post-links-plan.md` (SL1 to SL8). No new records, lexicons or permissions.
+- **A tile post's own page (SL1, SL5):** at the post's own AT URI, `at://<did or handle>/cafe.thunderbird.tile.post/<rkey>`,
+  typed, pasted, in a `#t=` link, or a PDSls / Taproot link to the post. A small heading, "Tile post", with **All tile
+  posts** beside it (someone arriving by a shared link has no Back), then the post's card as Tile posts draws it, with
+  Play here, expand and Autoplay. The tab: "@handle's post" (SL7). The whole collection (no key) still opens the link
+  message. A post's page counts as one of Raku's own pages (the Discover, Shelf and About buttons stay in the tab).
+- **When it can't be shown (SL6):** deleted: "There's no tile post at that address (it may have been deleted)." (tab
+  "No such post"); its author or its tile hidden: "This tile post isn't shown in Raku." and Reporting and takedowns
+  (tab "Not shown"; the hidden account's server isn't asked); its tile gone or changed: the card with "This tile can't
+  be shown.", as in the list; the server unreachable: a note with Try again.
+- **On every post card (SL2, SL3):** the time opens the post's page in this tab (Back returns; a middle click, a new
+  tab), and a **Share** button (a curved arrow) opens a small menu: **Open post** (not on the page itself), **Copy
+  link** (`https://raku.lexicographer.space/#t=<the post's AT URI, encoded>&a=0`: that one post, never the other open
+  tabs; "Link copied"; a refused clipboard shows the link to copy by hand), and **Share via…** only where the browser
+  has a share sheet (Edge and Chrome on Windows, phones): the title "@handle's tile post", the post's words, the link
+  (SL8). One menu open at a time; Escape, Tab or a click outside closes it; the arrow keys move through it.
+- Code: `src/address.js` (kind `tile-post`, `tilePostUri`, `shareLink`), `src/post-share.js` (the menu, `shareData`),
+  `src/discover.js` (`drawTilePostPage`; `tilePostCard` with `own`), `src/app.js` (the tab, `ownPage`), `src/icons.js`
+  (`share`, `link`). Unit tests: `test/post-links.test.mjs`. Browser: `test/browser/check_post_links.py` (below).
+
 ## Named colours (light-mode groundwork, Nov 2026)
 
 Step 1 of a light mode (`claude/raku-light-mode-plan.md`): nothing looks different. Every colour of Raku's own is
@@ -839,6 +861,15 @@ with the stand-in sign-in (which expands "Raku" into the grouped form Bluesky ha
 Playwright route. `check_signin.py`, `check_lounge.py` and `check_room.py` were written for the per-game permissions
 and still expect that wording: update them the next time they're run (they need the site's game files, the loader
 replica and the relays staged).
+
+`check_post_links.py` (47 checks, Nov 2026: a tile post's page, Copy link and Share) needs only `servers.mjs` and a
+bundle (tiles don't run: a stand-in for `@dasl/tile-loader` is enough); everything outside is a Playwright route, and the
+share sheet and a refusing clipboard are stood in: the time and Open post (the page in this tab, Raku's Back), the page
+(heading, All tile posts, the card with no ways in, the tab title), a shared link (one tab, no Back), the Discover
+button from a post's page, a pasted PDSls link and a handle address, the collection's link message, the deleted, hidden
+(author and tile) and tile-changed pages, the server unreachable and Try again, the menu (its items, the keys, Escape,
+one at a time, a click outside), Copy link and "Link copied", Share via… (with and without words, cancelled), no share
+sheet, the clipboard refused, the light look, the phone.
 
 `check_posts.py` (152 checks, tile posts, Play here, round C and Autoplay) runs the same way as `check_discover.py`, with the loader replica
 running too (`node test/browser/loader-replica.mjs <tiles-loading-server folder>`, port 80): posts from several accounts in order

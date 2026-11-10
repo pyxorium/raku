@@ -34,6 +34,9 @@ const PATHS = {
   // stage 9: Install Raku in the account menu
   install: ['M12 4v10.5', 'M7.5 10l4.5 4.5 4.5-4.5', 'M5 19.5h14'],
   brush: ['M10.2 12.4l8.3-8.3a1.8 1.8 0 0 1 2.5 2.5l-8.3 8.3', 'M8.6 13.4a3.1 3.1 0 0 1 3.1 3.1c0 2.6-2.6 4.1-6.7 4.1 1-1 1.3-2.2 1.3-3.5a3.1 3.1 0 0 1 2.3-3.7z'],
+  // a tile post's Share button (claude/raku-post-links-plan.md, SL2): a curved arrow, as Bluesky's; Copy link: two links of a chain
+  share: ['M14 5l6 6-6 6', 'M20 11h-9a6 6 0 0 0-6 6v2'],
+  link: ['M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1', 'M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1'],
 };
 const FILLED = new Set(['star-filled']);
 export const ICON_NAMES = Object.keys(PATHS);

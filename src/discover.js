@@ -12,8 +12,9 @@
 // Addresses (address.js): raku:discover, raku:discover/news, raku:discover/posts, raku:discover/recent,
 // raku:discover/following, raku:discover/make, raku:search/<words>.
 
-import { PICKS, SEARCH, RECENT, MAKE, FEED, NEWS_PINS, TILE_POSTS, PLAY_HERE, siteLabel, feedUri, postApp, appmosphereCopy } from './config.js';
-import { atUri, discoverUri, searchUri, accountPageUri, parseAddress, parsePost, SHELF_URI, DISCOVER_URI, ABOUT_URI } from './address.js';
+import { PICKS, SEARCH, RECENT, MAKE, FEED, NEWS_PINS, TILE_POSTS, PLAY_HERE, TAKEDOWNS_PAGE, siteLabel, feedUri, postApp, appmosphereCopy } from './config.js';
+import { atUri, discoverUri, searchUri, accountPageUri, parseAddress, parsePost, SHELF_URI, DISCOVER_URI, ABOUT_URI, tilePostUri, TILE_POST_COLLECTION } from './address.js';
+import { shareMenu } from './post-share.js';
 import { describeTile } from './tiles.js';
 import { NetError, formatBytes } from './net.js';
 import { h, bannerCid } from './cards.js';
@@ -25,7 +26,7 @@ import { createPublicReads } from './bluesky.js';
 import { readPost, threadContext, whenText, groupThreads, ago } from './posts.js';
 import { postCard, threadCard } from './post-card.js';
 import { searchAppmosphere, localMatches } from './search.js';
-import { createTilePosts, tileState } from './tile-posts.js';
+import { createTilePosts, tileState, readTilePost } from './tile-posts.js';
 import { expandMotion, createAutoplayWatch, autoplaySize, autoplayMayStart } from './play-here.js';
 import { switchButton } from './account-menu.js';
 import { createExpanded } from './expand-view.js';
@@ -544,6 +545,61 @@ function drawTilePosts(ctx, into) {
   fill(false);
 }
 
+// ---------- A tile post's own page (claude/raku-post-links-plan.md, SL1 to SL7) ----------
+// at://<did or handle>/cafe.thunderbird.tile.post/<rkey> in a tab: a small heading, "Tile post", with "All tile posts"
+// beside it (someone arriving by a shared link has no Back, SL5), then the post's card as Tile posts draws it, with Play
+// here, expand and Autoplay. When it can't be shown, the heading stays and a line says why, as a tile's tab speaks
+// (SL6): deleted ("No such post"), its author or its tile hidden ("Not shown", never which list or why), or its tile
+// gone or changed (the card shows "This tile can't be shown." as in the list). The tab: "@handle's post" (SL7).
+export function drawTilePostPage(ctx, target) {
+  const { p, tab, tabs, resolver, moderation, drawChrome, alive, player, autoplay } = ctx;
+  p.title = 'Tile post';
+  p.shownAddress = target.uri;
+  p.keep = null;
+  p.state = 'loading';
+  drawChrome();
+  const status = h('p', { class: 'dv-status', role: 'status' }, 'Finding this tile post…');
+  const holder = h('div', { class: 'posts tile-posts' });
+  const head = h('div', { class: 'tpp-head' }, h('h1', {}, 'Tile post'),
+    h('button', { type: 'button', class: 'linkish', onclick: () => tabs.go(tab.id, discoverUri('posts')) }, 'All tile posts'));
+  p.el.append(h('div', { class: 'tp-page' }, head, status, holder));
+  // PH2: the tile playing in the post stops when this page goes; Autoplay watches the one slot, as in Tile posts.
+  const auto = autoplay ? autoplayFor(ctx, holder, null) : null;
+  ctx.auto = auto;
+  const before = p.dispose;
+  p.dispose = () => { player.stop(); if (auto) auto.dispose(); if (before) before(); };
+  const note = (title, state, ...words) => {
+    status.remove();
+    holder.replaceChildren(h('p', { class: 'post-note tpp-note' }, ...words));
+    p.title = title;
+    p.state = state;
+    drawChrome();
+  };
+  const gone = () => note('No such post', 'error', "There's no tile post at that address (it may have been deleted).");
+  const hidden = () => note('Not shown', 'hidden', "This tile post isn't shown in Raku. ",
+    h('a', { href: TAKEDOWNS_PAGE, target: '_blank', rel: 'noopener noreferrer' }, 'Reporting and takedowns ↗'));
+  (async () => {
+    const did = await resolver.didFor(target.actor);
+    if (!alive()) return;
+    if (await moderation.isAccountHidden(did)) { if (alive()) hidden(); return; }
+    const rec = await resolver.record(did, TILE_POST_COLLECTION, target.rkey);
+    if (!alive()) return;
+    const post = readTilePost(rec, did);
+    if (!post) { gone(); return; }      // not a tile post Raku can show (as the list leaves it out)
+    if (await moderation.isHidden(post.tile.did, post.tile.rkey)) { if (alive()) hidden(); return; }
+    if (!alive()) return;
+    status.remove();
+    holder.replaceChildren(tilePostCard(ctx, post, { own: true, onHandle: (hd) => { if (!alive()) return; p.title = `@${hd}'s post`; drawChrome(); } }));
+    p.state = 'ready';
+    drawChrome();
+  })().catch((err) => {
+    if (!alive()) return;
+    if (err && (err.code === 'not-found' || err.code === 'no-handle')) { gone(); return; }
+    note('Tile post', 'error', "Couldn't reach the post's server just now. ",
+      h('button', { type: 'button', class: 'linkish', onclick: () => tabs.go(tab.id, target.uri) }, 'Try again'));
+  });
+}
+
 /**
  * Autoplay on Tile posts (claude/raku-expand-plan.md, "After C", AU1 to AU6): watches the tile posts' slots and starts the
  * newest to be about two-thirds on screen for a moment (play-here.js createAutoplayWatch), when the switch is on. It
@@ -591,23 +647,39 @@ function autoplayFor(ctx, list, autoSwitch) {
   };
 }
 
-/** One tile post as a card (post.css's look): author, time, text, then the tile's card or "This tile can't be shown." */
-function tilePostCard(ctx, post) {
+/**
+ * One tile post as a card (post.css's look): author, time, text, then the tile's card or "This tile can't be shown", and
+ * the Share button (claude/raku-post-links-plan.md, SL2). In Tile posts the time opens the post's page in this tab, and so
+ * does "Open post" in the Share menu (SL3, SL4); on the post's own page (own: true) the time is plain and the menu has no
+ * "Open post". onHandle(handle): the author's handle once known (the page's tab title, SL7).
+ */
+function tilePostCard(ctx, post, { own = false, onHandle = null } = {}) {
   const { kit, tabs, tab, openNew, resolver, moderation } = ctx;
   const av = h('span', { class: 'post-av' });
   const name = h('span', { class: 'post-name', hidden: true });
   const handle = h('span', { class: 'post-handle' }, post.did);
+  let knownHandle = null;
+  const gotHandle = (hd) => { knownHandle = hd; handle.textContent = `@${hd}`; if (onHandle) onHandle(hd); };
+  const page = tilePostUri(post.did, post.rkey);
+  const openPage = own ? null : () => tabs.go(tab.id, page);
+  const iso = post.time ? new Date(post.time).toISOString() : '';
+  const when = post.time ? ago(iso) : '';
+  const time = own || !when
+    ? h('span', { class: 'post-time', title: iso }, when)
+    : h('button', { type: 'button', class: 'post-time post-time-link', title: iso, 'aria-label': `Open this post (${when})`, onclick: openPage,
+      onauxclick: (ev) => { if (ev.button === 1) { ev.preventDefault(); openNew(page); } } }, when);
   const head = h('header', { class: 'post-head' },
     h('button', { type: 'button', class: 'post-who', title: 'Their tiles in Raku', onclick: () => tabs.go(tab.id, accountPageUri(post.did)) },
       av, h('span', { class: 'post-names' }, name, handle)),
-    h('span', { class: 'post-time', title: post.time ? new Date(post.time).toISOString() : '' }, post.time ? ago(new Date(post.time).toISOString()) : ''));
+    time);
   const body = h('div', { class: 'post-body' }, post.text ? h('p', { class: 'post-text' }, post.text) : null);
-  const card = h('article', { class: 'post tile-post', 'data-uri': post.uri }, head, body);
+  const actions = h('footer', { class: 'post-actions' }, shareMenu({ post, handle: () => knownHandle, open: openPage }));
+  const card = h('article', { class: 'post tile-post', 'data-uri': post.uri }, head, body, actions);
   moderation.profile(post.did).then((prof) => {
     if (prof.avatar && !av.firstChild) av.append(h('img', { src: prof.avatar, alt: '', referrerpolicy: 'no-referrer', loading: 'lazy' }));
     if (prof.displayName) { name.textContent = prof.displayName; name.hidden = false; }
-    if (prof.handle) handle.textContent = `@${prof.handle}`;
-    else resolver.checkedHandle(post.did).then((hd) => { if (hd) handle.textContent = `@${hd}`; });
+    if (prof.handle) gotHandle(prof.handle);
+    else resolver.checkedHandle(post.did).then((hd) => { if (hd) gotHandle(hd); });
   }).catch(() => {});
 
   const t = post.tile;

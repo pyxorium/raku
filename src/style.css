@@ -1197,6 +1197,32 @@ a { color: var(--glaze-light); }
 .dv-empty .tp-how { margin-top: 6px; font-size: 13.5px; }
 .dv-empty .tp-how a { color: var(--glaze-light); }
 
+/* A tile post's page, its time link and its Share button (claude/raku-post-links-plan.md, SL1 to SL8) */
+.tp-page { max-width: 660px; margin: 0 auto; padding: 24px 16px 48px; }
+.tpp-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-bottom: 12px; }
+.tpp-head h1 { margin: 0; font-size: 24px; font-weight: 650; color: var(--glaze-light); }
+.tpp-head .linkish { font-size: 13.5px; }
+.tpp-note { padding: 12px 14px; border-radius: 12px; border: 1px dashed var(--edge-strong); }
+.tpp-note a, .tpp-note .linkish { color: var(--glaze-light); }
+.post-time-link { padding: 2px 0; border: 0; background: none; font: inherit; font-size: 12.5px; color: var(--faint); cursor: pointer; }
+.post-time-link:hover, .post-time-link:focus-visible { color: var(--glaze-light); text-decoration: underline; }
+.post-actions { display: flex; align-items: center; gap: 6px; margin: 8px 0 -4px -6px; }
+.ps { position: relative; display: inline-flex; align-items: center; gap: 6px; }
+.ps-btn { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%;
+  background: none; color: var(--muted); cursor: pointer; }
+.ps-btn:hover, .ps-btn:focus-visible, .ps-btn[aria-expanded="true"] { color: var(--glaze-light); background: rgba(var(--tint-rgb),.07); }
+.ps-menu { position: absolute; left: 0; top: calc(100% + 4px); z-index: 30; min-width: 190px; padding: 6px; border-radius: 9px;
+  background: var(--raised); border: 1px solid var(--line); box-shadow: 0 14px 40px rgba(var(--shadow-rgb),.55); }
+.ps-menu[hidden] { display: none; }
+.ps-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 38px; padding: 6px 10px; border: 0; border-radius: 7px;
+  background: none; color: var(--text); cursor: pointer; text-align: left; font: inherit; white-space: nowrap; }
+.ps-item:hover, .ps-item:focus-visible { background: rgba(var(--tint-rgb),.07); }
+.ps-item .icon { color: var(--muted); flex: none; }
+.ps-note { margin: 2px 4px 6px; font-size: 12.5px; color: var(--muted); }
+.ps-link { width: min(320px, calc(100vw - 48px)); padding: 6px 8px; border-radius: 7px; border: 1px solid var(--line); background: var(--sunk); color: var(--text); font: inherit; font-size: 12.5px; }
+.ps-done { color: var(--glaze-light); font-size: 12.5px; }
+.ps-done:empty { display: none; }
+
 /* Play here (claude/raku-play-here-plan.md, PH1 to PH8; from claude/raku-play-here-mockup.html): a tile post's tile
    runs in a 16:9 slot above the card's words */
 .tp-card { flex-direction: column; isolation: isolate; }   /* the slot's layers stay inside the card (under Discover's sticky chips) */

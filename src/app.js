@@ -48,7 +48,7 @@ import { createPinnedLoader, TileChanged } from './tables/pinned.js';
 import { READY, UP, DOWN, recordPayload, recordTitle, readOpenRequest, openDecision, createOpenGate, readGetRequest, getTarget, createGetBudget, readPictureRequest, pictureSource, PICTURE_TYPES } from './renderers.js';
 import { createAccountMenu } from './account-menu.js';
 import { createLinkMessage } from './link-message.js';
-import { createDiscover, drawDiscover } from './discover.js';
+import { createDiscover, drawDiscover, drawTilePostPage } from './discover.js';
 import { createPostBox } from './post-box.js';
 import { canPostTile } from './tile-post-write.js';
 import { drawAbout } from './about-page.js';
@@ -181,7 +181,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
 
   // Rooms (rooms step 1): at most one room in this window (RR6). A raku:page tab (not a room) or a first screen can
   // become the room tab; otherwise a new tab.
-  const ownPage = (uri) => !uri || (uri.startsWith('raku:') && uri !== ROOM_URI);
+  // Raku's own pages: the first screen, raku:… (not the room), and a tile post's page (SL1, at its AT URI).
+  const ownPage = (uri) => !uri || (uri.startsWith('raku:') && uri !== ROOM_URI) || parseTarget(uri).kind === 'tile-post';
   function openRoomTab() {
     if (ownPage(current(tabs.active))) rawGo(tabs.active.id, ROOM_URI);
     else openNew(ROOM_URI);
@@ -385,6 +386,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (target.ok && target.kind === 'table') { openTable(p, tab, target.id, target.sub); return; }
     if (target.ok && target.kind === 'discover') { drawDiscover(pageContext(p, tab), { source: target.source }); return; }
     if (target.ok && target.kind === 'search') { drawDiscover(pageContext(p, tab), { source: 'search', query: target.query }); return; }
+    // A tile post's own page (claude/raku-post-links-plan.md, SL1): drawn by Raku, like Discover.
+    if (target.ok && target.kind === 'tile-post') { drawTilePostPage(pageContext(p, tab), target); return; }
     if (target.ok && target.kind === 'record' && rendererFor(target.collection)) { openRecord(p, tab, target); return; }
     if (target.ok && target.kind === 'way') { openWay(p, tab, target, arrival); return; }
     openTile(p, tab, uri, { arrival });
