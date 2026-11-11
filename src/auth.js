@@ -15,7 +15,7 @@
 //   - "Always" choices per account and game, in this browser (Q37).
 // Uses @atproto/oauth-client-browser 0.5.8 (as the site and the Foundry). createAuth takes the library's
 // exports (loaded when needed), so the browser checks can hand in a stand-in (test/browser/oauth-standin.js).
-import { SIGNIN, fullScope, RAKU_SCOPE, coversTable, coversLounge, coversRooms, coversPosts, coversRaku, TABLES, ROOMS } from './config.js';
+import { SIGNIN, fullScope, RAKU_SCOPE, coversTable, coversLounge, coversRooms, coversPosts, coversHearts, coversRaku, TABLES, ROOMS } from './config.js';
 
 export class SignInNeeded extends Error {}
 export class SignInStopped extends Error {}
@@ -219,6 +219,7 @@ export function createAuth(getLib, { storage, loc = globalThis.location, win = g
     loungeScopeFor(did, tableId) { return RAKU_SCOPE; },
     /** Does this account's sign-in cover writing tile posts (claude/raku-write-posts-plan.md)? (Known without waiting.) */
     coversPosts(did) { return coversPosts(scopes.get(did)); },
+    coversHearts(did) { return coversHearts(scopes.get(did)); },
     /** Does this account's sign-in cover everything Raku does (the whole "Raku" set)? */
     coversAll(did) { return coversRaku(scopes.get(did)); },
 

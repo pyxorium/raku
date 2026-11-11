@@ -2,21 +2,23 @@
 // account server. Adapted from tile-posts' test/publish-lexicons.test.mjs (Nov 8 2026).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { runPublish, readLexicons, ACCOUNT, SCHEMA } from '../scripts/publish-lexicons.mjs';
+import { readFileSync } from 'node:fs';
+import { runPublish, readLexicons, ACCOUNT, SCHEMA, PUBLISHED_FILE } from '../scripts/publish-lexicons.mjs';
 import { TABLES, ROOMS, rakuSet } from '../src/config.js';
 import { POST_COLLECTION } from '../src/tile-posts.js';
+import { HEART_COLLECTION } from '../src/hearts.js';
 
 const PDS = 'https://fibercap.us-west.host.bsky.network';
 const ID = 'cafe.thunderbird.authRaku';
 
-test('the set: "Raku", the wording agreed (WP6), only repo and rpc, no wildcards', () => {
+test('the set: "Raku", the wording agreed (WP6; hearts added HT15), only repo and rpc, no wildcards', () => {
   const [l, ...more] = readLexicons();
   assert.equal(more.length, 0);
   assert.equal(l.id, ID);
   const m = l.defs.main;
   assert.equal(m.type, 'permission-set');
   assert.equal(m.title, 'Raku');
-  assert.equal(m.detail, 'Lets Raku save your match results, show you in rooms and game lounges, and post tiles from your account. Nothing else in your account is changed.');
+  assert.equal(m.detail, 'Lets Raku save your match results, show you in rooms and game lounges, post tiles from your account, and heart tile posts. Nothing else in your account is changed.');
   assert.deepEqual(m.permissions.map((p) => p.resource).sort(), ['repo', 'rpc']);
   for (const p of m.permissions) {
     assert.equal(p.type, 'permission');
@@ -32,7 +34,7 @@ test("the set covers exactly what Raku writes and asks passes for (config.js), a
   const repo = m.permissions.find((p) => p.resource === 'repo');
   const rpc = m.permissions.find((p) => p.resource === 'rpc');
   const lounges = Object.values(TABLES).filter((t) => t.lounge);
-  assert.deepEqual([...repo.collection].sort(), [...Object.values(TABLES).map((t) => t.collection), ...lounges.map((t) => t.lounge.collection), POST_COLLECTION].sort());
+  assert.deepEqual([...repo.collection].sort(), [...Object.values(TABLES).map((t) => t.collection), ...lounges.map((t) => t.lounge.collection), POST_COLLECTION, HEART_COLLECTION].sort());
   assert.deepEqual([...rpc.lxm].sort(), [...lounges.map((t) => t.lounge.enter), ROOMS.join].sort());
   // and the same lists config.js reads a grant against
   assert.deepEqual([...repo.collection].sort(), [...rakuSet().repo].sort());
@@ -120,4 +122,11 @@ test("another account's app password, or a record that doesn't read back, stops 
     readPublished: () => ({}), writePublished: () => {}, ask: async () => 'y', askHidden: quiet }), /didn't read back/);
   await assert.rejects(runPublish({ fetchImpl: server().fetchImpl, log: quiet, env: { BSKY_APP_PASSWORD: 'wrong' },
     readPublished: () => ({}), writePublished: () => {}, ask: async () => 'y', askHidden: quiet }), /Invalid identifier or password/);
+});
+
+test("hearts (HT2): the set changed since today's lexicons-published.json, so it is published again", async () => {
+  const today = JSON.parse(readFileSync(PUBLISHED_FILE, 'utf8'));
+  const r = await runPublish({ fetchImpl: server().fetchImpl, log: () => {}, dryRun: true, env: {}, readPublished: () => today, ask: () => {}, askHidden: () => {} });
+  assert.deepEqual(r.due, [ID]);
+  assert.ok(!today.lexicons[ID].text.includes('cafe.thunderbird.tile.like'), 'the published set has no hearts yet');
 });

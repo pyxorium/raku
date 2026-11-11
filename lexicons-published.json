@@ -6,9 +6,9 @@
   "lexicons": {
     "cafe.thunderbird.authRaku": {
       "uri": "at://did:plc:6vxjigxrqizmbo56gojxico3/com.atproto.lexicon.schema/cafe.thunderbird.authRaku",
-      "cid": "bafyreiai7h3w37ucf4kmvqow24gvk3hnwrn2iudeybke36gpz2vcjfsuwe",
-      "text": "{\"lexicon\":1,\"id\":\"cafe.thunderbird.authRaku\",\"description\":\"Raku's one permission (raku.lexicographer.space), asked once when you sign in: saving match results, the Daisy lounge, joining rooms, and posting tiles. Requested as include:cafe.thunderbird.authRaku.\",\"defs\":{\"main\":{\"type\":\"permission-set\",\"title\":\"Raku\",\"detail\":\"Lets Raku save your match results, show you in rooms and game lounges, and post tiles from your account. Nothing else in your account is changed.\",\"permissions\":[{\"type\":\"permission\",\"resource\":\"repo\",\"collection\":[\"cafe.thunderbird.sevenup.match\",\"cafe.thunderbird.daisy.match\",\"cafe.thunderbird.daisy.lounge\",\"cafe.thunderbird.tile.post\"]},{\"type\":\"permission\",\"resource\":\"rpc\",\"lxm\":[\"cafe.thunderbird.daisy.lounge.enter\",\"cafe.thunderbird.rooms.join\"],\"aud\":\"*\"}]}}}",
-      "publishedAt": "2026-11-09T05:58:19.880Z"
+      "cid": "bafyreidcc6oivtd7jr7zkjoejb2cuvlzz2sehantmlfu5ceia5x5klldmq",
+      "text": "{\"lexicon\":1,\"id\":\"cafe.thunderbird.authRaku\",\"description\":\"Raku's one permission (raku.lexicographer.space), asked once when you sign in: saving match results, the Daisy lounge, joining rooms, posting tiles, and hearting tile posts. Requested as include:cafe.thunderbird.authRaku.\",\"defs\":{\"main\":{\"type\":\"permission-set\",\"title\":\"Raku\",\"detail\":\"Lets Raku save your match results, show you in rooms and game lounges, post tiles from your account, and heart tile posts. Nothing else in your account is changed.\",\"permissions\":[{\"type\":\"permission\",\"resource\":\"repo\",\"collection\":[\"cafe.thunderbird.sevenup.match\",\"cafe.thunderbird.daisy.match\",\"cafe.thunderbird.daisy.lounge\",\"cafe.thunderbird.tile.post\",\"cafe.thunderbird.tile.like\"]},{\"type\":\"permission\",\"resource\":\"rpc\",\"lxm\":[\"cafe.thunderbird.daisy.lounge.enter\",\"cafe.thunderbird.rooms.join\"],\"aud\":\"*\"}]}}}",
+      "publishedAt": "2026-11-11T17:42:28.692Z"
     }
   }
 }

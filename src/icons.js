@@ -37,6 +37,8 @@ const PATHS = {
   // a tile post's Share button (claude/raku-post-links-plan.md, SL2): a curved arrow, as Bluesky's; Copy link: two links of a chain
   share: ['M14 5l6 6-6 6', 'M20 11h-9a6 6 0 0 0-6 6v2'],
   link: ['M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1', 'M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1'],
+  // a tile post's heart (claude/raku-hearts-plan.md, HT4): an outline; filled by CSS when it's yours
+  heart: ['M12 20.2s-7.6-4.6-9.4-9.3C1.4 7.6 3.6 4.4 7 4.4c2.1 0 3.7 1.2 5 3 1.3-1.8 2.9-3 5-3 3.4 0 5.6 3.2 4.4 6.5-1.8 4.7-9.4 9.3-9.4 9.3z'],
 };
 const FILLED = new Set(['star-filled']);
 export const ICON_NAMES = Object.keys(PATHS);

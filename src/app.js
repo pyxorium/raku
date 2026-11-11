@@ -50,6 +50,8 @@ import { createAccountMenu } from './account-menu.js';
 import { createLinkMessage } from './link-message.js';
 import { createDiscover, drawDiscover, drawTilePostPage } from './discover.js';
 import { createPostBox } from './post-box.js';
+import { createHearts } from './hearts.js';
+import { createHeartSignIn } from './heart-signin.js';
 import { canPostTile } from './tile-post-write.js';
 import { drawAbout } from './about-page.js';
 import { groupThreads } from './posts.js';
@@ -176,8 +178,18 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     onSeePosts: () => { if (current(tabs.active) === POSTS_URI) reload(tabs.active.id); else openNew(POSTS_URI); },
     onAfterPost: () => { if (current(tabs.active) === POSTS_URI) reload(tabs.active.id); },
   });
-  // The Post button follows the accounts signed in here (signing in or out, another account added).
-  auth.onChange(() => drawChrome());
+  // Hearts on tile posts (claude/raku-hearts-plan.md): counted Raku's own way, yours read from your own server; the two
+  // panels a heart can open ("Sign in to heart", "Sign in again to heart").
+  const hearts = createHearts({ resolver, moderation, auth });
+  const heartSignIn = createHeartSignIn({ auth, host: () => stage, keepForReturn: (info) => keep(info) });
+  // The Post button follows the accounts signed in here (signing in or out, another account added); so do the hearts
+  // shown as yours (HT7: the current account's).
+  auth.onChange(() => {
+    drawChrome();
+    const a = auth.current();
+    if (a && a.did) hearts.readYours(a.did).catch(() => null);
+    else hearts.redraw();
+  });
 
   // Rooms (rooms step 1): at most one room in this window (RR6). A raku:page tab (not a room) or a first screen can
   // become the room tab; otherwise a new tab.
@@ -425,6 +437,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     const mine = p.attempt;
     return {
       p, tab, kit, shelf, tabs, resolver, moderation, openNew, say, drawChrome, discover, linkMessage, player, autoplay, postBox,
+      auth, hearts, heartSignIn,
       alive: () => mine === p.attempt,
       status: (kind, text, ...actions) => status(p, kind, text, ...actions),
       hideStatus: () => hideStatus(p),
@@ -1607,6 +1620,14 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   if (startInvite) { sync(); rooms.takeInvite(startInvite); } else if (!tabs.fromHash(loc.hash)) sync();
   // Back from "Sign in in this tab instead" at a room's join screen: that room's join screen again.
   if (pendingReturn && pendingReturn.kind === 'room') { const r = pendingReturn; pendingReturn = null; if (r.code) rooms.takeInvite({ room: r.code, hostKey: null }); }
+  // Back from signing in in this tab to heart a post (HT6, HT14): give the heart, if the sign-in allows hearts.
+  if (pendingReturn && pendingReturn.kind === 'heart') {
+    const r = pendingReturn; pendingReturn = null;
+    const a = auth.current();
+    if (a && a.did && auth.coversHearts(a.did) && typeof r.uri === 'string' && typeof r.cid === 'string') {
+      hearts.readYours(a.did).catch(() => null).finally(() => { if (!hearts.hearted(a.did, r.uri)) hearts.set(a.did, { uri: r.uri, cid: r.cid }, true).catch(() => say("Couldn't save your heart. Try again.")); });
+    }
+  }
   if (returned) say(returned.did && auth.current() ? `Signed in as @${auth.current().handle}.` : "Sign-in didn't finish. Try again.");
   globalThis.addEventListener?.('hashchange', () => {
     const inv = roomInHash(loc.hash);

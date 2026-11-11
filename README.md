@@ -725,6 +725,30 @@ Decisions: `claude/raku-write-posts-plan.md` (WP1 to WP13; the mockup `claude/ra
   `src/discover.js` (`drawTilePostPage`; `tilePostCard` with `own`), `src/app.js` (the tab, `ownPage`), `src/icons.js`
   (`share`, `link`). Unit tests: `test/post-links.test.mjs`. Browser: `test/browser/check_post_links.py` (below).
 
+## Hearts on tile posts (Nov 2026)
+
+`claude/raku-hearts-plan.md` (HT1 to HT15; the approved mockup `claude/raku-hearts-mockup.html`).
+- **The record:** `cafe.thunderbird.tile.like` (the lexicon in pyxorium/tile-posts), Bluesky's like shape: `subject` (a
+  strongRef to the tile post) and `createdAt`, in the hearting account's own repo; un-hearting deletes it. Raku's one
+  permission, "Raku" (`lexicons/cafe.thunderbird.authRaku.json`), includes it since Nov 2026: publish the lexicon from
+  pyxorium/tile-posts and this set (`node scripts/publish-lexicons.mjs`) before pushing Raku.
+- **The row** under every tile post (the list and a post's page; not Tile news): Bluesky-family slots as wide as the
+  tile card: comment and a spare slot (empty for now) and the heart in a left group of 65% (`HEARTS.left`), Share at
+  the right edge, its menu opening leftward.
+- **The heart:** an outline with its count (no number at zero, none until counted), yours filled in the accent with a
+  small pop; it shows at once and saves in the background, the last choice only; a failed save puts it back with
+  "Couldn't save your heart. Try again." The current account hearts; you can heart your own posts.
+- **Signed out:** the counts show; a heart opens "Sign in to heart", and once signed in the heart is given. A sign-in
+  from before hearts gets "Sign in again to heart" at its first heart (`coversHearts`). Signing in in this tab comes
+  back and gives the heart (`keepForReturn`, kind `heart`).
+- **Counting, Raku's own way:** the relay lists the accounts with hearts, each one's hearts are read from its own
+  server, one pass counts every post (distinct accounts; hidden accounts left out and not read); the posts never wait
+  for it; kept five minutes, Refresh reads again; your own hearts are read straight from your server.
+- Code: `src/hearts.js` (reading, counting, saving; no DOM), `src/heart-row.js` (the row and the heart),
+  `src/heart-signin.js` (the two panels), `src/config.js` (`HEARTS`, `coversHearts`, `PERMISSION_LINE`, the promise),
+  `src/discover.js` (the card's row; counting after the posts), `src/app.js` (wiring; the return after signing in),
+  `src/icons.js` (`heart`). Unit tests: `test/hearts.test.mjs`. Browser: `test/browser/check_hearts.py` (below).
+
 ## Named colours (light-mode groundwork, Nov 2026)
 
 Step 1 of a light mode (`claude/raku-light-mode-plan.md`): nothing looks different. Every colour of Raku's own is
@@ -861,6 +885,12 @@ with the stand-in sign-in (which expands "Raku" into the grouped form Bluesky ha
 Playwright route. `check_signin.py`, `check_lounge.py` and `check_room.py` were written for the per-game permissions
 and still expect that wording: update them the next time they're run (they need the site's game files, the loader
 replica and the relays staged).
+
+`check_hearts.py` (28 checks, Nov 2026: hearts on tile posts) runs as `check_post_links.py` does (a bundle with a
+stand-in loader, `servers.mjs`, everything outside a Playwright route; the sign-in stand-in's `standin-nohearts` leaves
+hearts out of the grant): the row's place, counts (distinct, hidden accounts left out), giving and taking back, the
+record, quick taps, a failed save, Refresh, the Share menu leftward, switching accounts, a post's page, signed out,
+an older sign-in (approved again, or not), the light look, the phone.
 
 `check_post_links.py` (47 checks, Nov 2026: a tile post's page, Copy link and Share) needs only `servers.mjs` and a
 bundle (tiles don't run: a stand-in for `@dasl/tile-loader` is enough); everything outside is a Playwright route, and the

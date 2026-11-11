@@ -206,8 +206,11 @@ export const SIGNIN = Object.freeze({
   alwaysKey: 'raku-always',                    // localStorage: "Always" choices, per account and game (Q37)
   returnKey: 'raku-signin-return',             // sessionStorage: what to pick up after "Sign in in this tab instead" (Q41)
 });
-// Shown beside sign-in, in the account menu and on the About page (Q43; since WP11, Nov 2026: one sign-in, tile posts).
-export const SIGNIN_PROMISE = "Signing in lets Raku save your match results, show you in rooms and game lounges, and post tiles from your accounts. It asks once, for all of these. Raku doesn't touch your Bluesky posts, likes, follows or anything else.";
+// Shown beside sign-in, in the account menu and on the About page (Q43; since WP11, Nov 2026: one sign-in, tile posts;
+// since HT15, Nov 2026: hearts, which are Raku's own, not Bluesky likes).
+export const SIGNIN_PROMISE = "Signing in lets Raku save your match results, show you in rooms and game lounges, post tiles from your accounts, and heart tile posts. It asks once, for all of these. Hearts are Raku's own, kept in your account; Raku doesn't touch your Bluesky posts, likes, follows or anything else.";
+// The line under a sign-in form naming the one permission (post box, hearts, tables; HT15).
+export const PERMISSION_LINE = 'saving your match results, showing you in rooms and game lounges, posting tiles from your account, and hearting tile posts';
 export const recordLink = (uri) => `https://pdsls.dev/${uri}`;
 
 /** Everything Raku asks for, at every sign-in (client-metadata.json's scope too): the one set, "Raku". */
@@ -217,7 +220,7 @@ export const fullScope = () => RAKU_SCOPE;
 export function rakuSet() {
   const lounges = Object.values(TABLES).filter((t) => t.lounge).map((t) => t.lounge);
   return {
-    repo: [...Object.values(TABLES).map((t) => t.collection), ...lounges.map((L) => L.collection), TILE_POSTS.collection],
+    repo: [...Object.values(TABLES).map((t) => t.collection), ...lounges.map((L) => L.collection), TILE_POSTS.collection, HEARTS.collection],
     rpc: [...lounges.map((L) => L.enter), ROOMS.join],
   };
 }
@@ -268,6 +271,8 @@ export function coversLounge(scope, table) {
 }
 /** Does a sign-in's permissions cover writing tile posts? */
 export function coversPosts(scope) { return has(readGrant(scope), 'repo', TILE_POSTS.collection); }
+/** Does a sign-in's permissions cover hearts (HT14)? A sign-in from before hearts doesn't: "Sign in again to heart". */
+export function coversHearts(scope) { return has(readGrant(scope), 'repo', HEARTS.collection); }
 /** Does a sign-in's permissions cover everything in "Raku"? (A sign-in from before WP5 doesn't, nor a refused one.) */
 export function coversRaku(scope) {
   const g = readGrant(scope);
@@ -399,6 +404,17 @@ export const TILE_POSTS = Object.freeze({
   always: Object.freeze(['did:plc:6vxjigxrqizmbo56gojxico3', 'did:plc:rqbqpaaluty5v47jwciowpik']),
   maxAccounts: 500, perAccount: 10, max: 100, atOnce: 4, accountMs: 10000, keepMs: 5 * 60 * 1000,
   repo: 'https://github.com/pyxorium/tile-posts',
+});
+// Hearts on tile posts (claude/raku-hearts-plan.md, HT1 to HT15): cafe.thunderbird.tile.like records (the lexicon in
+// pyxorium/tile-posts) in each hearting account's own repo. Counted Raku's own way (HT1): the relay says which accounts
+// hold hearts, each one's hearts are read from its own server (pageSize at a time, at most pages pages), a few accounts
+// at a time, kept keepMs (as Tile posts). noteMs: how long "Couldn't save your heart" shows (HT10). left: the share of
+// the post card's row the comment, spare and heart slots take (HT15: 65%, the heart a little left of the middle).
+export const HEARTS = Object.freeze({
+  collection: 'cafe.thunderbird.tile.like',
+  relay: TILE_POSTS.relay, relayPage: 100, relayMs: 8000,
+  maxAccounts: 500, pageSize: 100, pages: 10, atOnce: 4, accountMs: 10000, keepMs: 5 * 60 * 1000,
+  noteMs: 3500, left: '65%',
 });
 // "Play here" (claude/raku-play-here-plan.md): a tile post's tile running in its post. awayMs: how long fully out of view
 // before it stops (PH2); hintMs: how long "Keys go to the tile" shows after Play (PH8). Round C

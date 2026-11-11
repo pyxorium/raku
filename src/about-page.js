@@ -14,8 +14,8 @@ const outLink = (href, text) => h('a', { href, target: '_blank', rel: 'noopener 
 
 /** Who Raku talks to, and why: [who, what]. */
 export const TALKS_TO = Object.freeze([
-  ["Each tile's own account", "The tile itself, its pictures, the newest tiles of accounts on your shelf, and tile posts. Fetched from the author's own server."],
-  ["Bluesky's public servers", 'Moderation labels on accounts, Tile news posts, profile pictures, finding accounts by handle, and which accounts have tile posts (its relay).'],
+  ["Each tile's own account", "The tile itself, its pictures, the newest tiles of accounts on your shelf, tile posts, and hearts on them. Fetched from the author's own server."],
+  ["Bluesky's public servers", 'Moderation labels on accounts, Tile news posts, profile pictures, finding accounts by handle, and which accounts have tile posts and hearts (its relay).'],
   ['plc.directory', "Finding which server holds an account's data."],
   ['appmosphe.re', 'Only when you search (just the words you typed), the Recent tiles list, and pictures for the picks, Recent tiles and search results.'],
   ['lexicographer.space', 'A coded copy of its hide list, checked here in your browser, so nobody learns which tiles you open.'],

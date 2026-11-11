@@ -53,8 +53,8 @@ test('style.css: every name used is defined, and every colour name is used', () 
   const body = rules.map((r) => r.body).join('\n');
   const used = new Set([...body.matchAll(/var\((--[\w-]+)/g)].map((m) => m[1]));
   // set from code, not on :root: round C's --wco-right (src/app-shell.js); a swatch's own colours and the palette bar's
-  // (src/account-menu.js, from config.js)
-  const missing = [...used].filter((n) => !defined.has(n) && !['--wco-right', '--sw-strip', '--sw-dot', '--band'].includes(n));
+  // (src/account-menu.js, from config.js); a tile post's row, the left group's width (src/heart-row.js, HEARTS.left)
+  const missing = [...used].filter((n) => !defined.has(n) && !['--wco-right', '--sw-strip', '--sw-dot', '--band', '--ha-left'].includes(n));
   assert.deepEqual(missing, [], 'used but not on :root');
   const rgbUsed = new Set([...body.matchAll(/rgba\(var\((--[\w-]+-rgb)\)/g)].map((m) => m[1]));
   // the --pot-… colours are read by src/icons.js, which draws the bowl beside the Raku label in them

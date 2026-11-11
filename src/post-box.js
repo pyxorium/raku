@@ -6,7 +6,7 @@
 // The box (WP9): the tile, Your words (300, counted by graphemes), More (alt text, the tile's description as the grey
 // hint; a language box), From (your signed-in accounts, starting on the tile's own, WP2), Post to Raku. After posting
 // (WP10) it becomes a note and you stay where you are; the post is added to Tile posts straight away.
-import { SIGNIN_PROMISE, RAKU_SCOPE } from './config.js';
+import { SIGNIN_PROMISE, RAKU_SCOPE, PERMISSION_LINE } from './config.js';
 import { h, bannerCid } from './cards.js';
 import { icon } from './icons.js';
 import { openDialog, signInForm, blockedBox } from './signin-ui.js';
@@ -179,7 +179,7 @@ export function createPostBox({ auth, resolver, moderation, kit, tilePosts, host
       h('p', { class: 'rk-lede' }, 'Tile posts are saved in your own account. Sign in with the account your tiles are in; you can add more accounts later.'),
       form.el,
       h('div', { class: 'rk-details' },
-        h('p', {}, 'Your account’s server asks you to approve one permission, ', h('b', {}, 'Raku'), ': saving your match results, showing you in rooms and game lounges, and posting tiles from your account.'),
+        h('p', {}, 'Your account’s server asks you to approve one permission, ', h('b', {}, 'Raku'), `: ${PERMISSION_LINE}.`),
         h('p', { class: 'rk-promise' }, SIGNIN_PROMISE)),
     ]);
   }

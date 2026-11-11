@@ -15,6 +15,7 @@
 import { PICKS, SEARCH, RECENT, MAKE, FEED, NEWS_PINS, TILE_POSTS, PLAY_HERE, TAKEDOWNS_PAGE, siteLabel, feedUri, postApp, appmosphereCopy } from './config.js';
 import { atUri, discoverUri, searchUri, accountPageUri, parseAddress, parsePost, SHELF_URI, DISCOVER_URI, ABOUT_URI, tilePostUri, TILE_POST_COLLECTION } from './address.js';
 import { shareMenu } from './post-share.js';
+import { heartRow } from './heart-row.js';
 import { describeTile } from './tiles.js';
 import { NetError, formatBytes } from './net.js';
 import { h, bannerCid } from './cards.js';
@@ -533,6 +534,7 @@ function drawTilePosts(ctx, into) {
     if (player.current && list.contains(player.current)) player.stop();
     if (auto) auto.clear();
     list.replaceChildren(...r.items.map((post) => tilePostCard(ctx, post)));
+    countHearts(ctx, fresh);
     const words = [];
     if (!r.relayOk) words.push("Couldn't reach the network just now, showing accounts you know.");
     if (r.unreachable) words.push(`Couldn't reach ${r.unreachable} account${r.unreachable === 1 ? '' : 's'} just now.`);
@@ -543,6 +545,16 @@ function drawTilePosts(ctx, into) {
   };
   refresh.addEventListener('click', () => fill(true));
   fill(false);
+}
+
+// Hearts (claude/raku-hearts-plan.md, HT9): one pass counts every post, after the posts are drawn (they never wait for
+// it); the current account's own hearts are read straight from its server. Kept a few minutes; Refresh reads again.
+function countHearts(ctx, fresh) {
+  const { hearts, auth } = ctx;
+  if (!hearts) return;
+  hearts.pass({ fresh }).catch(() => null);
+  const a = auth && auth.current();
+  if (a && a.did) hearts.readYours(a.did, { fresh }).catch(() => null);
 }
 
 // ---------- A tile post's own page (claude/raku-post-links-plan.md, SL1 to SL7) ----------
@@ -590,6 +602,7 @@ export function drawTilePostPage(ctx, target) {
     if (!alive()) return;
     status.remove();
     holder.replaceChildren(tilePostCard(ctx, post, { own: true, onHandle: (hd) => { if (!alive()) return; p.title = `@${hd}'s post`; drawChrome(); } }));
+    countHearts(ctx, false);
     p.state = 'ready';
     drawChrome();
   })().catch((err) => {
@@ -673,7 +686,10 @@ function tilePostCard(ctx, post, { own = false, onHandle = null } = {}) {
       av, h('span', { class: 'post-names' }, name, handle)),
     time);
   const body = h('div', { class: 'post-body' }, post.text ? h('p', { class: 'post-text' }, post.text) : null);
-  const actions = h('footer', { class: 'post-actions' }, shareMenu({ post, handle: () => knownHandle, open: openPage }));
+  // The row (claude/raku-hearts-plan.md, HT5): the heart about the middle, Share at the right; Share alone without hearts.
+  const share = shareMenu({ post, handle: () => knownHandle, open: openPage });
+  const actions = ctx.hearts ? heartRow({ post, share, hearts: ctx.hearts, auth: ctx.auth, heartSignIn: ctx.heartSignIn })
+    : h('footer', { class: 'post-actions' }, share);
   const card = h('article', { class: 'post tile-post', 'data-uri': post.uri }, head, body, actions);
   moderation.profile(post.did).then((prof) => {
     if (prof.avatar && !av.firstChild) av.append(h('img', { src: prof.avatar, alt: '', referrerpolicy: 'no-referrer', loading: 'lazy' }));

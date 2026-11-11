@@ -237,7 +237,10 @@ with sync_playwright() as pw:
     check('...a post with no text shows just its tile', got[3] == '' and page.eval_on_selector_all('.tile-post', 'ps => !ps[3].querySelector(".post-text") && !!ps[3].querySelector(".post-tile")'))
     check("...a hidden account's post isn't shown, nor is its account's server asked", 'From a hidden account' not in got and not any(f'repo={H}' in c and 'listRecords' in c for c in calls))
     check('...a post about a hidden tile isn\'t shown', 'A post about a hidden tile' not in got)
-    check('...the relay asked once, for tile posts only, 100 at a time', len([c for c in calls if 'listReposByCollection' in c]) == 1 and any(f'collection={COLL}' in c and 'limit=100' in c for c in calls if 'listReposByCollection' in c))
+    # (since hearts, Nov 2026: the relay is also asked once for the accounts with hearts, claude/raku-hearts-plan.md, HT9)
+    relay_posts = lambda: [c for c in calls if 'listReposByCollection' in c and f'collection={COLL}' in c]
+    check('...the relay asked once for tile posts, 100 at a time (and once for hearts)', len(relay_posts()) == 1 and 'limit=100' in relay_posts()[0]
+          and len([c for c in calls if 'listReposByCollection' in c and 'collection=cafe.thunderbird.tile.like' in c]) == 1)
     check('...each account read from its own server, newest few', all('limit=10' in c for c in calls if 'listRecords' in c and COLL in c))
     check('...no network note when the relay answers', page.is_hidden('.tp-note'))
     first = '.tile-post:nth-child(1)'
@@ -283,10 +286,10 @@ with sync_playwright() as pw:
 
     # ---- Refresh, and the relay failing ----
     state['relay'] = '500'
-    n = len([c for c in calls if 'listReposByCollection' in c])
+    n = len(relay_posts())
     page.click('.dv-refresh')
     note = wait_for(lambda: page.is_visible('.tp-note') and page.inner_text('.tp-note'), page=page)
-    check('Refresh asks again; the relay failing: the quiet note', len([c for c in calls if 'listReposByCollection' in c]) == n + 1 and note == "Couldn't reach the network just now, showing accounts you know.", str(note))
+    check('Refresh asks again; the relay failing: the quiet note', len(relay_posts()) == n + 1 and note == "Couldn't reach the network just now, showing accounts you know.", f"{note} {len(relay_posts())} vs {n}")
     got = wait_for(lambda: (lambda g: g if len(g) == 4 else None)(post_texts(page)), page=page)
     check("...and the accounts Raku knows: the owner's and the shelf's (not the relay's)", got == ['From thunderbird.cafe, my coaster', LONG[:300] + '…', '', 'A tile that was deleted'], str(got))
     state['relay'] = 'down'

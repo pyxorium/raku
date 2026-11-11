@@ -41,5 +41,5 @@ test('the Messages line says when the button shows, and the page links to the bl
 test("\"You don't need an account\" repeats the sign-in promise word for word (WP11)", () => {
   assert.ok(NO_ACCOUNT_LINE.endsWith(SIGNIN_PROMISE));
   assert.match(NO_ACCOUNT_LINE, /^Browsing, searching, joining a room with a typed name, and playing the tables against the bot need no sign-in\. /);
-  assert.match(NO_ACCOUNT_LINE, /post tiles from your accounts\. It asks once/);
+  assert.match(NO_ACCOUNT_LINE, /post tiles from your accounts, and heart tile posts\. It asks once/);
 });

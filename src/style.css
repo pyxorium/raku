@@ -1223,6 +1223,32 @@ a { color: var(--glaze-light); }
 .ps-done { color: var(--glaze-light); font-size: 12.5px; }
 .ps-done:empty { display: none; }
 
+/* Hearts (claude/raku-hearts-plan.md, HT4, HT5, HT15; the approved mockup, claude/raku-hearts-mockup.html): the row as
+   wide as the tile card, Bluesky-family slots: comment, spare, heart in the left group (--ha-left of the row, set from
+   HEARTS.left; with .post-actions' 6 px gaps between the slots, as in the mockup the owner tuned), Share pinned to the right
+   edge with its menu opening leftward. */
+.tile-post .ha-row { display: grid; grid-template-columns: repeat(3, calc(var(--ha-left, 65%) / 3)) 1fr; align-items: center;
+  margin: 6px 0 -6px; max-width: 440px; }
+.ha-slot { display: flex; align-items: center; min-width: 0; }
+.ha-share { justify-self: end; }
+.ha-share .ps { flex-direction: row-reverse; }
+.ha-share .ps-menu { left: auto; right: 0; }
+.ht-btn { display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 8px 0 6px; margin-left: -6px; border: 0; border-radius: 999px;
+  background: none; color: var(--muted); cursor: pointer; }
+.ht-btn:hover, .ht-btn:focus-visible { color: var(--glaze-light); background: rgba(var(--tint-rgb),.07); }
+.ht-btn:disabled { cursor: default; opacity: .5; }
+.ht-btn .icon { width: 18px; height: 18px; }
+.ht-count { font-size: 13px; font-variant-numeric: tabular-nums; min-width: 2ch; text-align: left; }
+.ht-btn[aria-pressed="true"] { color: var(--glaze); }
+.ht-btn[aria-pressed="true"] .icon path { fill: currentColor; }
+.ht-btn.pop .icon { animation: ht-pop .32s ease-out; }
+@keyframes ht-pop { 0% { transform: scale(1); } 40% { transform: scale(1.32); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .ht-btn.pop .icon { animation: none; } }
+.ht-btn.waiting .ht-count { opacity: 0; }
+.ht-note { margin: 8px 0 0; font-size: 12.5px; color: var(--warn); transition: opacity .6s; }
+.ht-note.gone { opacity: 0; }
+@media (max-width: 640px) { .tile-post .ha-row { max-width: none; } }
+
 /* Play here (claude/raku-play-here-plan.md, PH1 to PH8; from claude/raku-play-here-mockup.html): a tile post's tile
    runs in a 16:9 slot above the card's words */
 .tp-card { flex-direction: column; isolation: isolate; }   /* the slot's layers stay inside the card (under Discover's sticky chips) */

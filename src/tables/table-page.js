@@ -127,7 +127,7 @@ export function drawTable(ctx, id, sub = null) {
     });
     // (the box first, the promise below: Q55)
     d.body.append(h('h2', {}, 'Sign in to save matches'), form.el,
-      h('div', { class: 'rk-details' }, h('p', {}, `Your account server asks you once to approve one permission, "Raku": saving your matches, rooms, game lounges and tile posts.`), h('p', { class: 'rk-promise' }, SIGNIN_PROMISE)));
+      h('div', { class: 'rk-details' }, h('p', {}, `Your account server asks you once to approve one permission, "Raku": saving your matches, rooms, game lounges, tile posts and hearts.`), h('p', { class: 'rk-promise' }, SIGNIN_PROMISE)));
     form.focus();
   }
   const offAuth = auth.onChange(() => drawAccount());

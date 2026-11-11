@@ -25,10 +25,18 @@ const SETS = {
   // Rooms (rooms step 1): the pass for the rooms relay only
   'include:cafe.thunderbird.rooms.authJoin?aud=did:web:relay.rooms.thunderbird.cafe%23rooms_relay': 'rpc:cafe.thunderbird.rooms.join?aud=did:web:relay.rooms.thunderbird.cafe%23rooms_relay',
 };
-// "Raku" (claude/raku-write-posts-plan.md, WP3): expanded in the grouped form Bluesky handed back in the probe (Nov 8 2026).
-// localStorage standin-partial: the server leaves tile posts out (a refused or older grant, for the "approve again" path).
-SETS['include:cafe.thunderbird.authRaku'] = 'repo?collection=cafe.thunderbird.daisy.lounge&collection=cafe.thunderbird.daisy.match&collection=cafe.thunderbird.sevenup.match&collection=cafe.thunderbird.tile.post rpc?lxm=cafe.thunderbird.daisy.lounge.enter&lxm=cafe.thunderbird.rooms.join&aud=*';
-const expandOne = (s) => (s === 'include:cafe.thunderbird.authRaku' && localStorage.getItem('standin-partial') ? SETS[s].replace('&collection=cafe.thunderbird.tile.post', '') : SETS[s] || s);
+// "Raku" (claude/raku-write-posts-plan.md, WP3): expanded in the grouped form Bluesky handed back in the probe (Nov 8 2026),
+// with hearts' collection since Nov 11 (claude/raku-hearts-plan.md, HT2).
+// localStorage standin-partial: the server leaves tile posts out (a refused or older grant, for the "approve again" path);
+// standin-nohearts: it leaves hearts out (a sign-in from before hearts, or "Raku" refused again, HT14).
+SETS['include:cafe.thunderbird.authRaku'] = 'repo?collection=cafe.thunderbird.daisy.lounge&collection=cafe.thunderbird.daisy.match&collection=cafe.thunderbird.sevenup.match&collection=cafe.thunderbird.tile.post&collection=cafe.thunderbird.tile.like rpc?lxm=cafe.thunderbird.daisy.lounge.enter&lxm=cafe.thunderbird.rooms.join&aud=*';
+const expandOne = (s) => {
+  if (s !== 'include:cafe.thunderbird.authRaku') return SETS[s] || s;
+  let g = SETS[s];
+  if (localStorage.getItem('standin-partial')) g = g.replace('&collection=cafe.thunderbird.tile.post', '');
+  if (localStorage.getItem('standin-nohearts')) g = g.replace('&collection=cafe.thunderbird.tile.like', '');
+  return g;
+};
 const expand = (scope) => String(scope || '').split(' ').filter(Boolean).map(expandOne).join(' ');
 
 export class LoginContinuedInParentWindowError extends Error {

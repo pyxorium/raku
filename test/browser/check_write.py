@@ -27,7 +27,7 @@ HANDLES = {T: T_H, P: P_H, X: X_H}
 PDS = 'https://pds.fakepds.net'
 SALT = 'lexicographer.space hide list v1'
 RAKU_SCOPE = 'atproto include:cafe.thunderbird.authRaku'
-FULL = 'repo?collection=cafe.thunderbird.daisy.lounge&collection=cafe.thunderbird.daisy.match&collection=cafe.thunderbird.sevenup.match&collection=cafe.thunderbird.tile.post rpc?lxm=cafe.thunderbird.daisy.lounge.enter&lxm=cafe.thunderbird.rooms.join&aud=*'
+FULL = 'repo?collection=cafe.thunderbird.daisy.lounge&collection=cafe.thunderbird.daisy.match&collection=cafe.thunderbird.sevenup.match&collection=cafe.thunderbird.tile.post&collection=cafe.thunderbird.tile.like rpc?lxm=cafe.thunderbird.daisy.lounge.enter&lxm=cafe.thunderbird.rooms.join&aud=*'
 PARTIAL = FULL.replace('&collection=cafe.thunderbird.tile.post', '')
 
 blobs = {}
@@ -293,7 +293,7 @@ with pw_ctx as pw:
     check('after posting from Write a post, closing the box shows the new post at the top (WP10)', page.inner_text('.tile-post .post-text') == 'Side A')
     page.screenshot(path=str(OUT / 'w6-after.png'))
     check('the account menu shows the one sign-in’s promise (WP11)', (page.click('.account-btn'), wait_for(lambda: page.is_visible('.account-menu .rk-promise'), page=page),
-          page.inner_text('.account-menu .rk-promise'))[2] == "Signing in lets Raku save your match results, show you in rooms and game lounges, and post tiles from your accounts. It asks once, for all of these. Raku doesn't touch your Bluesky posts, likes, follows or anything else.")
+          page.inner_text('.account-menu .rk-promise'))[2] == "Signing in lets Raku save your match results, show you in rooms and game lounges, post tiles from your accounts, and heart tile posts. It asks once, for all of these. Hearts are Raku's own, kept in your account; Raku doesn't touch your Bluesky posts, likes, follows or anything else.")
     ctx.close()
 
     # ---- Write a post signed out (WP13): Sign in to post, one window for the one set ----
