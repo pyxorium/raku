@@ -124,9 +124,18 @@ test("another account's app password, or a record that doesn't read back, stops 
     readPublished: () => ({}), writePublished: () => {}, ask: async () => 'y', askHidden: quiet }), /Invalid identifier or password/);
 });
 
-test("hearts (HT2): the set changed since today's lexicons-published.json, so it is published again", async () => {
-  const today = JSON.parse(readFileSync(PUBLISHED_FILE, 'utf8'));
-  const r = await runPublish({ fetchImpl: server().fetchImpl, log: () => {}, dryRun: true, env: {}, readPublished: () => today, ask: () => {}, askHidden: () => {} });
+test('the committed lexicons-published.json matches the set on disk: nothing due (publish, then commit the record)', async () => {
+  const committed = JSON.parse(readFileSync(PUBLISHED_FILE, 'utf8'));
+  const r = await runPublish({ fetchImpl: server().fetchImpl, log: () => {}, dryRun: true, env: {}, readPublished: () => committed, ask: () => {}, askHidden: () => {} });
+  assert.deepEqual(r.due, [], 'the set changed since it was last published: publish it, then commit lexicons-published.json');
+  assert.ok(committed.lexicons[ID].text.includes(HEART_COLLECTION), 'the published set includes hearts (HT2)');
+});
+
+test('hearts (HT2): a set published before hearts is due again', async () => {
+  const committed = JSON.parse(readFileSync(PUBLISHED_FILE, 'utf8'));
+  const before = structuredClone(committed);
+  before.lexicons[ID].text = before.lexicons[ID].text.replace(`,"${HEART_COLLECTION}"`, "");
+  assert.notEqual(before.lexicons[ID].text, committed.lexicons[ID].text);
+  const r = await runPublish({ fetchImpl: server().fetchImpl, log: () => {}, dryRun: true, env: {}, readPublished: () => before, ask: () => {}, askHidden: () => {} });
   assert.deepEqual(r.due, [ID]);
-  assert.ok(!today.lexicons[ID].text.includes('cafe.thunderbird.tile.like'), 'the published set has no hearts yet');
 });
