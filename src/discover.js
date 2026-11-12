@@ -161,9 +161,10 @@ export function createDiscover({ resolver, moderation, shelf, storage = null, lo
   };
 }
 
-const SOURCES = {
-  news: { label: 'Tile news', icon: 'news', blurb: 'Posts about web tiles, from the Web Tiles feed.' },
-  posts: { label: 'Tile posts', icon: 'posts', blurb: "Tiles people have posted, with a few words, from their own accounts. Everyone's, newest first." },
+export const SOURCES = {
+  // The two lines say what each is first, then where it comes from (claude/raku-discover-wording-plan.md, DW2, Nov 2026).
+  news: { label: 'Tile news', icon: 'news', blurb: 'What people are saying about web tiles across the Atmosphere: talk, links and news. From the Web Tiles feed.' },
+  posts: { label: 'Tile posts', icon: 'posts', blurb: "Tiles shared as posts: each one is a live tile you can play right here. Posted from people's own accounts with Raku or the Foundry." },
   recent: { label: 'Recent tiles', icon: 'clock', blurb: `The newest tiles on the network, as listed by ${RECENT.name}.` },
   following: { label: 'Following', icon: 'people', blurb: 'New tiles from the accounts on your shelf, newest first.' },
   search: { label: 'Search results', icon: 'search', blurb: '' },

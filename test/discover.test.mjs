@@ -328,3 +328,10 @@ test('Tile news, one card per thread (Q123): later replies counted on the first 
   assert.deepEqual(two.added.map((g) => g.item.post.uri), [U('next')]);
   assert.deepEqual([...two.counted].map((g) => [g.item.post.uri, g.more]), [[U('r3'), 2]], 'a reply on a later page counts on the same card');
 });
+
+test("Discover's lines tell Tile news and Tile posts apart: what each is first, then where it comes from (DW2)", async () => {
+  const { SOURCES } = await import('../src/discover.js');
+  assert.equal(SOURCES.posts.blurb, "Tiles shared as posts: each one is a live tile you can play right here. Posted from people's own accounts with Raku or the Foundry.");
+  assert.equal(SOURCES.news.blurb, 'What people are saying about web tiles across the Atmosphere: talk, links and news. From the Web Tiles feed.');
+  assert.deepEqual([SOURCES.news.label, SOURCES.posts.label], ['Tile news', 'Tile posts']);
+});
