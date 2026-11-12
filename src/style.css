@@ -809,7 +809,12 @@ a { color: var(--glaze-light); }
 .table-hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 2; display: flex; align-items: center; gap: 10px;
   padding: 8px 8px 8px 14px; border-radius: 999px; background: rgba(var(--kiln-rgb),.95); border: 1px solid var(--edge-strong); color: var(--text); font-size: 13.5px;
   box-shadow: 0 6px 20px rgba(var(--shadow-rgb),.4); max-width: calc(100% - 24px); }
-.table-hint .table-hint-x { width: 30px; height: 30px; padding: 0; display: grid; place-items: center; border-radius: 50%; }
+.table-hint .table-hint-x { width: 30px; height: 30px; padding: 0; display: grid; place-items: center; border-radius: 50%; flex: none; }
+.table-hint button { flex: none; }
+/* PT5 (claude/raku-prepare-tiles-plan.md): the note inside a tile post's slot: above the keys label, smaller, its words wrap, the buttons keep their shape */
+.tp-slot > .record-hint { bottom: 36px; width: max-content; max-width: calc(100% - 20px); border-radius: 18px; font-size: 12.5px; gap: 8px; padding: 6px 6px 6px 12px; z-index: 4; }
+.tp-slot > .record-hint button { padding: 5px 10px; }
+.tp-slot > .record-hint .table-hint-x { width: 26px; height: 26px; padding: 0; }
 
 @media (max-width: 760px) {
   .table-seats { grid-template-columns: 1fr; }

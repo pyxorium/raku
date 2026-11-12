@@ -253,6 +253,10 @@ try:
         check('...its banner, from the bytes Raku fetched (a blob: picture, 1280 px)', wait_for(lambda: inner().locator('img.pic').evaluate('i => i.src.startsWith("blob:") && i.complete && i.naturalWidth === 1280'), 10))
         check('...fetched from the author\'s own server', any('getBlob' in c and BANNER_CID in c and A.replace(':', '%3A') in c for c in calls))
         check('...the tile\'s address still under it', tile_text('.card code') == FOREST_TILE)
+        # PT3 (claude/raku-prepare-tiles-plan.md): a tile handed to the renderer is likely opened next: its page early, once
+        check('PT3: the tile\'s page fetched early, once Raku handed its record over', wait_for(lambda: len([c for c in calls if 'getBlob' in c and HTML_CID in c]) == 1, 5),
+              str(len([c for c in calls if 'getBlob' in c and HTML_CID in c])))
+        check('...and none of its other files (no pointer resting inside a tile)', not [c for c in calls if 'getBlob' in c and (BIG_CID in c or SVG_CID in c)])
         page.screenshot(path=str(OUT / 'renderer-place.png'))
         f = inner()
         f.evaluate('''() => { window.__pics = []; addEventListener('message', (e) => { const p = e.data && e.data.payload; if (p && typeof p.gotPicture === 'string') window.__pics.push({ cid: p.gotPicture, from: p.from, error: p.error || null, type: p.type || null, n: p.bytes ? p.bytes.byteLength : 0 }); }); }''')
@@ -311,9 +315,13 @@ try:
         # 3. Step into (RT5): the place's tile in a new tab; the place stays
         before = tab_count()
         place_tab = page.eval_on_selector('.pane.front', 'p => p.dataset.tab')
+        reads_before = len([c for c in calls if 'getRecord' in c and 'rkey=3myxm45elkp22' in c])
         f = inner(); f.locator('button.go').click()
         check('"Step into" opens the place\'s tile in a new tab, in front', wait_for(lambda: tab_count() == before + 1 and page.inner_text('.tab.on .tab-title') == 'Winter Forest' and page.input_value('.addr').endswith('/ing.dasl.masl/3myxm45elkp22'), 10), f'{tab_count()} {page.input_value(".addr")}')
         check('...and it runs', wait_for(lambda: page.frame_locator('.pane.front iframe.tile-frame').frame_locator('iframe').locator('#h').inner_text() == 'Winter Forest tile', 15))
+        check('PT1: opening it fetched its page no second time (kept from the early download)', len([c for c in calls if 'getBlob' in c and HTML_CID in c]) == 1)
+        check('...and read its record only once more, in the background', wait_for(lambda: len([c for c in calls if 'getRecord' in c and 'rkey=3myxm45elkp22' in c]) == reads_before + 1, 5),
+              f"{reads_before} -> {len([c for c in calls if 'getRecord' in c and 'rkey=3myxm45elkp22' in c])}")
         check('...the place\'s tab is still there, showing the place', page.query_selector(f'.pane[data-tab="{place_tab}"] iframe.tile-frame') is not None)
         check('"Open in" hides on a tile\'s tab', not page.is_visible('.openin-btn'))
         page.locator('.tab').nth(0).click()            # the place's tab is the first

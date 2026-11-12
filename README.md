@@ -791,6 +791,33 @@ swatches always on the line below; pointing at a swatch, or tabbing to it, shows
 - `public/offline.html`: its seven names in each style, its own look script in `<head>` (both scripts allowed by hash).
 - Browser check: `test/browser/check_look.py` (with the other browser checks, below).
 
+## Preparing a tile while its card shows (Nov 2026)
+
+Decided in `claude/raku-prepare-tiles-plan.md` (PT1 to PT5): since the loading server's WebRTC guard (about 0.8 s on
+every tile in Chromium), Raku does the waiting it can while a tile's card is on screen. Nothing on screen changes, and
+nothing runs before you open a tile.
+
+- **Tile records kept 5 minutes** (`src/resolve.js`: `tileRecord` keeps what it reads, `keptTileRecord`): opening a tile
+  whose card was just drawn starts at once from that copy (the moderation check still first), and reads the record
+  again once the tile's page is in. Not for a door through a place (it must be the pinned version), nor after Reload
+  or Try again (they read it fresh).
+- **The note** (the `table-hint` bar at the bottom of the tile): changed since it opened, "This tile has been updated
+  since it opened." with Reload (the new version) and ×; deleted, "Its author has deleted this tile." with × only; the
+  old version keeps running until then. Inside a tile post (Play here) the same note in the post, and Reload restarts
+  it there. Nothing when the record is the same or the read fails.
+- **Two sizes of early download** (`src/prefetch.js`, no DOM; `PREPARE` in `src/config.js`): a card at least half on
+  screen for 1 s fetches its tile's page (`/`); the pointer resting on it 0.25 s (a mouse or pen), or a touch, fetches the
+  rest, smallest first, up to 2 MB in all. At most 2 tiles at a time; a touch or a resting pointer goes first; of the
+  cards merely seen, the newest first and only 4 wait. Never a tile over 25 MB (`LIMITS.askBytes`), one whose record
+  doesn't give every file's size, a hidden one, or anything with the browser's data saver on. The files go into the
+  kept-files store (`createFileStore`), so opening takes them from there; a tile's own 500 MB limit is charged then.
+- **Where:** the first screen's picks (not the table and Rooms cards), Discover (Tile news, Following, search results,
+  Recent tiles), Tile posts (the card with Play here), and the Places renderer's tile card (its page when Raku hands the
+  place its tile record). The hook is `prepareCard` in `src/cards.js` (`tileCard({ prepare })`). Not rooms, ways or
+  tables; not yet your shelf and account pages.
+- Unit tests: `test/prefetch.test.mjs`. Browser: `test/browser/check_prepare.py` (below), and two checks in
+  `check_renderer.py` for the Places card.
+
 ## Try it
 
 ```
@@ -816,8 +843,9 @@ and open http://127.0.0.1:5181/.
 | `src/config.js` | every setting: Raku's address, the loading server, limits, picks, the page policy |
 | `src/address.js` | the address forms the box accepts |
 | `src/net.js` | careful fetching (https, public hosts, time and size limits) |
-| `src/resolve.js` | handle → account → server → a tile's record (and any record, for renderer tiles) |
+| `src/resolve.js` | handle → account → server → a tile's record (kept 5 minutes for opening; and any record, for renderer tiles) |
 | `src/tiles.js` | a tile's files (adapted copy of the site's `src/lib/at-tile-loader.js`), its declared size |
+| `src/prefetch.js` | preparing a tile while its card shows: its page, then its smaller files, fetched early into the kept files (no DOM) |
 | `src/moderation.js` | the coded hide list and Bluesky's moderation |
 | `src/tabs.js` | the tabs as data (history with a state beside each place, the cap, the page address) |
 | `src/app.js` | the page: tab strip, address bar, panes, the first screen |
@@ -891,6 +919,14 @@ stand-in loader, `servers.mjs`, everything outside a Playwright route; the sign-
 hearts out of the grant): the row's place, counts (distinct, hidden accounts left out), giving and taking back, the
 record, quick taps, a failed save, Refresh, the Share menu leftward, switching accounts, a post's page, signed out,
 an older sign-in (approved again, or not), the light look, the phone.
+
+`check_prepare.py` (39 checks, Nov 2026: preparing a tile while its card shows) runs as `check_post_links.py` does (a
+bundle with a stand-in loader that asks Raku for a tile's page and then its other files, as the real worker would;
+`servers.mjs`; everything outside a Playwright route): nothing in the first moment, a card on screen a second fetching
+its page once, a pointer sweeping across fetching nothing, a resting pointer the small files and not one over 2 MB, a tile
+over 25 MB never, opening fetching no kept file again and reading the record once after its page, the changed note
+(Reload opening the new version) and the deleted one (× only), the note inside a tile post and Reload there, a touch,
+data saver, the first screen's picks.
 
 `check_post_links.py` (47 checks, Nov 2026: a tile post's page, Copy link and Share) needs only `servers.mjs` and a
 bundle (tiles don't run: a stand-in for `@dasl/tile-loader` is enough); everything outside is a Playwright route, and the
@@ -968,7 +1004,7 @@ and the palette bar never move, each bar in its style's colours, pointing and ta
 putting the chosen one back, the bar hidden from screen readers. The first-paint checks fail without `public/look.js`, the bowl's after a reload without
 `refreshBrandPots` once the chrome is in place.
 
-`check_renderer.py` (81 checks, renderer tiles; since ways, a signpost's "Go to" taking that way to the maze's tile; since Nov 9, a test renderer adding handlers after `listen()` gets the record from the loading server's `data.js`: fails with the stock one) sets everything up itself, like `check_daisy.py`: a copy of this folder
+`check_renderer.py` (85 checks, renderer tiles; since Nov 11, the Places card's tile page fetched early and not again on Step into; since ways, a signpost's "Go to" taking that way to the maze's tile; since Nov 9, a test renderer adding handlers after `listen()` gets the record from the loading server's `data.js`: fails with the stock one) sets everything up itself, like `check_daisy.py`: a copy of this folder
 with a test pin in `RENDERERS`, bundled, Raku's page and the loader replica, and the real place renderer from a
 maze-tiles folder. Usage: `python3 test/browser/check_renderer.py <work folder> <tiles-loading-server folder> <maze-tiles
 folder>`. A place typed in the box opens in its tab through the real loader; the record handed over (name, checked

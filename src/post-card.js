@@ -125,7 +125,7 @@ function tileInPost(post, ctx) {
   const ext = post.external;
   const card = kit.tileCard({
     name: ext?.title || 'A web tile', description: ext?.description || '',
-    onOpen: () => ctx.openTile(t.uri), onOpenNew: ctx.openTileNew ? () => ctx.openTileNew(t.uri) : null,
+    onOpen: () => ctx.openTile(t.uri), onOpenNew: ctx.openTileNew ? () => ctx.openTileNew(t.uri) : null, prepare: t.uri,
   });
   card.el.classList.add('post-tile');
   (async () => {

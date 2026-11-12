@@ -59,6 +59,7 @@ export function describeTile(record) {
     name: typeof t.name === 'string' && t.name.trim() ? t.name.trim().slice(0, 120) : 'Untitled tile',
     description: typeof t.description === 'string' ? t.description.slice(0, 300) : '',
     declaredBytes, unknownSizes, files,
+    cid: typeof record?.cid === 'string' ? record.cid : null,   // the version read (PT5: has it changed since?)
     sizing: w >= 100 && w <= 4000 && h >= 100 && h <= 4000 ? { width: w, height: h } : null,
   };
 }

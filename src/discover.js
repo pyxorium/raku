@@ -272,7 +272,7 @@ function tileItemCard(ctx, it, { badge = '' } = {}) {
   const { kit, tabs, tab, openNew, resolver } = ctx;
   const d = describeTile(it.record);
   const uri = atUri(it.did, it.rkey);
-  const card = kit.tileCard({ name: d.name, description: d.description, badge, onOpen: () => tabs.go(tab.id, uri), onOpenNew: () => openNew(uri) });
+  const card = kit.tileCard({ name: d.name, description: d.description, badge, onOpen: () => tabs.go(tab.id, uri), onOpenNew: () => openNew(uri), prepare: uri });
   resolver.account(it.did).then((acct) => card.picture({ pds: acct.pds, did: it.did, cid: bannerCid(d.manifest) })).catch(() => {});
   resolver.checkedHandle(it.did).then((hd) => card.set({ by: hd || '' }));
   return card;
@@ -283,7 +283,7 @@ function tileItemCard(ctx, it, { badge = '' } = {}) {
 function addressCard(ctx, addr, onGone, { copies = false } = {}) {
   const { kit, tabs, tab, openNew, resolver, moderation } = ctx;
   let uri = addr.uri;
-  const card = kit.tileCard({ name: '…', onOpen: () => tabs.go(tab.id, uri), onOpenNew: () => openNew(uri) });
+  const card = kit.tileCard({ name: '…', onOpen: () => tabs.go(tab.id, uri), onOpenNew: () => openNew(uri), prepare: () => uri });
   const job = async () => {
     try {
       const did = await resolver.didFor(addr.actor);
@@ -341,7 +341,7 @@ function drawMake(ctx, into) {
 function recentCard(ctx, t, { badge = '', earlier = 0 } = {}) {
   const { kit, tabs, tab, openNew } = ctx;
   const card = kit.tileCard({ name: t.name, description: t.description, by: t.handle || t.did, when: whenText(t.createdAt), badge,
-    onOpen: () => tabs.go(tab.id, t.uri), onOpenNew: () => openNew(t.uri) });
+    onOpen: () => tabs.go(tab.id, t.uri), onOpenNew: () => openNew(t.uri), prepare: t.uri });
   if (t.picture) card.picture({ url: t.picture }, { look: `${t.pictureIsIcon ? 'icon' : ''} ${t.blur ? 'blur' : ''}` });
   card.el.dataset.uri = t.uri;
   const line = h('button', { type: 'button', class: 'card-earlier', hidden: true,
@@ -843,6 +843,14 @@ function playCard(ctx, t) {
       return;
     }
     if (kind === 'place') { showPlace(detail); return; }
+    // PT5: Reload on "This tile has been updated since it opened.": app.js restarts the new version in the slot; the card
+    // keeps it for its words and its next Play
+    if (kind === 'update') {
+      tile = { ...tile, d: detail };
+      title.textContent = detail.name || 'Untitled tile';
+      desc.textContent = detail.description || '';
+      return;
+    }
     if (kind === 'note') { if (view) view.note(detail); else say(detail); return; }
     if (kind === 'stopped' || kind === 'error') {
       if (view) collapse({ instant: true });
@@ -891,6 +899,7 @@ function playCard(ctx, t) {
     },
     ready({ d, pds, alt }) {
       tile = { d, pds };
+      kit.prepareCard(el, t.uri);      // PT3: the banner, Play here and the tab open the same tile
       title.textContent = d.name || 'Untitled tile';
       desc.textContent = d.description || '';
       const cid = bannerCid(d.manifest);

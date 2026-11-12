@@ -58,6 +58,21 @@ export const LIMITS = Object.freeze({
   cardImageBytes: 5 * 1024 * 1024, // a card picture on the first screen
 });
 
+// Preparing a tile while its card shows (claude/raku-prepare-tiles-plan.md, PT2 to PT4, decided Nov 11): a card on
+// screen for seenMs fetches its tile's page ("/"); the pointer resting on it for restMs, or a touch, fetches the rest of
+// its files, smallest first, up to bytes in all; at most atOnce tiles at a time, and only a few more waiting (cards
+// scrolled past are dropped, oldest first). Never for a tile over LIMITS.askBytes, nor with the browser's data saver on.
+// The files go into the same kept-files store as an opened tile's; they count against a tile's own limit only when
+// it's opened. Nothing on screen changes.
+export const PREPARE = Object.freeze({
+  seenMs: 1000,
+  restMs: 250,
+  bytes: 2 * 1024 * 1024,
+  atOnce: 2,
+  waiting: 4,
+  filesAtOnce: 3,                  // one tile's files fetched side by side
+});
+
 // New windows from tiles (links with target=_blank, window.open after a click). The loading server lets a tile
 // open them (its sandbox allows popups), so a tile can link out, and a click can also carry data out in the
 // new window's address. Set to false to give every tile frame a sandbox without popups: tiles still run, but

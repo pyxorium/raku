@@ -59,9 +59,13 @@ import { createRooms } from './room-tab.js';
 import { setLeaveWarning } from './signin-ui.js';
 import { isInstalled } from './app-shell.js';
 import { playVerdict, createOneAtATime, wayPlan, createTrail, tabFor, createAutoplaySetting } from './play-here.js';
+import { createPrefetcher } from './prefetch.js';
 
 export function mountRaku(root, { mothership, resolver, moderation, files, shelf, auth, storage = null, session = null, returned = null, keepForReturn = () => {}, loc = globalThis.location, hist = globalThis.history, tableDeps = {}, install = null }) {
-  const kit = createCardKit({ files });
+  // Preparing a tile while its card shows (claude/raku-prepare-tiles-plan.md): the early downloads (prefetch.js), asked
+  // for by the cards (cards.js prepareCard) and by the Places renderer's { get } (answerGet).
+  const prefetch = createPrefetcher({ files, resolver, moderation });
+  const kit = createCardKit({ files, prefetch });
   // Discover (stage 6): what it keeps while Raku is open, shared by every Discover tab.
   const discover = createDiscover({ resolver, moderation, shelf, storage, loc });
   // Tables (stage 3): their tiles load through Raku's one mothership, but only the pinned versions.
@@ -450,6 +454,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (rooms.isLive(id)) { leaveFirst(); return; }
     const p = paneFor(tab);
     p.uri = undefined;
+    p.freshRecord = true;            // (a reload reads the tile's record again, PT1; as does Try again)
     // Reload on a way taken reads its signpost again (RW2), as a page reload does.
     p.freshWay = String(current(tab) || '').startsWith(WAY_PREFIX);
     show(tab);
@@ -490,6 +495,12 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (!parsed.ok) { p.state = 'error'; status(p, 'error', parsed.reason); return; }
 
     let did, record, account;
+    // PT1: a tile whose record was read in the last 5 minutes (its card was just drawn) starts at once from that copy and
+    // is checked again once its page is in (checkRecord); not a door through a place (it must be the pinned version, as
+    // now), nor after Reload or Try again.
+    const fresh = !!p.freshRecord;
+    p.freshRecord = false;
+    let kept = null;
     try {
       did = await resolver.didFor(parsed.actor);
       if (!alive()) return;
@@ -503,7 +514,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
           h('a', { href: TAKEDOWNS_PAGE, target: '_blank', rel: 'noopener noreferrer' }, 'Reporting and takedowns ↗'));
         return;
       }
-      [record, account] = await Promise.all([resolver.tileRecord(did, parsed.rkey), resolver.account(did)]);
+      kept = way || fresh ? null : resolver.keptTileRecord(did, parsed.rkey);
+      [record, account] = await Promise.all([kept || resolver.tileRecord(did, parsed.rkey), resolver.account(did)]);
       if (!alive()) return;
     } catch (err) {
       if (!alive()) return;
@@ -544,17 +556,20 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       return;
     }
     const sizeKey = atUri(did, parsed.rkey);
+    const check = { did, rkey: parsed.rkey, cid: record.cid };
     if (verdict === 'ask' && !largeOk.has(sizeKey)) {
       p.state = 'asking';
       status(p, 'ask', `This tile is large (${formatBytes(d.declaredBytes)}). Open anyway?`,
-        button('Open anyway', () => { largeOk.add(sizeKey); startTile(p, tab, uri, did, account.pds, d); }, 'primary'),
+        button('Open anyway', () => { largeOk.add(sizeKey); startTile(p, tab, uri, did, account.pds, d, kept ? check : null); }, 'primary'),
         button('Not now', () => (tabs.canBack(tab.id) ? tabs.back(tab.id) : tabs.go(tab.id, null))));
       return;
     }
-    startTile(p, tab, uri, did, account.pds, d);
+    startTile(p, tab, uri, did, account.pds, d, kept ? check : null);
   }
 
-  function startTile(p, tab, uri, did, pds, d) {
+  // check (PT1, PT5): { did, rkey, cid } when the tile started from a kept copy of its record: read again once its page
+  // is in, and a note if it has changed or been deleted since.
+  function startTile(p, tab, uri, did, pds, d, check = null) {
     const keep = p.keep, screen = p.screen, arrival = p.arrival;
     p.screen = null;                                   // (kept: clearPane would let go of its picture)
     clearPane(p);
@@ -577,6 +592,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
           p.timers.forEach(clearTimeout);
           if (ok) {
             p.state = 'ready'; hideStatus(p); drawChrome();
+            if (check) { const c = check; check = null; checkRecord(c, alive, (kind) => recordNote(p.el, kind, () => reload(tab.id))); }
             // The screen between places (ways): a destination without ways shows after a moment; one with ways when it
             // says hello (fromWayTile), or after a while if it never does.
             if (p.screen) { const s = p.screen; p.timers.push(setTimeout(() => { if (alive() && p.screen === s) revealScreen(p, 0); }, p.ways ? WAYS.helloMs : WAYS.plainMs)); }
@@ -622,6 +638,24 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
         h('button', { type: 'button', class: 'table-hint-x', 'aria-label': 'Hide this note', onclick: () => hint.remove() }, icon('close', 14)));
       p.el.append(hint);
     }
+  }
+
+  // PT1: a tile started from a kept copy of its record, read again in the background: changed → 'changed', deleted →
+  // 'deleted'; the same, or the read failing (no connection, a slow server), says nothing.
+  function checkRecord({ did, rkey, cid }, alive, onNews) {
+    resolver.tileRecord(did, rkey).then((rec) => { if (alive() && rec.cid !== cid) onNews('changed'); })
+      .catch((err) => { if (alive() && err instanceof NetError && err.code === 'not-found') onNews('deleted'); });
+  }
+  // PT5: the note at the bottom of the tile (the table-hint bar): "updated" with Reload (the new version) and ×, or
+  // "deleted" with × only. The old version keeps running until then. One note at a time, in place of any other bar.
+  function recordNote(holder, kind, onReload) {
+    for (const old of holder.querySelectorAll(':scope > .table-hint')) old.remove();
+    const hint = h('div', { class: 'table-hint record-hint', 'data-kind': kind, role: 'status' },
+      h('span', {}, kind === 'changed' ? 'This tile has been updated since it opened.' : 'Its author has deleted this tile.'),
+      kind === 'changed' ? h('button', { type: 'button', class: 'primary', onclick: () => { hint.remove(); onReload(); } }, 'Reload') : null,
+      h('button', { type: 'button', class: 'table-hint-x', 'aria-label': 'Hide this note', onclick: () => hint.remove() }, icon('close', 14)));
+    holder.append(hint);
+    return hint;
   }
 
   // ---------- ways (claude/raku-ways-plan.md, RW1 to RW8) ----------
@@ -785,6 +819,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     pane.timers.forEach(clearTimeout);
     pane.timers = [];
     if (pane.frame) { pane.frame.remove(); pane.frame = null; }
+    for (const n of pane.slot.querySelectorAll(':scope > .record-hint')) n.remove();   // (PT5's note belongs to the tile left)
     pane.ways = null;
     pane.arrival = arrival;
     pane.state = 'loading';
@@ -802,6 +837,12 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
         }
         pane.state = 'ready';
         if (first) pane.onState('playing');
+        // PT5: the post's own tile ran from the card's copy of its record: read it again, with the note inside the post
+        if (first && !pane.checked && place.d.cid) {
+          pane.checked = true;
+          checkRecord({ did, rkey: place.uri.split('/').pop(), cid: place.d.cid }, alive,
+            (kind) => recordNote(pane.slot, kind, () => reloadPost(pane)));
+        }
         if (pane.screen) { const s = pane.screen; pane.timers.push(setTimeout(() => { if (alive() && pane.screen === s) revealScreen(pane, 0); }, pane.ways ? WAYS.helloMs : WAYS.plainMs)); }
         // PH4: the keys at once, as a tab gives them (RW10), twice as its page settles
         else if (!pane.quiet) for (const ms of KEYS_AFTER_MS) pane.timers.push(setTimeout(() => { if (alive() && !pane.screen) focusPost(pane); }, ms));
@@ -818,6 +859,25 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     pane.frame = frame;
     pane.slot.prepend(frame);           // (under the screen between places, which stays on top while it shows)
     if (d.manifest.resources?.['/ways.json']) hostWays(pane, did, pds, d.manifest);
+  }
+  // PT5's Reload inside a post: the post's own tile, its record read again, restarted in the same slot (expanded or not);
+  // the post's card takes the new version too ('update'), for its next Play.
+  async function reloadPost(pane) {
+    if (playing !== pane || pane.trail.travelled) return;
+    const here = pane.trail.here;
+    try {
+      const rec = await resolver.tileRecord(here.did, here.uri.split('/').pop());
+      const d = describeTile(rec);
+      if (playing !== pane || pane.trail.travelled) return;
+      if (!d.ok) { postNote(pane, d.reason); return; }
+      here.d = d;
+      here.name = d.name;
+      pane.onState('update', d);
+      pane.onState('starting');
+      runInPost(pane, here, { first: true });
+    } catch (err) {
+      if (playing === pane) postNote(pane, err instanceof NetError ? err.message : "Couldn't load this tile.");
+    }
   }
   function endPost(pane) {
     if (playing === pane) playing = null;
@@ -1280,6 +1340,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       const record = recordPayload({ did, handle: hd, collection: t.collection, rkey: t.rkey, cid: rec.cid, value: rec.value });
       if (mine === pane.attempt) r.seen.set(record.uri, { did, value: rec.value });
       send({ got: address, record });
+      // PT3: a tile handed to a renderer (the Places card) is likely opened next: its page, early (no hover inside a tile)
+      if (t.collection === 'ing.dasl.masl') prefetch.seen(atUri(did, t.rkey));
     } catch {
       send({ got: address, error: 'not-found' });
     }
@@ -1463,7 +1525,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     // bake. A pick with no baked copy waits for them, as before.
     const baked = bakedPick(uri);
     const card = kit.tileCard({ name: baked ? baked.name : '…', description: baked?.description || '', by: baked?.handle || '',
-      onOpen: () => tabs.go(tab.id, target), onOpenNew: () => openNew(target) });
+      onOpen: () => tabs.go(tab.id, target), onOpenNew: () => openNew(target), prepare: parsed.ok && target === uri ? uri : null });
     if (baked?.banner) card.picture({ url: bakedPictureUrl(baked), fallback: { url: appmosphereCopy(baked.did, baked.banner.cid), cid: baked.banner.cid } });
     (async () => {
       if (!parsed.ok) throw new Error('bad pick');
@@ -1598,7 +1660,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   }
 
   tabs.onChange((what) => {
-    if (what?.type === 'reload') { const p = panes.get(what.id); if (p) p.uri = undefined; }
+    if (what?.type === 'reload') { const p = panes.get(what.id); if (p) { p.uri = undefined; p.freshRecord = true; } }
     sync();
   });
   // When the shelf changes (the star, Import, another Raku tab), redraw the panes that show it, except

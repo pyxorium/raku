@@ -1,4 +1,4 @@
-// Accounts: handle → DID, DID → its document (handle, PDS), and a tile's record.
+// Accounts: handle → DID, DID → its document (handle, PDS), and a tile's record (kept 5 minutes for opening, PT1).
 // Every lookup goes through net.js (https, public hosts, time and size limits). Answers are kept for
 // a few minutes while Raku is open; failures aren't kept.
 
@@ -72,14 +72,47 @@ export function createResolver({ fetchImpl = globalThis.fetch, now = () => Date.
     return actor.startsWith('did:') ? actor : resolveHandle(actor);
   }
 
-  /** A tile's record. → { uri, cid, value } ; NetError 'not-found' when there's none. */
-  async function tileRecord(did, rkey) {
-    const { pds } = await account(did);
-    const url = `${pds}/xrpc/com.atproto.repo.getRecord?repo=${encodeURIComponent(did)}&collection=${COLLECTION}&rkey=${encodeURIComponent(rkey)}`;
-    const r = await fetchJson(url, { timeoutMs: LIMITS.lookupMs, maxBytes: LIMITS.recordBytes, fetchImpl });
-    if (r.status === 400 || r.status === 404) throw new NetError('not-found', "There's no tile at that address (it may have been deleted).");
-    if (!r.ok || !r.json?.value) throw new NetError('upstream', "The tile's account server didn't answer properly.");
-    return r.json;
+  // Tile records (claude/raku-prepare-tiles-plan.md, PT1): every read is kept 5 minutes, so that opening a tile whose
+  // card was just drawn can start at once from that copy (keptTileRecord) and check it again in the background.
+  // tileRecord itself always asks the author's server (cards, the post box, pinned opens), merging reads already on
+  // the way; a tile found deleted is dropped from what's kept.
+  const tileKey = (did, rkey) => `t:${did} ${rkey}`;
+  const keptTiles = new Map();   // tileKey -> { at, value }
+  const tileReads = new Map();
+  function keepTile(did, rkey, value) {
+    const k = tileKey(did, rkey);
+    keptTiles.delete(k);
+    keptTiles.set(k, { at: now(), value });
+    for (const [key, v] of keptTiles) {       // (oldest first: drop what's too old, and never keep more than 500)
+      if (keptTiles.size <= 500 && now() - v.at < KEEP_MS) break;
+      keptTiles.delete(key);
+    }
+  }
+
+  /** A tile's record, asked of its author's server. → { uri, cid, value } ; NetError 'not-found' when there's none. */
+  function tileRecord(did, rkey) {
+    const k = tileKey(did, rkey);
+    if (tileReads.has(k)) return tileReads.get(k);
+    const p = (async () => {
+      const { pds } = await account(did);
+      const url = `${pds}/xrpc/com.atproto.repo.getRecord?repo=${encodeURIComponent(did)}&collection=${COLLECTION}&rkey=${encodeURIComponent(rkey)}`;
+      const r = await fetchJson(url, { timeoutMs: LIMITS.lookupMs, maxBytes: LIMITS.recordBytes, fetchImpl });
+      if (r.status === 400 || r.status === 404) {
+        keptTiles.delete(k);
+        throw new NetError('not-found', "There's no tile at that address (it may have been deleted).");
+      }
+      if (!r.ok || !r.json?.value) throw new NetError('upstream', "The tile's account server didn't answer properly.");
+      keepTile(did, rkey, r.json);
+      return r.json;
+    })().finally(() => tileReads.delete(k));
+    tileReads.set(k, p);
+    return p;
+  }
+
+  /** The copy of a tile's record read in the last 5 minutes, or null (PT1). */
+  function keptTileRecord(did, rkey) {
+    const k = keptTiles.get(tileKey(did, rkey));
+    return k && now() - k.at < KEEP_MS ? k.value : null;
   }
 
   /** Any record (renderer tiles, RT4): what Raku hands a renderer. → { uri, cid, value } ; NetError 'not-found'
@@ -90,6 +123,7 @@ export function createResolver({ fetchImpl = globalThis.fetch, now = () => Date.
     const r = await fetchJson(url, { timeoutMs: LIMITS.lookupMs, maxBytes: LIMITS.recordBytes, fetchImpl });
     if (r.status === 400 || r.status === 404) throw new NetError('not-found', "There's no record at that address (it may have been deleted).");
     if (!r.ok || !r.json?.value || typeof r.json.value !== 'object') throw new NetError('upstream', "The record's account server didn't answer properly.");
+    if (collection === COLLECTION) keepTile(did, rkey, r.json);   // (a tile read for a renderer: the Places card, PT3)
     return r.json;
   }
 
@@ -131,5 +165,5 @@ export function createResolver({ fetchImpl = globalThis.fetch, now = () => Date.
     return { count: n, more: n >= cap && typeof r.json.cursor === 'string' };
   }
 
-  return { resolveHandle, account, checkedHandle, didFor, tileRecord, record, listTiles, countTiles, countRecords, didDocumentUrl };
+  return { resolveHandle, account, checkedHandle, didFor, tileRecord, keptTileRecord, record, listTiles, countTiles, countRecords, didDocumentUrl };
 }

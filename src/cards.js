@@ -6,7 +6,7 @@
 // tiles (net.js: https, public hosts, size and time limits), and only as plain picture types
 // (moderation.js sniffPicture: PNG, JPEG, WebP, GIF, SVG drawn as an image).
 
-import { LIMITS } from './config.js';
+import { LIMITS, PREPARE } from './config.js';
 import { blobCidOf } from './tiles.js';
 import { sniffPicture } from './moderation.js';
 import { icon } from './icons.js';
@@ -33,7 +33,7 @@ export function bannerCid(manifest) {
   return null;
 }
 
-export function createCardKit({ files }) {
+export function createCardKit({ files, prefetch = null, prepareTimes = PREPARE }) {
   const waiting = [];
   let running = 0;
   const MAX = 3;
@@ -83,6 +83,43 @@ export function createCardKit({ files }) {
     else { waiting.push(holder._loadPicture); pump(); }
   }
 
+  // Preparing a tile while its card shows (claude/raku-prepare-tiles-plan.md, PT2 to PT4): a card at least half on
+  // screen for a second asks prefetch.js for the tile's page; the pointer resting on it a quarter of a second (a mouse
+  // or a pen; sweeping across doesn't count), or a touch, asks for the rest. `uri` is the tile's address, or a function
+  // giving it (a card that learns its address later); nothing is asked when it gives none (a greyed card). Nothing on
+  // screen changes.
+  const seenTimers = new WeakMap();
+  const seenObserver = prefetch && typeof IntersectionObserver === 'function'
+    ? new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        clearTimeout(seenTimers.get(e.target));
+        if (!e.isIntersecting || e.intersectionRatio < 0.5) continue;
+        const el = e.target;
+        seenTimers.set(el, setTimeout(() => {
+          if (!el.isConnected) return;
+          seenObserver.unobserve(el);
+          const uri = el._prepareUri?.();
+          if (uri) prefetch.seen(uri);              // (none: a card that can't be opened)
+        }, prepareTimes.seenMs));
+      }
+    }, { threshold: [0, 0.5] })
+    : null;
+  function prepareCard(el, uri) {
+    if (!prefetch || !el || uri == null) return;
+    const now = typeof uri === 'function' ? uri : () => uri;
+    el._prepareUri = now;
+    if (seenObserver) seenObserver.observe(el);
+    let rest = null;
+    const interest = () => { const u = now(); if (u) prefetch.interest(u); };
+    el.addEventListener('pointerenter', (e) => {
+      if (e.pointerType !== 'mouse' && e.pointerType !== 'pen') return;
+      clearTimeout(rest);
+      rest = setTimeout(interest, prepareTimes.restMs);
+    });
+    el.addEventListener('pointerleave', () => clearTimeout(rest));
+    el.addEventListener('pointerdown', () => { clearTimeout(rest); interest(); });   // a touch, or a press: at once
+  }
+
   /**
    * A tile's card. The whole card opens the tile (in this tab); corner buttons open it in a new tab and,
    * on your shelf, remove it. `note` (a sentence) and `greyed` mark tiles that can't be opened.
@@ -90,7 +127,9 @@ export function createCardKit({ files }) {
   // by: a handle ("by @handle"), or an account's DID when no handle could be checked ("by did:plc:…");
   // when (stage 6c): a short time after it ("3h ago").
   const byText = (b, w) => [b ? (b.startsWith('did:') ? `by ${b}` : `by @${b}`) : '', w || ''].filter(Boolean).join(' · ');
-  function tileCard({ name, description = '', by = '', when = '', note = '', greyed = false, badge = '', onOpen, onOpenNew, onRemove, removeLabel }) {
+  // prepare (PT3): the tile's address (or a function giving it), for the early download; left out where opening the
+  // card doesn't open that tile as it is (tables, rooms).
+  function tileCard({ name, description = '', by = '', when = '', note = '', greyed = false, badge = '', onOpen, onOpenNew, onRemove, removeLabel, prepare = null }) {
     // badge: a short word over the picture (stage 6: "New" in Following)
     const pic = h('div', { class: 'card-pic' }, badge ? h('span', { class: 'card-badge' }, badge) : null);
     const title = h('span', { class: 'card-title' }, name || 'Untitled tile');
@@ -106,6 +145,7 @@ export function createCardKit({ files }) {
       onOpenNew && !greyed ? h('button', { type: 'button', class: 'card-btn', title: 'Open in a new tab', 'aria-label': `Open ${name} in a new tab`, onclick: onOpenNew }, icon('newtab', 16)) : null,
       onRemove ? h('button', { type: 'button', class: 'card-btn', title: removeLabel || 'Remove from your shelf', 'aria-label': `${removeLabel || 'Remove from your shelf'}: ${name}`, onclick: onRemove }, icon('close', 16)) : null);
     const card = h('article', { class: `card${greyed ? ' greyed' : ''}` }, main, corner);
+    if (prepare) prepareCard(card, () => (card.classList.contains('greyed') ? null : (typeof prepare === 'function' ? prepare() : prepare)));
     return {
       el: card,
       set({ name: n, description: d, by: b, note: t, greyed: g }) {
@@ -146,5 +186,5 @@ export function createCardKit({ files }) {
     };
   }
 
-  return { tileCard, accountChip, picture };
+  return { tileCard, accountChip, picture, prepareCard };
 }
