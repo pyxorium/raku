@@ -7,6 +7,10 @@
 # 1 MB, within the same 20 per load. Since ways (claude/raku-ways-plan.md, RW5): a signpost's "Go to" takes that way.
 # Since Nov 9 (claude/raku-data-replay-plan.md): a test renderer that adds handlers after listen() gets the record from
 # the loading server's data.js (step 6c, which fails with the stock data.js).
+# Since Nov 15 (claude/mixtape-3c-track-renderer-notes.md, R3c-4): the track renderer "Tracks" (maze-tiles track\tile\)
+# plays a song record of ours and a plyr.fm one; Raku fetches the song's audio for it only when Play is pressed, only
+# the record's own audioBlob, from its author's server, an audio file by its bytes, matching its CID, at most 100 MB and
+# 3 per load (step 6d; a probe renderer asks for what it mayn't, and fails the check when the rule is loosened).
 #
 # It sets everything up itself: a copy of this Raku folder with a test pin in RENDERERS (the real pin is filled in
 # after publishing), bundled with esbuild and the stand-in sign-in, then servers.mjs and loader-replica.mjs.
@@ -40,7 +44,7 @@ blobs = {}
 def res(data, ctype):
     c = raw_cid(data); blobs[c] = data
     return {'src': {'$type': 'blob', 'ref': {'$link': c}, 'mimeType': ctype, 'size': len(data)}, 'content-type': ctype}
-TYPES = {'.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png'}
+TYPES = {'.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.mp3': 'audio/mpeg'}
 
 # ---- the renderer tile, from maze-tiles, under a test record pinned by a test CID ----
 RENDERER_RKEY = '3mzplacestest'
@@ -111,6 +115,64 @@ records[(A, TILE, LATE_RKEY)] = (LATE_CID, {'$type': TILE, 'cid': 'bafyreimanife
     'resources': {'/': res(LATE_HTML, 'text/html'), '/late.js': res(LATE_JS, 'text/javascript')}}, 'createdAt': '2026-11-09T12:00:00Z'})
 records[(A, LATE, 'one')] = ('bafyreilaterecord', {'$type': LATE, 'name': 'A record for a late handler', 'see': MAZE_PLACE})
 records[(A, SIGNPOST, 'winter-forest.slide')] = ('bafyreisignslide', {'$type': SIGNPOST, 'to': [{'place': MAZE_PLACE, 'entrance': 'obelisk'}], 'updatedAt': '2026-10-29T05:40:00.000Z'})
+# ---- the track renderer, "Tracks" (claude/mixtape-3c-track-renderer-notes.md), from maze-tiles, test-pinned for both
+#      song kinds; a few songs; and a probe renderer for a test kind that asks for what it mayn't (R3c-4) ----
+AUDIO = 'cafe.thunderbird.audio.track'
+PLYR = 'fm.plyr.track'
+TRACK_RKEY = '3mztrackstest'
+TRACK_CID = 'bafyreitracksrenderertestpinaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+track_dir = MAZE / 'track' / 'tile'
+track_res = {}
+for f in ['index.html', 'track.css', 'track.js', 'view.js', 'looks.js', 'icon.png', 'banner.png']:
+    track_res['/' if f == 'index.html' else f'/{f}'] = res((track_dir / f).read_bytes(), TYPES[Path(f).suffix])
+records[(A, TILE, TRACK_RKEY)] = (TRACK_CID, {'$type': TILE, 'cid': 'bafyreimanifest4', 'tile': {'name': 'Tracks', 'description': 'Plays a song.', 'resources': track_res,
+    'icons': [{'src': '/icon.png'}], 'screenshots': [{'src': '/banner.png'}]}, 'createdAt': '2026-11-15T12:00:00Z'})
+SAMPLE = (MAZE / 'track' / 'dev' / 'sample.mp3').read_bytes()
+song_blob = res(SAMPLE, 'audio/mpeg')['src']
+SONG_CID = song_blob['ref']['$link']
+COVER_BLOB = res((MAZE / 'forest' / 'tile' / 'icon.png').read_bytes(), 'image/png')['src']
+FAKE_CID = raw_cid(SAMPLE + b'x'); blobs[FAKE_CID] = SAMPLE          # a file that isn't the one its record names
+REC = {'date': '2002-04-20', 'venue': 'The Fillmore Auditorium', 'place': 'Denver, CO', 'set': 'Set 1', 'taper': 'Jim Smith', 'source': 'SBD > DAT > CDR > FLAC',
+       'archiveUrl': 'https://archive.org/details/ymsb2002-04-20.flac16.sbd'}
+def song(title, blob, **more): return {'$type': AUDIO, 'title': title, 'artist': 'Yonder Mountain String Band', 'album': 'Yonder Mountain String Band · The Fillmore Auditorium · 2002-04-20',
+    'trackNumber': 7, 'duration': 24, 'fileType': 'mp3', 'audioBlob': blob, 'recording': REC, 'createdAt': '2026-11-15T03:10:00.000Z', **more}
+records[(P, AUDIO, 'song1')] = ('bafyreisongone', song('Lord Only Knows (Pt. 1)', song_blob, imageBlob=COVER_BLOB))
+records[(P, PLYR, 'plyr1')] = ('bafyreiplyrone', {'title': 'Jackson Station', 'artist': 'Band of Heathens', 'album': 'Band of Heathens · Grey Eagle · 2011-02-17', 'duration': 24,
+    'audioBlob': song_blob, 'createdAt': '2026-10-01T00:00:00Z'})
+records[(P, AUDIO, 'notaudio')] = ('bafyreinotaudio', song('A picture, not a song', {**COVER_BLOB, 'mimeType': 'audio/mpeg'}))
+records[(P, AUDIO, 'changed')] = ('bafyreichanged', song('A file that changed', {**song_blob, 'ref': {'$link': FAKE_CID}}))
+records[(P, AUDIO, 'huge')] = ('bafyreihuge', song('A very long jam', {**song_blob, 'size': 200 * 1024 * 1024}))
+PROBE = 'cafe.thunderbird.test.audioprobe'
+PROBE_RKEY = '3mzprobetest'
+PROBE_CID = 'bafyreiaudioprobetestpinaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+PROBE_JS = '''const got = [];
+const show = () => { document.getElementById('n').textContent = JSON.stringify(got); };
+const dp = await import('/.well-known/web-tiles/data.js');
+let rec = null;
+dp.addDataHandler((p) => {
+  if (p && typeof p.gotAudio === 'string') { got.push(p.error || p.type + ':' + (p.bytes ? p.bytes.byteLength : 0)); show(); next(); return; }
+  if (!p || !p.value || rec) return;
+  rec = p;
+  next();
+});
+const asks = () => [
+  { audio: rec.value.imageBlob.ref.$link, from: rec.uri },             // another file in the record: not a song
+  { audio: rec.value.audioBlob.ref.$link, from: rec.value.other },      // the song, but said to come from another record
+  { audio: rec.value.audioBlob.ref.$link, from: rec.uri },
+  { audio: rec.value.audioBlob.ref.$link, from: rec.uri },
+  { audio: rec.value.audioBlob.ref.$link, from: rec.uri },
+  { audio: rec.value.audioBlob.ref.$link, from: rec.uri },             // a fourth time in one load: too many
+];
+let i = 0;
+function next() { const a = asks(); if (i < a.length) dp.sendData(a[i++]); else document.body.dataset.done = '1'; }
+dp.listen();
+show();
+'''.encode()
+PROBE_HTML = b'''<!doctype html><meta charset=utf-8><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'">
+<body><h1>Audio probe</h1><p id=n></p><script type=module src=./probe.js></script>'''
+records[(A, TILE, PROBE_RKEY)] = (PROBE_CID, {'$type': TILE, 'cid': 'bafyreimanifest5', 'tile': {'name': 'Audio probe', 'description': 'Asks for songs it may and mayn\'t have.',
+    'resources': {'/': res(PROBE_HTML, 'text/html'), '/probe.js': res(PROBE_JS, 'text/javascript')}}, 'createdAt': '2026-11-15T12:00:00Z'})
+records[(P, PROBE, 'p1')] = ('bafyreiprobe', {'$type': PROBE, 'name': 'Probe', 'audioBlob': song_blob, 'imageBlob': COVER_BLOB, 'other': f'at://{P}/{AUDIO}/song1'})
 state = {'renderer_cid': RENDERER_CID}
 calls = []
 
@@ -127,7 +189,11 @@ sign_pin = (f"'{SIGNPOST}': Object.freeze({{ name: 'Signposts', uri: 'at://{A}/{
             f"\n  '{LATE}': Object.freeze({{ name: 'Late handler', uri: 'at://{A}/{TILE}/{LATE_RKEY}', cid: '{LATE_CID}' }}),")
 cfg3 = re.sub(r"'cafe\.thunderbird\.way\.signpost': Object\.freeze\(\{[^}]*\}\),", sign_pin, cfg2, count=1)
 assert cfg3 != cfg2 or SIGN_CID in cfg2, 'the signpost RENDERERS entry was not found'
-(COPY / 'src' / 'config.js').write_text(cfg3)
+track_pin = lambda kind: f"'{kind}': Object.freeze({{ name: 'Tracks', uri: 'at://{A}/{TILE}/{TRACK_RKEY}', cid: '{TRACK_CID}' }}),"
+cfg4 = re.sub(r"'cafe\.thunderbird\.audio\.track': Object\.freeze\(\{[^}]*\}\),", track_pin(AUDIO), cfg3, count=1)
+cfg4 = re.sub(r"'fm\.plyr\.track': Object\.freeze\(\{[^}]*\}\),", track_pin(PLYR) + f"\n  '{PROBE}': Object.freeze({{ name: 'Audio probe', uri: 'at://{A}/{TILE}/{PROBE_RKEY}', cid: '{PROBE_CID}' }}),", cfg4, count=1)
+assert cfg4.count(TRACK_CID) == 2 and PROBE_CID in cfg4, 'the song RENDERERS entries were not found'
+(COPY / 'src' / 'config.js').write_text(cfg4)
 site = W / 'site' / 'assets'; site.mkdir(parents=True, exist_ok=True)
 esbuild = shutil.which('esbuild') or '/opt/npm-tools/node_modules/.bin/esbuild'
 env = {**os.environ, 'NODE_PATH': f"{RAKU_SRC / 'node_modules'}:/opt/npm-tools/node_modules"}
@@ -420,6 +486,44 @@ try:
         late_warns = [w for w in warnings[n_warn:] if w.startswith('Web tiles data.js: a data handler was added after listen().')]
         check('DR2: the tile\'s console warns once (two handlers were added late)', len(late_warns) == 1, str(warnings[n_warn:][:3]))
         page.locator('.tab.on .tab-x').click()
+
+        # 6d. Tracks (claude/mixtape-3c-track-renderer-notes.md, R3c-4): a song of ours, then the song's audio fetched only
+        #     when Play is pressed, then a plyr.fm song, the refusals, and a probe asking for what it mayn't
+        song_calls = lambda cid=SONG_CID: [c for c in calls if 'getBlob' in c and cid in c]
+        page.fill('.addr', f'at://{P_HANDLE}/{AUDIO}/song1'); page.press('.addr', 'Enter')
+        check('6d. a song address opens in a tab, shown by Tracks', wait_for(lambda: tile_text('.card-title h1') == 'Lord Only Knows (Pt. 1)', 15), str(tile_text('.card-title h1')))
+        check('...its title card and credits from the record Raku handed over', tile_text('.card-title .where') == 'The Fillmore Auditorium, Denver, CO · April 20, 2002' and tile_text('.credits .by') == 'Shared by @pyxorium.com', str(tile_text('.card-title .where')))
+        check('...the tab titled with the song (its record has no name: its key)', page.inner_text('.tab.on .tab-title') in ('song1', 'Lord Only Knows (Pt. 1)'))
+        track_icon = wait_for(tab_icon, 5)
+        check('...the tab shows Tracks\' icon (the jukebox, 256 px)', track_icon and track_icon[:2] == [256, 256] and track_icon != place_icon, str(track_icon))
+        check('...its cover, from the picture Raku fetched for it', wait_for(lambda: inner().locator('.card-title img.cover').evaluate('i => i.src.startsWith("blob:") && i.complete && i.naturalWidth > 0'), 10))
+        time.sleep(0.5)
+        check('...nothing of the song fetched before Play', not song_calls())
+        inner().locator('.play').click()
+        check('Play: the song comes from its author\'s own server, once', wait_for(lambda: len(song_calls()) == 1, 10) and P.replace(':', '%3A') in song_calls()[0], str(song_calls()))
+        played = wait_for(lambda: inner().locator('.play').get_attribute('aria-label') == 'Pause' or tile_text('.status') == 'Ready: press ▶ to play.', 15)
+        if played and inner().locator('.play').get_attribute('aria-label') != 'Pause': inner().locator('.play').click()
+        check('...then it plays (from the bytes Raku handed over)', wait_for(lambda: inner().locator('.play').get_attribute('aria-label') == 'Pause', 10), str(tile_text('.status')))
+        check('...the time moves', wait_for(lambda: tile_text('.seek .now') not in (None, '0:00'), 6))
+        inner().locator('.looks [data-look="scope"]').click()
+        time.sleep(0.6)
+        page.screenshot(path=str(OUT / 'renderer-track.png'))
+        inner().locator('.play').click()
+        page.fill('.addr', f'at://{P_HANDLE}/{PLYR}/plyr1'); page.press('.addr', 'Enter')
+        check('a plyr.fm song opens in Tracks too, "Uploaded through plyr.fm"', wait_for(lambda: tile_text('.card-title h1') == 'Jackson Station', 15) and 'Uploaded through plyr.fm' in (tile_text('.credits dl') or ''), str(tile_text('.credits dl')))
+        for rkey, words, fetches in [('notaudio', "isn't one this tile can play", True), ('changed', "doesn't match the song's record", True), ('huge', 'larger than Raku fetches', False)]:
+            page.fill('.addr', f'at://{P_HANDLE}/{AUDIO}/{rkey}'); page.press('.addr', 'Enter')
+            wait_for(lambda: inner() and inner().locator('.play').count() == 1, 15)
+            before = len([c for c in calls if 'getBlob' in c])
+            inner().locator('.play').click()
+            check(f'a song whose file is {rkey}: Raku refuses it and the tile says why', wait_for(lambda: words in (tile_text('.status') or ''), 10), str(tile_text('.status')))
+            if not fetches: check('...without fetching anything', len([c for c in calls if 'getBlob' in c]) == before)
+        cover_before = len(song_calls(COVER_BLOB['ref']['$link']))
+        page.fill('.addr', f'at://{P_HANDLE}/{PROBE}/p1'); page.press('.addr', 'Enter')
+        probe = wait_for(lambda: inner() and inner().locator('body[data-done="1"]').count() == 1 and json.loads(inner().locator('#n').inner_text()), 20)
+        check('R3c-4: a renderer may have only its record\'s own song: another file and another record refused, then three, then too many',
+              probe == ['not-allowed', 'not-allowed', f'audio/mpeg:{len(SAMPLE)}', f'audio/mpeg:{len(SAMPLE)}', f'audio/mpeg:{len(SAMPLE)}', 'too-many'], str(probe))
+        check('...the record\'s other file was never fetched for it', len(song_calls(COVER_BLOB['ref']['$link'])) == cover_before)
 
         # 7. a renderer that changed since it was pinned is refused
         state['renderer_cid'] = 'bafyreisomethingelseentirelyaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'

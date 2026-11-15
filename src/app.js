@@ -36,7 +36,7 @@ import { createTabs, current, stateAt } from './tabs.js';
 import { WAY_UP, readWays, entranceFor, readWayMessage, statusMessage, arriveMessage, testSignposts, createWayReader, chosenDoor, keepDoor,
   signpostGoTo, parseAtUri } from './ways.js';
 import { describeTile, sizeVerdict, createPathLoader, blobCidOf } from './tiles.js';
-import { formatBytes, NetError } from './net.js';
+import { formatBytes, NetError, fetchLimited } from './net.js';
 import { sniffPicture } from './moderation.js';
 import { icon, ICON_WITH_PIP, brandPot, refreshBrandPots } from './icons.js';
 import { createLookSetting } from './look.js';
@@ -44,8 +44,9 @@ import { h, createCardKit, bannerCid } from './cards.js';
 import { drawYourShelf, drawAccountTiles, drawShelfTeaser } from './shelf-pages.js';
 import { attachTypeahead } from './typeahead.js';
 import { drawTable, createPanel } from './tables/table-page.js';
-import { createPinnedLoader, TileChanged } from './tables/pinned.js';
-import { READY, UP, DOWN, recordPayload, recordTitle, readOpenRequest, openDecision, createOpenGate, readGetRequest, getTarget, createGetBudget, readPictureRequest, pictureSource, PICTURE_TYPES } from './renderers.js';
+import { createPinnedLoader, TileChanged, rawCid } from './tables/pinned.js';
+import { READY, UP, DOWN, recordPayload, recordTitle, readOpenRequest, openDecision, createOpenGate, readGetRequest, getTarget, createGetBudget, readPictureRequest, pictureSource, PICTURE_TYPES,
+  readAudioRequest, audioSource, sniffAudio, createAudioBudget, createProgress } from './renderers.js';
 import { createAccountMenu } from './account-menu.js';
 import { createLinkMessage } from './link-message.js';
 import { createDiscover, drawDiscover, drawTilePostPage } from './discover.js';
@@ -1282,7 +1283,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     p.el.prepend(frame);
     // seen: every record handed to this renderer in this load, by the address it was sent with (PC6: the pictures it
     // may ask for are the ones these records list).
-    p.renderer = { payload, given, gate: createOpenGate(), gets: createGetBudget(), seen: new Map([[given.uri, { did: given.did, value: given.value }]]) };
+    p.renderer = { payload, given, gate: createOpenGate(), gets: createGetBudget(), audios: createAudioBudget(), seen: new Map([[given.uri, { did: given.did, value: given.value }]]) };
     // RT12: the record's tab shows its renderer's own icon (the carved door, the trail signpost), read from the
     // renderer's record as a tile's tab reads its tile's; the dot until then, and if it has none.
     const rdid = (/^at:\/\/([^/]+)\//.exec(renderer.uri) || [])[1];
@@ -1310,6 +1311,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (wanted) { answerGet(pane, wanted); return; }
     const pic = readPictureRequest(d.payload);
     if (pic) { answerPicture(pane, pic); return; }
+    const song = readAudioRequest(d.payload);
+    if (song) { answerAudio(pane, song); return; }
     const address = readOpenRequest(d.payload);
     if (!address || !r.gate.take()) return;
     // A signpost's "Go to" (RW5): that way, in a new tab, to the place chosen, arriving at the signpost's entrance.
@@ -1368,6 +1371,37 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       send({ type, bytes: buf });
     } catch (err) {
       send({ error: err instanceof NetError && err.code === 'too-large' ? 'too-big' : 'not-found' });
+    }
+  }
+
+  // A renderer's { audio, from } (claude/mixtape-3c-track-renderer-notes.md, R3c-4): the song file of the record it was
+  // handed (its audioBlob), fetched from that record's account's own server, never kept (it can be large), at most
+  // RENDER.audioMaxBytes, an audio file by its bytes and the very file the record names (its CID checked); while it comes,
+  // { audioProgress, from, received, total }; then { gotAudio, from, type, bytes } (the bytes handed over, not copied) or
+  // { gotAudio, from, error } with error one of not-allowed, too-many, too-big, not-audio, changed, not-found. At most
+  // RENDER.audioMax per load (a separate allowance from { get } and { picture }).
+  async function answerAudio(pane, req) {
+    const mine = pane.attempt;
+    const r = pane.renderer;
+    const send = (payload, transfer) => { if (mine === pane.attempt && pane.frame) pane.frame.contentWindow.postMessage({ action: DOWN, payload: { from: req.from, ...payload } }, '*', transfer || []); };
+    const source = audioSource(req, r.given);
+    if (!source) return send({ gotAudio: req.cid, error: 'not-allowed' });
+    if (source.size > RENDER.audioMaxBytes) return send({ gotAudio: req.cid, error: 'too-big' });
+    if (!r.audios.take()) return send({ gotAudio: req.cid, error: 'too-many' });
+    try {
+      const { pds } = await resolver.account(source.did);
+      if (mine !== pane.attempt) return;
+      const progress = createProgress((received, total) => send({ audioProgress: req.cid, received, total: total || source.size }));
+      const url = `${pds}/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(source.did)}&cid=${encodeURIComponent(req.cid)}`;
+      const got = await fetchLimited(url, { timeoutMs: RENDER.audioMs, maxBytes: RENDER.audioMaxBytes, onProgress: progress });
+      if (!got.ok) return send({ gotAudio: req.cid, error: 'not-found' });
+      const type = sniffAudio(got.bytes);
+      if (!type) return send({ gotAudio: req.cid, error: 'not-audio' });
+      if ((await rawCid(got.bytes)) !== req.cid) return send({ gotAudio: req.cid, error: 'changed' });
+      const bytes = got.bytes.buffer.byteLength === got.bytes.byteLength ? got.bytes.buffer : got.bytes.slice().buffer;
+      send({ gotAudio: req.cid, type, bytes }, [bytes]);
+    } catch (err) {
+      send({ gotAudio: req.cid, error: err instanceof NetError && err.code === 'too-large' ? 'too-big' : 'not-found' });
     }
   }
 

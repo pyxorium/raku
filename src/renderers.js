@@ -9,11 +9,16 @@
 //   Raku → tile   tiles-protocol-down-data-payload  { got: "at://…", record: { …RT4's shape… } }  or  { got, error }
 //   tile → Raku   tiles-protocol-up-data-payload    { picture: "<blob cid>", from: "at://…" }                (PC6)
 //   Raku → tile   tiles-protocol-down-data-payload  { gotPicture, from, type, bytes }  or  { gotPicture, from, error }
+//   tile → Raku   tiles-protocol-up-data-payload    { audio: "<blob cid>", from: "at://…" }                 (R3c-4)
+//   Raku → tile   tiles-protocol-down-data-payload  { audioProgress, from, received, total }  (while it downloads)
+//                                                   then { gotAudio, from, type, bytes }  or  { gotAudio, from, error }
 // Raku answers every "ready" (a reloaded tile asks again) and each allowed get, and never sends anything else. Nothing
 // a renderer sends can write to any account: it can ask to open an address, as if it had been typed, or to read a
 // record named in the one it was given (or in that record's own account), so it can show names (the signpost
 // renderer: claude/raku-renderer-tiles-plan.md, "The signpost renderer"), or to fetch a picture one of the records it
-// was handed lists as a file, so it can show it (Places' tile card: claude/raku-places-card-plan.md, PC1 to PC6).
+// was handed lists as a file, so it can show it (Places' tile card: claude/raku-places-card-plan.md, PC1 to PC6), or
+// to fetch the song a song record lists as its audio, so it can play it (Tracks: claude/mixtape-3c-track-renderer-notes.md,
+// R3c-4).
 
 import { parseTarget } from './address.js';
 import { RENDERERS, rendererFor, RENDER } from './config.js';
@@ -130,4 +135,66 @@ function blobsIn(value, out = new Set(), depth = 0) {
 export function pictureSource(req, seen) {
   const rec = req && seen && typeof seen.get === 'function' ? seen.get(req.from) : null;
   return rec && blobsIn(rec.value).has(req.cid) ? { did: rec.did } : null;
+}
+
+// ---------- songs (claude/mixtape-3c-track-renderer-notes.md, R3c-4) ----------
+
+/** The song files Raku hands a renderer, checked from the bytes (not the server's label: ours comes back "video/webm"). */
+export const AUDIO_TYPES = Object.freeze(['audio/mpeg', 'audio/webm', 'audio/ogg', 'audio/flac', 'audio/wav', 'audio/mp4']);
+
+/** The song a renderer asks for, { cid, from }, or null when the request isn't one (a blob cid, an at:// record). */
+export function readAudioRequest(payload, limits = RENDER) {
+  if (!payload || typeof payload !== 'object') return null;
+  const { audio: cid, from } = payload;
+  if (typeof cid !== 'string' || !/^b[a-z2-7]{20,120}$/.test(cid)) return null;
+  if (typeof from !== 'string' || from.length > limits.openMaxChars || !/^at:\/\/[^\s]+$/i.test(from)) return null;
+  return { cid, from };
+}
+
+/**
+ * May a renderer have Raku fetch this song? Only the audio file of the record it was handed (not a record a { get }
+ * sent back, and no other file in it): `from` must be that record's address, as sent, and its `audioBlob` must be that
+ * file. → { did, size } (size: as the record declares it, 0 when it doesn't), else null.
+ */
+export function audioSource(req, given) {
+  if (!req || !given || req.from !== given.uri) return null;
+  const b = given.value && typeof given.value === 'object' ? given.value.audioBlob : null;
+  const cid = b && typeof b === 'object' && b.ref && typeof b.ref.$link === 'string' ? b.ref.$link : null;
+  if (!cid || cid !== req.cid) return null;
+  const size = Number(b.size);
+  return { did: given.did, size: Number.isFinite(size) && size > 0 ? size : 0 };
+}
+
+/** A song file's kind from its first bytes, or null: MP3, WebM (Opus), Ogg, FLAC, WAV or M4A. */
+export function sniffAudio(bytes) {
+  const b = bytes;
+  if (!b || b.length < 12) return null;
+  if (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) return 'audio/mpeg';                       // "ID3"
+  if (b[0] === 0xff && (b[1] & 0xe0) === 0xe0 && (b[1] & 0x06) !== 0) return 'audio/mpeg';        // an MPEG audio frame
+  if (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return 'audio/webm';      // EBML (WebM)
+  if (b[0] === 0x4f && b[1] === 0x67 && b[2] === 0x67 && b[3] === 0x53) return 'audio/ogg';       // "OggS"
+  if (b[0] === 0x66 && b[1] === 0x4c && b[2] === 0x61 && b[3] === 0x43) return 'audio/flac';      // "fLaC"
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x41 && b[10] === 0x56 && b[11] === 0x45) return 'audio/wav';
+  if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) {                          // "ftyp": an MP4 box
+    const brand = String.fromCharCode(b[8], b[9], b[10], b[11]);
+    if (/^(M4A |M4B |mp42|isom|mp41|dash)$/.test(brand)) return 'audio/mp4';
+  }
+  return null;
+}
+
+/** How many songs one renderer tab may have Raku fetch (R3c-4): at most `max`, counted per load. */
+export function createAudioBudget({ max = RENDER.audioMax } = {}) {
+  let used = 0;
+  return { take() { if (used >= max) return false; used += 1; return true; } };
+}
+
+/** A progress reporter that speaks at most every `gapMs` (and always for the last bytes). */
+export function createProgress(send, { gapMs = RENDER.progressMs, now = () => Date.now() } = {}) {
+  let last = -Infinity;
+  return (received, total) => {
+    const t = now();
+    if (t - last < gapMs && !(total && received >= total)) return;
+    last = t;
+    send(received, total);
+  };
 }

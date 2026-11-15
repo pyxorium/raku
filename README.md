@@ -519,6 +519,22 @@ for `RENDERERS`). Until its `uri` and `cid` are filled in, places keep opening t
   it was sent with); fetched from that record's account's own server as a tab's icon is; a PNG, JPEG, WebP or GIF by
   its bytes (no SVG), at most 1 MB (`RENDER.pictureMaxBytes`); counted against the same 20 per load as `{ get }`
   (`readPictureRequest`, `pictureSource`, `PICTURE_TYPES` in `src/renderers.js`; `answerPicture` in `src/app.js`).
+- **Songs for renderers (Tracks, Nov 15; claude/mixtape-3c-track-renderer-notes.md, R3c-1 to R3c-9):** the third
+  renderer, **Tracks**, plays a song record, ours (`cafe.thunderbird.audio.track`, from the Foundry's importer) or
+  plyr.fm's (`fm.plyr.track`): one tile pinned for both kinds, published with `node scripts/publish.mjs --track` in
+  `C:\thunderbird-cafe\maze-tiles`. Until its pin is filled in, songs keep opening the link message. When the listener
+  presses Play it asks for the song: `{ audio: "<blob cid>", from: "at://…" }`; while Raku downloads it, it sends
+  `{ audioProgress, from, received, total }` (at most every 250 ms, `RENDER.progressMs`), then `{ gotAudio, from, type,
+  bytes }` (an `ArrayBuffer`, handed over, not copied; the tile plays it from a `blob:` address) or `{ gotAudio, from,
+  error }` (`not-allowed`, `too-many`, `too-big`, `not-audio`, `changed`, `not-found`). Only **the `audioBlob` of the
+  record it was given**, by the address it was sent with (not a record a `{ get }` sent back, and no other file);
+  fetched from that record's account's own server, never kept (it can be large); at most 100 MB
+  (`RENDER.audioMaxBytes`; Bluesky's own limit is 50 MB a file), declared or counted; an MP3, WebM, Ogg, FLAC, WAV or
+  M4A **by its bytes** (the server's label isn't trusted: Bluesky labels our Opus WebM `video/webm`); **its CID
+  checked** against the record (`changed` otherwise); at most 3 per load (`RENDER.audioMax`), a separate allowance from
+  `{ get }` and `{ picture }`; given up after 20 minutes (`RENDER.audioMs`) (`readAudioRequest`, `audioSource`,
+  `sniffAudio`, `createAudioBudget`, `createProgress` in `src/renderers.js`; `answerAudio` in `src/app.js`;
+  `fetchLimited`'s `onProgress` in `src/net.js`).
 - Unit tests: `test/renderers.test.mjs`. Browser: `test/browser/check_renderer.py` (below).
 
 ## Ways (Nov 2026): carrying travellers between tiles
@@ -1004,7 +1020,7 @@ and the palette bar never move, each bar in its style's colours, pointing and ta
 putting the chosen one back, the bar hidden from screen readers. The first-paint checks fail without `public/look.js`, the bowl's after a reload without
 `refreshBrandPots` once the chrome is in place.
 
-`check_renderer.py` (85 checks, renderer tiles; since Nov 11, the Places card's tile page fetched early and not again on Step into; since ways, a signpost's "Go to" taking that way to the maze's tile; since Nov 9, a test renderer adding handlers after `listen()` gets the record from the loading server's `data.js`: fails with the stock one) sets everything up itself, like `check_daisy.py`: a copy of this folder
+`check_renderer.py` (101 checks, renderer tiles; since Nov 15, Tracks playing a song of ours and a plyr.fm one, the song fetched only on Play and only the record's own file, refused when it isn't audio, has changed or is too big, and a probe renderer refused what it mayn't have; since Nov 11, the Places card's tile page fetched early and not again on Step into; since ways, a signpost's "Go to" taking that way to the maze's tile; since Nov 9, a test renderer adding handlers after `listen()` gets the record from the loading server's `data.js`: fails with the stock one) sets everything up itself, like `check_daisy.py`: a copy of this folder
 with a test pin in `RENDERERS`, bundled, Raku's page and the loader replica, and the real place renderer from a
 maze-tiles folder. Usage: `python3 test/browser/check_renderer.py <work folder> <tiles-loading-server folder> <maze-tiles
 folder>`. A place typed in the box opens in its tab through the real loader; the record handed over (name, checked

@@ -6,7 +6,7 @@ import { RENDERERS, rendererFor, pinnedRenderers, RENDER } from '../src/config.j
 import { parseTarget, opensHere } from '../src/address.js';
 import { createTabs, current } from '../src/tabs.js';
 import { READY, UP, DOWN, recordPayload, recordTitle, readOpenRequest, openDecision, createOpenGate, readGetRequest, getTarget, createGetBudget,
-  readPictureRequest, pictureSource, PICTURE_TYPES } from '../src/renderers.js';
+  readPictureRequest, pictureSource, PICTURE_TYPES, readAudioRequest, audioSource, sniffAudio, createAudioBudget, createProgress, AUDIO_TYPES } from '../src/renderers.js';
 
 const PLACE = 'cafe.thunderbird.way.place';
 const PINNED = { [PLACE]: { name: 'Places', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3mzplacesxxxx', cid: 'bafyreiplaces' } };
@@ -184,4 +184,74 @@ test('which pictures (PC6): one a record already handed over in this load lists 
   assert.equal(pictureSource({ cid: BANNER, from: TILE_URI }, null), null);
   assert.deepEqual([...PICTURE_TYPES], ['image/png', 'image/jpeg', 'image/webp', 'image/gif'], 'no SVG');
   assert.equal(RENDER.pictureMaxBytes, 1024 * 1024, 'at most 1 MB');
+});
+
+// ---------- songs (claude/mixtape-3c-track-renderer-notes.md, R3c-4) ----------
+
+const SONG_URI = 'at://did:plc:rqbqpaaluty5v47jwciowpik/cafe.thunderbird.audio.track/3n2caaaaaaaag';
+const SONG = 'bafkreisongaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const song = (over = {}) => ({ uri: SONG_URI, did: 'did:plc:rqbqpaaluty5v47jwciowpik', value: { title: 'Lord Only Knows (Pt. 1)', audioBlob: { $type: 'blob', ref: { $link: SONG }, mimeType: 'video/webm', size: 5_400_000 }, imageBlob: { $type: 'blob', ref: { $link: BANNER }, mimeType: 'image/png', size: 10 }, ...over } });
+
+test('Tracks is on the list for both song kinds; until its address and CID are filled in, songs open the message', () => {
+  for (const kind of ['cafe.thunderbird.audio.track', 'fm.plyr.track']) {
+    assert.ok(RENDERERS[kind], `${kind} has a renderer entry`);
+    assert.equal(RENDERERS[kind].name, 'Tracks');
+    if (RENDERERS[kind].uri) {
+      assert.match(RENDERERS[kind].uri, /^at:\/\/did:plc:6vxjigxrqizmbo56gojxico3\/ing\.dasl\.masl\/[a-z2-7]{13}$/, 'published from thunderbird.cafe');
+      assert.match(RENDERERS[kind].cid, /^bafyrei[a-z2-7]{52}$/, 'pinned by its record CID');
+      assert.equal(rendererFor(kind), RENDERERS[kind]);
+    } else {
+      assert.equal(rendererFor(kind), null);
+    }
+  }
+  assert.deepEqual(RENDERERS['cafe.thunderbird.audio.track'], RENDERERS['fm.plyr.track'], 'the same tile for both');
+});
+
+test('an audio request: a blob cid and the at:// record it comes from, nothing else', () => {
+  assert.deepEqual(readAudioRequest({ audio: SONG, from: SONG_URI }), { cid: SONG, from: SONG_URI });
+  for (const bad of [null, 'x', { audio: SONG }, { from: SONG_URI }, { audio: 'Qm123', from: SONG_URI }, { audio: SONG, from: 'https://example.com/a.mp3' },
+    { audio: SONG, from: `at://${'a'.repeat(RENDER.openMaxChars)}` }, { audio: `${SONG} `, from: SONG_URI }]) {
+    assert.equal(readAudioRequest(bad), null, JSON.stringify(bad));
+  }
+  assert.equal(readPictureRequest({ audio: SONG, from: SONG_URI }), null, 'not a picture');
+  assert.equal(readGetRequest({ audio: SONG, from: SONG_URI }), null, 'not a get');
+  assert.equal(readOpenRequest({ audio: SONG, from: SONG_URI }), null, 'not an open');
+});
+
+test('which song (R3c-4): only the audioBlob of the record the renderer was handed, by the address it was sent with', () => {
+  assert.deepEqual(audioSource({ cid: SONG, from: SONG_URI }, song()), { did: 'did:plc:rqbqpaaluty5v47jwciowpik', size: 5_400_000 });
+  assert.equal(audioSource({ cid: BANNER, from: SONG_URI }, song()), null, 'another file in the record (its cover) isn\'t a song');
+  assert.equal(audioSource({ cid: SONG, from: 'at://pyxorium.com/cafe.thunderbird.audio.track/3n2caaaaaaaag' }, song()), null, 'only by the address it was sent with');
+  assert.equal(audioSource({ cid: SONG, from: 'at://did:plc:rqbqpaaluty5v47jwciowpik/cafe.thunderbird.audio.track/other' }, song()), null, 'another record');
+  assert.equal(audioSource({ cid: SONG, from: SONG_URI }, song({ audioBlob: { ref: { $link: 'bafkreiother' } } })), null, 'a different file');
+  assert.equal(audioSource({ cid: SONG, from: SONG_URI }, song({ audioBlob: undefined, audioUrl: 'https://x.r2.dev/a.mp3' })), null, 'audio kept elsewhere: nothing to fetch');
+  assert.deepEqual(audioSource({ cid: SONG, from: SONG_URI }, song({ audioBlob: { ref: { $link: SONG } } })), { did: 'did:plc:rqbqpaaluty5v47jwciowpik', size: 0 }, 'no declared size');
+  assert.equal(audioSource({ cid: SONG, from: SONG_URI }, null), null);
+  assert.equal(RENDER.audioMaxBytes, 100 * 1024 * 1024, 'at most 100 MB');
+  assert.equal(RENDER.audioMax, 3);
+});
+
+test('songs are recognised by their bytes, never by the server\'s label', () => {
+  const head = (...bytes) => { const b = new Uint8Array(64); b.set(bytes); return b; };
+  assert.equal(sniffAudio(head(0x49, 0x44, 0x33, 4)), 'audio/mpeg', 'MP3 with ID3');
+  assert.equal(sniffAudio(head(0xff, 0xfb, 0x90)), 'audio/mpeg', 'an MP3 frame');
+  assert.equal(sniffAudio(head(0x1a, 0x45, 0xdf, 0xa3)), 'audio/webm', 'WebM (the importer\'s Opus)');
+  assert.equal(sniffAudio(head(0x4f, 0x67, 0x67, 0x53)), 'audio/ogg');
+  assert.equal(sniffAudio(head(0x66, 0x4c, 0x61, 0x43)), 'audio/flac');
+  assert.equal(sniffAudio(head(0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x41, 0x56, 0x45)), 'audio/wav');
+  assert.equal(sniffAudio(head(0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41, 0x20)), 'audio/mp4');
+  assert.equal(sniffAudio(head(0x89, 0x50, 0x4e, 0x47)), null, 'a PNG');
+  assert.equal(sniffAudio(new TextEncoder().encode('<html><script>alert(1)</script></html>')), null, 'a page');
+  assert.equal(sniffAudio(head(0xff, 0xf9)), null, 'not an MP3 layer');
+  assert.equal(sniffAudio(new Uint8Array(4)), null);
+  assert.deepEqual([...AUDIO_TYPES], ['audio/mpeg', 'audio/webm', 'audio/ogg', 'audio/flac', 'audio/wav', 'audio/mp4']);
+});
+
+test('at most RENDER.audioMax songs per load; progress at most every RENDER.progressMs, the end always told', () => {
+  const b = createAudioBudget({ max: 2 });
+  assert.equal(b.take(), true); assert.equal(b.take(), true); assert.equal(b.take(), false);
+  let t = 0; const told = [];
+  const p = createProgress((r, total) => told.push([r, total]), { gapMs: 250, now: () => t });
+  p(10, 100); t = 100; p(20, 100); t = 260; p(30, 100); t = 270; p(100, 100);
+  assert.deepEqual(told, [[10, 100], [30, 100], [100, 100]]);
 });

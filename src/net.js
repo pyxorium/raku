@@ -62,7 +62,7 @@ export function checkUrl(url) {
  * Fetches with a time limit and a size limit. Returns { status, ok, bytes (Uint8Array), type }.
  * Stops reading (and throws 'too-large') once more than maxBytes have arrived.
  */
-export async function fetchLimited(url, { timeoutMs, maxBytes, fetchImpl = globalThis.fetch, check = checkUrl } = {}) {
+export async function fetchLimited(url, { timeoutMs, maxBytes, fetchImpl = globalThis.fetch, check = checkUrl, onProgress = null } = {}) {
   const u = check(url);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -79,14 +79,15 @@ export async function fetchLimited(url, { timeoutMs, maxBytes, fetchImpl = globa
       controller.abort();
       throw new NetError('too-large', `The answer from ${u.hostname} is too large.`);
     }
-    const bytes = await readCapped(res, maxBytes, controller, u.hostname);
+    const bytes = await readCapped(res, maxBytes, controller, u.hostname, onProgress, declared || 0);
     return { status: res.status, ok: res.ok, bytes, type: res.headers?.get?.('content-type') || '' };
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function readCapped(res, maxBytes, controller, host) {
+// onProgress(received, total): told as the bytes come in (total: the answer's declared length, or 0 when unknown).
+async function readCapped(res, maxBytes, controller, host, onProgress = null, total = 0) {
   if (!res.body || !res.body.getReader) {
     const buf = new Uint8Array(await res.arrayBuffer());
     if (buf.byteLength > maxBytes) throw new NetError('too-large', `The answer from ${host} is too large.`);
@@ -94,24 +95,25 @@ async function readCapped(res, maxBytes, controller, host) {
   }
   const reader = res.body.getReader();
   const parts = [];
-  let total = 0;
+  let got = 0;
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      total += value.byteLength;
-      if (total > maxBytes) {
+      got += value.byteLength;
+      if (got > maxBytes) {
         controller.abort();
         throw new NetError('too-large', `The answer from ${host} is too large.`);
       }
       parts.push(value);
+      if (onProgress) { try { onProgress(got, total); } catch { /* a listener's trouble isn't the download's */ } }
     }
   } catch (err) {
     if (err instanceof NetError) throw err;
     if (controller.signal.aborted) throw new NetError('timeout', `${host} took too long.`);
     throw new NetError('network', `The download from ${host} broke off.`);
   }
-  const out = new Uint8Array(total);
+  const out = new Uint8Array(got);
   let at = 0;
   for (const p of parts) { out.set(p, at); at += p.byteLength; }
   return out;

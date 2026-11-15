@@ -549,6 +549,12 @@ export const RENDERERS = Object.freeze({
   // --signpost in C:\thunderbird-cafe\maze-tiles prints these two values (its published.json: "signpost-renderer").
   'cafe.thunderbird.way.signpost': Object.freeze({ name: 'Signposts', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3mzoty54cln2u',
     cid: 'bafyreifeyejtny7l7dc6kv33yiyasihzfvgd2mjdvyr5ubxlkt2lj7b4fa' }),   // published Nov 6 2026
+  // The track renderer, "Tracks" (claude/mixtape-3c-track-renderer-notes.md, R3c-1 to R3c-9): one song, ours (from the
+  // Foundry's importer) or plyr.fm's, played in the look the listener picks; it asks Raku for the song's audio
+  // ({ audio }, R3c-4). node scripts/publish.mjs --track in C:\thunderbird-cafe\maze-tiles prints these two values (its
+  // published.json: "track-renderer"); the same tile for both kinds. Until they're filled in, songs open the link message.
+  'cafe.thunderbird.audio.track': Object.freeze({ name: 'Tracks', uri: '', cid: '' }),
+  'fm.plyr.track': Object.freeze({ name: 'Tracks', uri: '', cid: '' }),
 });
 /** The pinned renderer for records of this kind, or null (none, or not pinned yet). */
 export function rendererFor(collection, renderers = RENDERERS) {
@@ -562,8 +568,11 @@ export const pinnedRenderers = (renderers = RENDERERS) => Object.keys(renderers)
 // to check out before it's sent without one (the tile shows the DID then). getMax: how many records a renderer may
 // have Raku read for it, per load (SR6: only records named in the one it was given, or in that record's account);
 // its picture requests count against the same allowance. pictureMaxBytes: the largest picture Raku hands a renderer
-// (claude/raku-places-card-plan.md, PC6: a tile's banner).
-export const RENDER = Object.freeze({ openMaxChars: 600, gapMs: 1000, handleMs: 1500, getMax: 20, pictureMaxBytes: 1024 * 1024 });
+// (claude/raku-places-card-plan.md, PC6: a tile's banner). The song a track renderer asks for (R3c-4): at most
+// audioMaxBytes (100 MB; Bluesky's own limit is 50 MB a file), audioMax files per load, given up after audioMs (a long
+// song on a slow line), its progress sent at most every progressMs.
+export const RENDER = Object.freeze({ openMaxChars: 600, gapMs: 1000, handleMs: 1500, getMax: 20, pictureMaxBytes: 1024 * 1024,
+  audioMaxBytes: 100 * 1024 * 1024, audioMax: 3, audioMs: 20 * 60 * 1000, progressMs: 250 });
 // Ways (claude/raku-ways-plan.md, RW1 to RW8): Raku carries travellers between tiles with ways, as the travel pages do
 // (maze-tiles site/travel.js). After a place says hello and Raku sends its arrival, the screen between places stays
 // revealMs (the tile plays its own arrival under it), then fades over fadeMs; a destination without ways shows plainMs

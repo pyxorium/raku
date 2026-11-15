@@ -49,3 +49,14 @@ test('sizes in words', () => {
   assert.equal(formatBytes(820 * 1024), '820 KB');
   assert.equal(formatBytes(3 * 1024 * 1024 * 1024), '3.0 GB');
 });
+
+test('a download can say how far it has come (a song for a renderer: R3c-4)', async () => {
+  const chunks = [new Uint8Array(400), new Uint8Array(400), new Uint8Array(200)];
+  const stream = async () => new Response(new ReadableStream({ pull(c) { const n = chunks.shift(); if (n) c.enqueue(n); else c.close(); } }), { headers: { 'content-length': '1000' } });
+  const seen = [];
+  const r = await fetchLimited('https://a.example.com/', { timeoutMs: 1000, maxBytes: 2000, fetchImpl: stream, onProgress: (got, total) => seen.push([got, total]) });
+  assert.equal(r.bytes.byteLength, 1000);
+  assert.deepEqual(seen, [[400, 1000], [800, 1000], [1000, 1000]]);
+  const broken = await fetchLimited('https://a.example.com/', { timeoutMs: 1000, maxBytes: 2000, fetchImpl: respond('0123456789'), onProgress: () => { throw new Error('listener trouble'); } });
+  assert.equal(broken.bytes.byteLength, 10, 'a listener\'s trouble doesn\'t break the download');
+});
