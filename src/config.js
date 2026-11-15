@@ -553,8 +553,10 @@ export const RENDERERS = Object.freeze({
   // Foundry's importer) or plyr.fm's, played in the look the listener picks; it asks Raku for the song's audio
   // ({ audio }, R3c-4). node scripts/publish.mjs --track in C:\thunderbird-cafe\maze-tiles prints these two values (its
   // published.json: "track-renderer"); the same tile for both kinds. Until they're filled in, songs open the link message.
-  'cafe.thunderbird.audio.track': Object.freeze({ name: 'Tracks', uri: '', cid: '' }),
-  'fm.plyr.track': Object.freeze({ name: 'Tracks', uri: '', cid: '' }),
+  'cafe.thunderbird.audio.track': Object.freeze({ name: 'Tracks', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3n2emk2xd562v',
+    cid: 'bafyreidcnkfdszuizpsaqxuj7egd446m2n67vbehrnrksewdzdgqzxchq4' }),   // published Nov 15 2026
+  'fm.plyr.track': Object.freeze({ name: 'Tracks', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3n2emk2xd562v',
+    cid: 'bafyreidcnkfdszuizpsaqxuj7egd446m2n67vbehrnrksewdzdgqzxchq4' }),   // published Nov 15 2026
 });
 /** The pinned renderer for records of this kind, or null (none, or not pinned yet). */
 export function rendererFor(collection, renderers = RENDERERS) {
