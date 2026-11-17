@@ -222,8 +222,9 @@ export const SIGNIN = Object.freeze({
   returnKey: 'raku-signin-return',             // sessionStorage: what to pick up after "Sign in in this tab instead" (Q41)
 });
 // Shown beside sign-in, in the account menu and on the About page (Q43; since WP11, Nov 2026: one sign-in, tile posts;
-// since HT15, Nov 2026: hearts, which are Raku's own, not Bluesky likes).
-export const SIGNIN_PROMISE = "Signing in lets Raku save your match results, show you in rooms and game lounges, post tiles from your accounts, and heart tile posts. It asks once, for all of these. Hearts are Raku's own, kept in your account; Raku doesn't touch your Bluesky posts, likes, follows or anything else.";
+// since HT15, Nov 2026: hearts; since SG5, Nov 17 2026: your rpg.actor character in games, and only what Raku does:
+// claude/raku-sprite-games-plan.md).
+export const SIGNIN_PROMISE = 'Signing in lets Raku save your match results, show you in rooms and game lounges, bring your rpg.actor character into games, post tiles from your accounts, and heart tile posts.';
 // The line under a sign-in form naming the one permission (post box, hearts, tables; HT15).
 export const PERMISSION_LINE = 'saving your match results, showing you in rooms and game lounges, posting tiles from your account, and hearting tile posts';
 export const recordLink = (uri) => `https://pdsls.dev/${uri}`;
@@ -575,6 +576,21 @@ export const pinnedRenderers = (renderers = RENDERERS) => Object.keys(renderers)
 // song on a slow line), its progress sent at most every progressMs.
 export const RENDER = Object.freeze({ openMaxChars: 600, gapMs: 1000, handleMs: 1500, getMax: 20, pictureMaxBytes: 1024 * 1024,
   audioMaxBytes: 100 * 1024 * 1024, audioMax: 3, audioMs: 20 * 60 * 1000, progressMs: 250 });
+// Sprite games (claude/raku-sprite-games-plan.md, SG1 to SG8): a tile that says { kind: "hello", v: 1 } on the data
+// channel (Cosmic Junkyard's messages) gets the current account's rpg.actor character, read from rpg.actor's Compendium
+// tile (SG1; the account's own actor.rpg.sprite record when it isn't there). The Compendium: its record (about 730 KB, it
+// lists every file) and its /catalog.json (about 4 MB) are read again only when rpg.actor's account has changed since
+// the last look (getLatestCommit, about 100 bytes), at most every checkGapMs (SG6); kept in memory only. recordBytes,
+// catalogBytes, spriteBytes: the most Raku reads of each. answersMax: sprites Raku sends one tile per load (SG7).
+// switchKey: localStorage, the accounts whose "Show my character in games" is off (SG4; on unless listed).
+export const SPRITE_GAMES = Object.freeze({
+  compendium: Object.freeze({ did: 'did:plc:kwgllf365cwmxbnxitx4pjdj', rkey: '3n2gvvgkkok2i', catalogPath: '/catalog.json' }),
+  spriteCollection: 'actor.rpg.sprite', spriteRkey: 'self',
+  checkGapMs: 15 * 1000, lookupMs: 10000, catalogMs: 60000,
+  recordBytes: 2 * 1024 * 1024, catalogBytes: 16 * 1024 * 1024, spriteBytes: 2 * 1024 * 1024,
+  maxSide: 4096, answersMax: 6,
+  switchKey: 'raku-character-off',
+});
 // Ways (claude/raku-ways-plan.md, RW1 to RW8): Raku carries travellers between tiles with ways, as the travel pages do
 // (maze-tiles site/travel.js). After a place says hello and Raku sends its arrival, the screen between places stays
 // revealMs (the tile plays its own arrival under it), then fades over fadeMs; a destination without ways shows plainMs

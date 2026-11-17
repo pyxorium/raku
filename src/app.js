@@ -61,6 +61,7 @@ import { setLeaveWarning } from './signin-ui.js';
 import { isInstalled } from './app-shell.js';
 import { playVerdict, createOneAtATime, wayPlan, createTrail, tabFor, createAutoplaySetting } from './play-here.js';
 import { createPrefetcher } from './prefetch.js';
+import { readSpriteGameMessage, statusMessage as spriteStatusMessage, spriteMessage, createCharacters, createCharacterSwitch, createAnswerBudget, answerHello, answerRequest } from './sprite-games.js';
 
 export function mountRaku(root, { mothership, resolver, moderation, files, shelf, auth, storage = null, session = null, returned = null, keepForReturn = () => {}, loc = globalThis.location, hist = globalThis.history, tableDeps = {}, install = null }) {
   // Preparing a tile while its card shows (claude/raku-prepare-tiles-plan.md): the early downloads (prefetch.js), asked
@@ -148,7 +149,11 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   // The look (claude/raku-light-mode-plan.md): Match device / Light / Dark and the light style, in the account menu;
   // public/look.js put the saved choice on the page before the first paint, this keeps it (and follows the device).
   const look = createLookSetting({ storage, doc: root.ownerDocument });
-  const menu = createAccountMenu({ auth, moderation, keepForReturn: keep, say: (t) => say(t), onAbout: () => goAbout(), install, autoplay, look });
+  // Sprite games (claude/raku-sprite-games-plan.md): "Show my character in games", per account (SG4), in the account menu;
+  // the characters themselves, from rpg.actor's Compendium or the account's own record (SG1).
+  const character = createCharacterSwitch({ storage });
+  const characters = createCharacters({ resolver });
+  const menu = createAccountMenu({ auth, moderation, keepForReturn: keep, say: (t) => say(t), onAbout: () => goAbout(), install, autoplay, look, character });
   let pendingReturn = returned && returned.pending ? returned.pending : null;
   const stage = h('main', { class: 'stage' });
   const sheetList = h('ul', { class: 'sheet-list' });
@@ -357,7 +362,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (!p) {
       const el = h('section', { class: 'pane', 'data-tab': tab.id });
       p = { el, uri: undefined, attempt: 0, timers: [], frame: null, title: 'New tab', icon: null, shownAddress: '', state: 'new', keep: null, dispose: null, panel: null, table: null, mark: null, record: null, renderer: null,
-        ways: null, screen: null, arrival: null, freshWay: false, tripStarted: null };
+        ways: null, screen: null, arrival: null, freshWay: false, tripStarted: null, spriteGame: null, onlyReady: null };
       panes.set(tab.id, p);
       // Step 5b-2: a page can put a quiet mark on its tab (Daisy's lounge: someone arrived while it was behind).
       const pane = p;
@@ -381,6 +386,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     p.record = null;
     p.renderer = null;
     p.ways = null;
+    p.spriteGame = null;
+    p.onlyReady = null;
     if (p.screen?.url) URL.revokeObjectURL(p.screen.url);
     p.screen = null;
     p.arrival = null;
@@ -1427,6 +1434,55 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   document.addEventListener('pointerdown', (e) => { if (!openInMenu.hidden && !openIn.contains(e.target)) toggleOpenIn(false); }, true);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !openInMenu.hidden) { toggleOpenIn(false); openInBtn.focus(); } });
 
+  // ---------- sprite games (claude/raku-sprite-games-plan.md, SG1 to SG8) ----------
+  // A tile that says { kind: "hello", v: 1 } on the data channel (Cosmic Junkyard's messages) gets the current account's
+  // rpg.actor character, with its handle (SG7, SG8), when "Show my character in games" is on for it (SG4); otherwise
+  // "ready", which shows the game's own button. That button opens the account menu with a line saying why (SG2, SG3).
+  // Signing in, switching accounts or turning the switch on hands every open game that said hello the character again.
+  // Like a tile's way messages, these are answered, not logged on the Messages panel (its pill would sit on the game's
+  // own button). Nothing a game sends can write anywhere.
+  const sendGame = (pane, msg) => { try { pane.frame?.contentWindow?.postMessage(msg, '*'); } catch { /* the tile has gone */ } };
+  function sendGameStatus(pane, state) { sendGame(pane, spriteStatusMessage(state)); }
+  function fromSpriteGame(pane, msg) {
+    if (msg.kind === 'hello') {
+      // (a tile saying hello again within one load keeps its allowance)
+      if (!pane.spriteGame || pane.spriteGame.attempt !== pane.attempt) pane.spriteGame = { attempt: pane.attempt, budget: createAnswerBudget(), last: null };
+      // Its handshake (data-ready) may already have shown the Messages pill, over the game's own button: when that's all
+      // it has sent, the pill goes again.
+      if (pane.panel && pane.onlyReady) pane.panel.button.hidden = true;
+      feedGame(pane, true);
+      return;
+    }
+    // The game's button (SG2 to SG4): Raku has no search box, so the game's "Search for your handle…" goes at once,
+    // and the account menu opens: sign in, turn the switch on, or choose another account.
+    sendGameStatus(pane, 'cancelled');
+    const a = auth.current();
+    menu.openFor(answerRequest(a, a ? character.isOn(a.did) : false));
+  }
+  // force: answer even when nothing has changed since this game's last answer (its hello).
+  async function feedGame(pane, force = false) {
+    const g = pane.spriteGame;
+    if (!g || g.attempt !== pane.attempt || !pane.frame) return;
+    const a = auth.current();
+    const on = !!a && character.isOn(a.did);
+    const key = answerHello(a, on) === 'feed' ? a.did : 'ready';
+    if (!force && g.last === key) return;
+    g.last = key;
+    if (key === 'ready') { sendGameStatus(pane, 'ready'); return; }
+    if (!g.budget.take()) return;                     // (as many characters as Raku hands one load)
+    const mine = pane.attempt, did = a.did, handle = a.handle;
+    const still = () => mine === pane.attempt && pane.spriteGame === g && g.last === did;
+    sendGameStatus(pane, 'loading');
+    let c = null;
+    try { c = await characters.forAccount(did); } catch { if (still()) sendGameStatus(pane, 'error'); return; }
+    if (!still()) return;
+    if (!c) { sendGameStatus(pane, 'no-sprite'); return; }
+    sendGame(pane, spriteMessage({ image: new Blob([c.bytes], { type: 'image/png' }), ...c.sizes, handle }));
+  }
+  const feedAllGames = () => { for (const p of panes.values()) if (p.spriteGame) feedGame(p); };
+  auth.onChange(feedAllGames);
+  character.onChange(feedAllGames);
+
   // Messages from ordinary tiles (tiles-protocol-up-…): logged on their tab's panel. Raku doesn't answer
   // other protocols yet; the panel just shows what was asked. (A renderer's are answered: fromRenderer; a tile with
   // ways has its way messages answered: fromWayTile.)
@@ -1439,7 +1495,13 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       if (!pane.frame || pane.frame.contentWindow !== e.source) continue;
       if (pane.renderer) { fromRenderer(pane, d); return; }
       if (pane.ways && d.action === WAY_UP) { fromWayTile(pane, id, d); return; }
+      // A game asking for a character (sprite games, SG7): any tile that says the hello.
+      const game = readSpriteGameMessage(d);
+      if (game && pane.frame) { fromSpriteGame(pane, game); return; }
       if (!pane.panel) continue;
+      // (a game's data-channel handshake isn't a request: once it has said hello, it isn't logged either)
+      if (d.action === READY && pane.spriteGame) return;
+      pane.onlyReady = d.action === READY && pane.onlyReady !== false;
       const what = d.action.slice('tiles-protocol-up-'.length);
       const kind = d.payload && typeof d.payload === 'object' && typeof d.payload.kind === 'string' ? `${what} · ${d.payload.kind}` : what;
       pane.panel.log({ dir: 'page', from: 'tile', to: 'Raku', kind: kind.slice(0, 80), note: "Raku doesn't answer this yet" });

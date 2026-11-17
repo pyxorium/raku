@@ -22,6 +22,8 @@ test('"Who Raku talks to" names every outside server Raku is set up to reach (ke
   // Rooms (rooms step 1, RR9): the relay, the people in the room, and the connection helpers (STUN, Cloudflare's TURN)
   for (const h of [host(ROOMS.relay), ...ROOMS.stun]) assert.ok(text.includes(h), `${h} is on the About page`);
   assert.ok(/The people in your room/.test(text) && /straight between your computers, encrypted/.test(text));
+  // Sprite games (SG1): rpg.actor's Compendium
+  assert.ok(text.includes('rpg.actor') && /Compendium/.test(text), "rpg.actor's Compendium");
   assert.ok(new RegExp(`${ROOMS.turn} passes the encrypted call along`).test(text), "Cloudflare's TURN");
 });
 
@@ -41,5 +43,5 @@ test('the Messages line says when the button shows, and the page links to the bl
 test("\"You don't need an account\" repeats the sign-in promise word for word (WP11)", () => {
   assert.ok(NO_ACCOUNT_LINE.endsWith(SIGNIN_PROMISE));
   assert.match(NO_ACCOUNT_LINE, /^Browsing, searching, joining a room with a typed name, and playing the tables against the bot need no sign-in\. /);
-  assert.match(NO_ACCOUNT_LINE, /post tiles from your accounts, and heart tile posts\. It asks once/);
+  assert.match(NO_ACCOUNT_LINE, /bring your rpg\.actor character into games, post tiles from your accounts, and heart tile posts\.$/);
 });

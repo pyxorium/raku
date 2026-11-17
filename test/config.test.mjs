@@ -69,8 +69,8 @@ test("the sign-in description file names Raku's own address (a new file since WP
   assert.ok(!file('vite.config.js').includes("'oauth.json'"), "the file's name comes from SIGNIN.clientId too");
 });
 
-test('the sign-in promise: one sign-in, tile posts (WP11)', () => {
-  assert.equal(SIGNIN_PROMISE, "Signing in lets Raku save your match results, show you in rooms and game lounges, post tiles from your accounts, and heart tile posts. It asks once, for all of these. Hearts are Raku's own, kept in your account; Raku doesn't touch your Bluesky posts, likes, follows or anything else.");
+test('the sign-in promise: one sign-in, tile posts (WP11), your character in games, only what Raku does (SG5)', () => {
+  assert.equal(SIGNIN_PROMISE, 'Signing in lets Raku save your match results, show you in rooms and game lounges, bring your rpg.actor character into games, post tiles from your accounts, and heart tile posts.');
 });
 
 test("Raku's link card (stage 6): tags from config.js, pictures in public/, the address not written into index.html", () => {

@@ -293,7 +293,7 @@ with pw_ctx as pw:
     check('after posting from Write a post, closing the box shows the new post at the top (WP10)', page.inner_text('.tile-post .post-text') == 'Side A')
     page.screenshot(path=str(OUT / 'w6-after.png'))
     check('the account menu shows the one sign-in’s promise (WP11)', (page.click('.account-btn'), wait_for(lambda: page.is_visible('.account-menu .rk-promise'), page=page),
-          page.inner_text('.account-menu .rk-promise'))[2] == "Signing in lets Raku save your match results, show you in rooms and game lounges, post tiles from your accounts, and heart tile posts. It asks once, for all of these. Hearts are Raku's own, kept in your account; Raku doesn't touch your Bluesky posts, likes, follows or anything else.")
+          page.inner_text('.account-menu .rk-promise'))[2] == "Signing in lets Raku save your match results, show you in rooms and game lounges, bring your rpg.actor character into games, post tiles from your accounts, and heart tile posts.")
     ctx.close()
 
     # ---- Write a post signed out (WP13): Sign in to post, one window for the one set ----
@@ -306,7 +306,7 @@ with pw_ctx as pw:
     pg.click('.dv-write')
     wait_for(lambda: pg.is_visible('.rk-dialog .signin-handle'), page=pg)
     check('Write a post signed out: "Sign in to post", one permission "Raku", the promise', pg.inner_text('.rk-dialog h2') == 'Sign in to post' and 'one permission, Raku' in pg.inner_text('.rk-dialog .rk-details')
-          and "It asks once, for all of these." in pg.inner_text('.rk-dialog .rk-promise'))
+          and "bring your rpg.actor character into games" in pg.inner_text('.rk-dialog .rk-promise'))
     pg.screenshot(path=str(OUT / 'w7-signin.png'))
     pg.fill('.rk-dialog .signin-handle', T_H)
     with ctx2.expect_page():

@@ -834,6 +834,40 @@ nothing runs before you open a tile.
 - Unit tests: `test/prefetch.test.mjs`. Browser: `test/browser/check_prepare.py` (below), and two checks in
   `check_renderer.py` for the Places card.
 
+## Sprite games (Nov 2026): your rpg.actor character in games
+
+Decided in `claude/raku-sprite-games-plan.md` (SG1 to SG8), after rpg.actor's Compendium tile: a game that asks gets the
+signed-in account's rpg.actor character, with no handle to type. Proved with Cosmic Junkyard
+(`at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3mwvoqidyqd24`), unchanged.
+
+- **The messages are Cosmic Junkyard's** (tp-data, the renderers' envelopes): the game says `{ kind: "hello", v: 1 }`;
+  Raku answers `{ kind: "sprite-status", state }` and `{ kind: "sprite", v: 1, image (a PNG Blob), frameWidth,
+  frameHeight, sheetWidth, sheetHeight, handle }`; the game's button sends `{ kind: "sprite-request" }`. **Any tile that
+  says the hello** is answered (SG7), only from its own tab's frame, at most 6 characters per load.
+- **Signed in, "Show my character in games" on** (SG4, on unless turned off, per account, in the account menu): the
+  character, with the account's handle (SG8). **Signed out, or the switch off:** `ready`, which shows the game's "Load my
+  RPG actor sprite" button. **The button** (SG2, SG3) sends `cancelled` at once (the game's "Search for your handle"
+  line goes) and opens the account menu with a line saying why: sign in, turn the switch on, or choose the account whose
+  character plays. Signing in, switching accounts or turning the switch on hands every open game that said hello the
+  character again. Like a tile's way messages, these are answered, not logged on the Messages panel (its pill would sit on
+  the game's own button).
+- **Where the character comes from** (SG1, SG6): rpg.actor's Compendium tile
+  (`at://did:plc:kwgllf365cwmxbnxitx4pjdj/ing.dasl.masl/3n2gvvgkkok2i`): `getLatestCommit` on rpg.actor's account
+  (about 100 bytes, at most every 15 s), its record (about 730 KB) only when the account has changed, its
+  `/catalog.json` (about 4 MB) only when that file has changed, each checked against its CID; kept in memory only. The
+  account's entry gives the picture's path and layout; the picture is fetched from rpg.actor and checked against its
+  CID. **Not in the Compendium** (or it can't be read): the account's own `actor.rpg.sprite/self`. The sizes: the
+  picture's own (PNG header) for the sheet, the listed layout for the frame.
+- **The promise** (SG5) now says only what Raku does: "Signing in lets Raku save your match results, show you in rooms
+  and game lounges, bring your rpg.actor character into games, post tiles from your accounts, and heart tile posts."
+  No new permission (sprites and the Compendium are public reads). The About page names rpg.actor among who Raku talks
+  to, the switch among what stays in the browser, and what a game is handed.
+- **Not here:** tiles playing in a tile post (Play here), rooms, lounges, emotes, stats, rpg.actor's own message format.
+- Files: `src/sprite-games.js` (no DOM: the messages, the Compendium, the account's own record, the checks, the switch),
+  `src/app.js` (`fromSpriteGame`, `feedGame`), `src/account-menu.js` (the switch, `openFor`), `src/config.js`
+  (`SPRITE_GAMES`, `SIGNIN_PROMISE`), `src/about-page.js`. Unit tests: `test/sprite-games.test.mjs`. Browser:
+  `test/browser/check_sprite_games.py` (below).
+
 ## Try it
 
 ```
@@ -890,6 +924,7 @@ and open http://127.0.0.1:5181/.
 | `src/link-message.js` | the link message: where a link goes, Open / Cancel |
 | `src/renderers.js` | renderer tiles: what a renderer is handed, what it may ask for (tp-data) |
 | `src/ways.js` | ways: reading a tile's `/ways.json`, signposts, places and doors; the way messages; test signposts |
+| `src/sprite-games.js` | sprite games: a game's messages, the character from rpg.actor's Compendium or the account's own record, the switch |
 | `src/about-page.js` | the About page: what Raku keeps, who it talks to, how tiles are kept in their box, installing Raku |
 | `src/app-shell.js` | stage 9: installed or not, the service worker's registration, the update rule, the install offer, the tabs in the title bar |
 | `src/room-tab.js`, `src/room-words.js` | rooms step 1: the room tab hosting rooms-lab's room (the join screen, invites, one room at a time, the rejoin after a reload); the words and links, tested in Node |

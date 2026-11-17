@@ -61,10 +61,9 @@ test('the permission set includes hearts; old sign-ins do not cover them (HT14)'
   assert.ok(coversHearts('atproto include:cafe.thunderbird.authRaku'));
 });
 
-test("the promise names hearts as Raku's own, not Bluesky likes (HT15)", () => {
-  assert.match(SIGNIN_PROMISE, /heart tile posts/);
-  assert.match(SIGNIN_PROMISE, /Hearts are Raku’s own|Hearts are Raku's own/);
-  assert.match(SIGNIN_PROMISE, /doesn't touch your Bluesky posts, likes, follows/);
+test("the promise names hearting tile posts (HT15; since SG5 it says only what Raku does)", () => {
+  assert.match(SIGNIN_PROMISE, /heart tile posts\.$/);
+  assert.doesNotMatch(SIGNIN_PROMISE, /doesn't touch|It asks once/);
   assert.match(PERMISSION_LINE, /hearting tile posts/);
   assert.equal(HEARTS.left, '65%');
 });

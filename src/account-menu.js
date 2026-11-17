@@ -4,17 +4,27 @@
 // switches, no window: Q38), Add another account, the "Saves without asking" choices with Turn off (Q37),
 // Raku's sign-in promise (Q43), and Sign out; then the Autoplay switch (claude/raku-expand-plan.md, AU5), "Install
 // Raku" when the browser offers it (stage 9, S3); last, a link to the About page (going public, Q134). Above Autoplay,
-// the Look row and the Light style row (claude/raku-light-mode-plan.md, LM7, LM14, LM18).
+// the Look row and the Light style row (claude/raku-light-mode-plan.md, LM7, LM14, LM18). Sprite games
+// (claude/raku-sprite-games-plan.md, SG2 to SG4): the current account's "Show my character in games" switch, and
+// openFor(reason), the menu opened by a game's "Load my sprite" button with a line saying why.
 import { SIGNIN_PROMISE, TABLES, LIGHT_STYLES } from './config.js';
 import { h } from './cards.js';
 import { icon } from './icons.js';
 import { signInForm, avatarEl } from './signin-ui.js';
 
-export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbout = null, install = null, autoplay = null, look = null }) {
+// What the menu says first when a game's button opened it (SG2 to SG4).
+export const MENU_REASONS = Object.freeze({
+  signin: 'Sign in to play as your rpg.actor character.',
+  switch: 'Turn on \u201cShow my character in games\u201d to play as your rpg.actor character.',
+  accounts: 'Choose the account whose rpg.actor character plays.',
+});
+
+export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbout = null, install = null, autoplay = null, look = null, character = null }) {
   const button = h('button', { type: 'button', class: 'account-btn', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', onclick: () => toggle() });
   const panel = h('div', { class: 'account-menu', hidden: true, role: 'dialog', 'aria-label': 'Your accounts' });
   const avatars = new Map();             // did → avatar address (Bluesky's picture server), once known
   let adding = false;
+  let reason = null;                     // a key of MENU_REASONS while a game's button has the menu open
 
   const avatarOf = (a, cls) => avatarEl(a.handle, avatars.get(a.did), cls);
   function learnAvatar(did) {
@@ -44,7 +54,7 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
       auth, button: label,
       // A new account asks only for itself; signing in again keeps the games it already allows.
       scope: (who) => auth.scopeFor(auth.didForHandle(who), null),
-      onDone: (did) => { adding = false; draw(); const a = auth.current(); if (a && a.did === did) say(`Signed in as @${a.handle}.`); },
+      onDone: (did) => { adding = false; reason = null; draw(); const a = auth.current(); if (a && a.did === did) say(`Signed in as @${a.handle}.`); },
       goHere: (who, scope) => { keepForReturn({ kind: 'signin' }); return auth.signInHere(who, scope, 'signin'); },
     });
   }
@@ -101,15 +111,21 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
       look.look === 'device' && !look.deviceLight ? h('span', { class: 'small acct-style-note' }, 'Used when your device is light.') : null);
     return h('div', { class: 'acct-looks' }, lookRow, styleRow);
   };
+  // SG4: the current account's "Show my character in games" (on unless turned off; per account).
+  const characterRow = (cur) => (character && cur ? h('div', { class: 'acct-autoplay acct-character' },
+    h('span', { class: 'acct-autoplay-words' }, h('span', {}, 'Show my character in games'),
+      h('span', { class: 'small' }, 'Games that ask get your rpg.actor character and handle.')),
+    switchButton({ get on() { return character.isOn(cur.did); }, set: (on) => { reason = null; character.set(cur.did, on); } }, 'Show my character in games')) : null);
+  const reasonLine = () => (reason && MENU_REASONS[reason] ? h('p', { class: 'small acct-reason', role: 'status' }, h('b', {}, MENU_REASONS[reason])) : null);
   const aboutRow = () => (onAbout ? h('button', { type: 'button', class: 'acct-about', onclick: () => { toggle(false); onAbout(); } }, icon('info', 16), 'About Raku: privacy and safety') : null);
   function drawPanel() {
     const list = auth.list();
     const head = h('div', { class: 'acct-head' }, h('b', {}, list.length ? 'Signed in on this browser' : 'Sign in to Raku'),
       h('button', { type: 'button', class: 'acct-close', 'aria-label': 'Close', onclick: () => toggle(false) }, icon('close', 16)));
-    const parts = [head];
+    const parts = [head, reasonLine()];
     if (!list.length) {
       const f = form({ label: 'Sign in' });
-      parts.push(h('p', { class: 'small' }, 'Browsing never needs a sign-in. Signing in is only for saving match results from the tables.'), f.el,
+      parts.push(h('p', { class: 'small' }, 'Browsing never needs a sign-in.'), f.el,
         h('p', { class: 'rk-promise' }, SIGNIN_PROMISE), installRow(), aboutRow());
       parts.splice(parts.length - 2, 0, lookRows(), autoplayRow());
       panel.replaceChildren(...parts.filter(Boolean));
@@ -118,7 +134,7 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
     parts.push(h('ul', { class: 'acct-list' }, ...list.map((a) => {
       learnAvatar(a.did);
       return h('li', {}, h('button', { type: 'button', class: `acct-row${a.current ? ' on' : ''}`, 'aria-current': a.current ? 'true' : null,
-        onclick: () => { if (!a.current) { auth.switchTo(a.did); say(`Now using @${a.handle}.`); } } },
+        onclick: () => { if (!a.current) { reason = null; auth.switchTo(a.did); say(`Now using @${a.handle}.`); } } },
       avatarOf(a, 'acct-av'), h('span', { class: 'acct-handle' }, `@${a.handle}`), a.current ? h('span', { class: 'tick', 'aria-label': 'current' }, '✓') : null));
     })));
     let f = null;
@@ -132,8 +148,9 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
           h('button', { type: 'button', class: 'linkish', onclick: () => { auth.accounts.setAlways(e.did, e.tableId, false); draw(); say(`${TABLES[e.tableId].name} asks again before saving.`); } }, 'Turn off'));
       })));
     }
-    parts.push(h('p', { class: 'rk-promise' }, SIGNIN_PROMISE));
     const cur = auth.current();
+    parts.push(characterRow(cur));
+    parts.push(h('p', { class: 'rk-promise' }, SIGNIN_PROMISE));
     if (cur) parts.push(h('button', { type: 'button', class: 'acct-out', onclick: async () => { const hd = cur.handle; await auth.signOut(cur.did); draw(); say(`Signed out @${hd}.`); } }, `Sign out @${cur.handle}`));
     parts.push(lookRows(), autoplayRow(), installRow(), aboutRow());
     panel.replaceChildren(...parts.filter(Boolean));
@@ -147,7 +164,14 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
   function toggle(open = panel.hidden) {
     panel.hidden = !open;
     button.setAttribute('aria-expanded', open ? 'true' : 'false');
-    if (open) { adding = false; const f = drawPanel(); (f ? f.input : panel.querySelector('.acct-row'))?.focus(); }
+    if (!open) reason = null;
+    if (open) { adding = false; const f = drawPanel(); (f ? f.input : panel.querySelector(reason === 'switch' ? '.acct-character .rk-switch' : '.acct-row'))?.focus(); }
+  }
+  // SG2 to SG4: a game's "Load my sprite" button: the menu, with a line saying why ('signin' | 'switch' | 'accounts').
+  function openFor(why) {
+    reason = MENU_REASONS[why] ? why : null;
+    if (!panel.hidden) { panel.hidden = true; }
+    toggle(true);
   }
   // Close on a click outside, or Escape.
   document.addEventListener('pointerdown', (e) => { if (!panel.hidden && !panel.contains(e.target) && !button.contains(e.target)) toggle(false); });
@@ -155,6 +179,7 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
   auth.onChange(() => draw());
   if (install) install.onChange(() => draw());
   if (autoplay) autoplay.onChange(() => draw());
+  if (character) character.onChange(() => draw());
   // A new look draws the menu again; the button just pressed keeps the focus (keyboard, screen readers).
   if (look) look.onChange(() => {
     const was = panel.contains(document.activeElement) ? document.activeElement.getAttribute('data-focus-key') : null;
@@ -162,7 +187,7 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
     if (was) panel.querySelector(`[data-focus-key="${was}"]`)?.focus();
   });
   draw();
-  return { button, panel, toggle, draw };
+  return { button, panel, toggle, draw, openFor };
 }
 
 /** An on/off switch for the Autoplay choice (AU5), drawn the same in the account menu and Tile posts' header. */

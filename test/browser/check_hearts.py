@@ -30,7 +30,7 @@ PDS = 'https://pds.fakepds.net'
 SALT = 'lexicographer.space hide list v1'
 FULL = 'repo?collection=cafe.thunderbird.daisy.lounge&collection=cafe.thunderbird.daisy.match&collection=cafe.thunderbird.sevenup.match&collection=cafe.thunderbird.tile.post&collection=cafe.thunderbird.tile.like rpc?lxm=cafe.thunderbird.daisy.lounge.enter&lxm=cafe.thunderbird.rooms.join&aud=*'
 OLD = FULL.replace('&collection=cafe.thunderbird.tile.like', '')
-PROMISE = "Signing in lets Raku save your match results, show you in rooms and game lounges, post tiles from your accounts, and heart tile posts. It asks once, for all of these. Hearts are Raku's own, kept in your account; Raku doesn't touch your Bluesky posts, likes, follows or anything else."
+PROMISE = "Signing in lets Raku save your match results, show you in rooms and game lounges, bring your rpg.actor character into games, post tiles from your accounts, and heart tile posts."
 
 blobs = {}
 def cid_for(data):
