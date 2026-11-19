@@ -11,7 +11,8 @@
 //     with the tile (it lives in the tile until it is saved), so the box says so.
 // tell(state, extra) answers the tile: 'asking', 'saving', then 'saved' ({ uri, handle }) or one of 'declined', 'failed'.
 // host: where the prompt goes (a tab's pane); wide: over Raku's whole window instead (a game in a tile post, PG2:
-// claude/raku-play-here-games-plan.md), the post dimmed behind with the rest of the page; onClosed(): after it closes.
+// claude/raku-play-here-games-plan.md), the post dimmed behind with the rest of the page; onClosed(): after it closes;
+// beforeOpen(): just before it opens (a tile post in full screen leaves it, PG7). Always (no prompt) calls neither.
 import { SIGNIN_PROMISE, recordLink } from './config.js';
 import { SignInNeeded } from './auth.js';
 import { h } from './cards.js';
@@ -21,7 +22,7 @@ import { describeRun } from './game-saves.js';
 
 const at = (hd) => `@${hd}`;
 
-export function createGameSaver({ auth, host, wide = false, onClosed = () => {}, say = () => {}, newKey = () => newTid() }) {
+export function createGameSaver({ auth, host, wide = false, beforeOpen = () => {}, onClosed = () => {}, say = () => {}, newKey = () => newTid() }) {
   let dialog = null;
   let job = null;                       // { game, record, tell, done }
 
@@ -31,6 +32,7 @@ export function createGameSaver({ auth, host, wide = false, onClosed = () => {},
 
   function show(build) {
     if (!dialog || dialog.closed) {
+      beforeOpen();
       dialog = openDialog(host, { label: `Save this ${job.game.name} ${job.game.what}`, cls: wide ? 'rk-wide' : '',
         onClose: () => { const j = job; job = null; if (j && !j.done) { j.done = true; j.tell('declined'); } onClosed(); } });
     }

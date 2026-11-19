@@ -161,10 +161,13 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
     drawButton();
     if (!panel.hidden) drawPanel();
   }
+  const closers = new Set();
   function toggle(open = panel.hidden) {
+    const was = !panel.hidden;
     panel.hidden = !open;
     button.setAttribute('aria-expanded', open ? 'true' : 'false');
     if (!open) reason = null;
+    if (!open && was) { const fs = [...closers]; closers.clear(); for (const fn of fs) fn(); }
     if (open) { adding = false; const f = drawPanel(); (f ? f.input : panel.querySelector(reason === 'switch' ? '.acct-character .rk-switch' : '.acct-row'))?.focus(); }
   }
   // SG2 to SG4: a game's "Load my sprite" button: the menu, with a line saying why ('signin' | 'switch' | 'accounts').
@@ -173,9 +176,12 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
     if (!panel.hidden) { panel.hidden = true; }
     toggle(true);
   }
-  // Close on a click outside, or Escape.
+  // whenClosed(fn): fn once, the next time the menu closes (a game in an expanded tile post: Raku's bar goes back, PG6).
+  function whenClosed(fn) { closers.add(fn); }
+  // Close on a click outside, or Escape. Escape closes only the menu: nothing else on the page hears it (an expanded
+  // tile post behind the menu stays expanded; claude/raku-play-here-games-plan.md, PG6).
   document.addEventListener('pointerdown', (e) => { if (!panel.hidden && !panel.contains(e.target) && !button.contains(e.target)) toggle(false); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) { toggle(false); button.focus(); } });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) { e.stopImmediatePropagation(); toggle(false); button.focus(); } });
   auth.onChange(() => draw());
   if (install) install.onChange(() => draw());
   if (autoplay) autoplay.onChange(() => draw());
@@ -187,7 +193,7 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
     if (was) panel.querySelector(`[data-focus-key="${was}"]`)?.focus();
   });
   draw();
-  return { button, panel, toggle, draw, openFor };
+  return { button, panel, toggle, draw, openFor, whenClosed };
 }
 
 /** An on/off switch for the Autoplay choice (AU5), drawn the same in the account menu and Tile posts' header. */

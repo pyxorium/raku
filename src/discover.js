@@ -789,7 +789,7 @@ function playCard(ctx, t) {
     byItself = quiet;
     touched = !quiet;
     phase = 'starting';
-    player.play({ slot, uri: t.uri, did: t.did, pds: tile.pds, d: tile.d, onState, expand: () => expand(), expanded: () => !!view, shrink: () => collapse({ instant: true }), quiet });
+    player.play({ slot, uri: t.uri, did: t.did, pds: tile.pds, d: tile.d, onState, expand: () => expand(), expanded: () => !!view, quiet });
   }
   function showPlace(info) {
     place = info && info.travelled ? info : null;

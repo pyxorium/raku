@@ -807,11 +807,10 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   //   | 'place' (detail: { name, by, travelled, backTo, tab }: the place now, after a trip or Back) | 'note' (detail: words)
   // expand(): the slot expanded to Raku's window (a promise, once it has grown); expanded(): whether it is.
   // quiet (Autoplay, AU3): started by itself, so it takes no keys until it is clicked or tapped (or expanded).
-  // shrink(): the expanded view closed at once (a game's button opening the account menu, which sits in Raku's bar).
   // Games in tile posts (claude/raku-play-here-games-plan.md, PG1 to PG4): spriteGame and gameSave as a tab's, per frame.
-  function playInPost({ slot, uri, did, pds, d, onState, expand = null, expanded = () => false, shrink = null, quiet = false }) {
+  function playInPost({ slot, uri, did, pds, d, onState, expand = null, expanded = () => false, quiet = false }) {
     const pane = { post: true, el: slot, slot, frame: null, ways: null, attempt: 0, arrival: null, timers: [], observer: null, state: 'loading', failed: null,
-      onState, expand, expanded, shrink, quiet, inView: true, big: false, screen: null, tripStarted: null, trip: 0, spriteGame: null, gameSave: null,
+      onState, expand, expanded, quiet, inView: true, big: false, screen: null, tripStarted: null, trip: 0, spriteGame: null, gameSave: null,
       trail: createTrail({ uri, did, pds, d, name: d.name, by: null }) };
     postSlots.start(slot, () => endPost(pane));
     playing = pane;
@@ -1470,9 +1469,21 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     sendGameStatus(pane, 'cancelled');
     const a = auth.current();
     const why = answerRequest(a, a ? character.isOn(a.did) : false);
-    // A game in an expanded tile post: back to its post first (the menu opens from Raku's bar, under the expanded view).
-    if (pane.post && pane.expanded() && pane.shrink) Promise.resolve(pane.shrink()).then(() => menu.openFor(why), () => menu.openFor(why));
-    else menu.openFor(why);
+    // A game in a tile post (claude/raku-play-here-games-plan.md): out of full screen first (PG7: the menu is outside the
+    // post); expanded, Raku's bar comes over the expanded view while the menu is open (PG6), the post staying expanded.
+    if (!pane.post) { menu.openFor(why); return; }
+    leaveFullscreen().then(() => {
+      if (pane.expanded()) { barOver(true); menu.whenClosed(() => barOver(false)); }
+      menu.openFor(why);
+    });
+  }
+  // PG6: Raku's bar over an expanded tile post (the class on <html>; see .rk-bar-over in style.css).
+  const barOver = (on) => document.documentElement.classList.toggle('rk-bar-over', on);
+  // PG7: the browser's full screen holds only a post's slot, so anything Raku asks would be out of sight: leave it first
+  // (the post stays expanded). → a promise, settled once out (or at once when not in full screen).
+  function leaveFullscreen() {
+    if (!document.fullscreenElement || typeof document.exitFullscreen !== 'function') return Promise.resolve();
+    try { return document.exitFullscreen().catch(() => {}); } catch { return Promise.resolve(); }
   }
   // force: answer even when nothing has changed since this game's last answer (its hello).
   async function feedGame(pane, force = false) {
@@ -1520,7 +1531,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
         // A tile post's game (PG2): the prompt over Raku's window, not in the post's small slot; when it closes, the
         // keys back to the tile (its ring, PH4), unless the post has stopped or moved on meanwhile.
         saver: pane.post
-          ? createGameSaver({ auth, host: stage, wide: true, say, onClosed: () => { if (playing === pane) focusPost(pane); } })
+          ? createGameSaver({ auth, host: stage, wide: true, say, beforeOpen: () => { leaveFullscreen(); },        // (PG7)
+              onClosed: () => { if (playing === pane) focusPost(pane); } })
           : createGameSaver({ auth, host: pane.el, say }) };
     }
     return pane.gameSave;

@@ -926,13 +926,17 @@ expanded or not, also Autoplay) is answered as in a tab; the game itself is unch
 - **The prompt over Raku's window** (PG2): "Save this run?" is centred over the whole window, the post dimmed behind
   (also over an expanded post); when it closes, the keys go back to the post (its ring). "See it" uses the link message,
   already page-wide.
-- **An expanded post's sprite button** goes back to its place first, then opens the account menu (the menu hangs from
-  Raku's bar, which the expanded view covers).
+- **An expanded post's sprite button** (PG6) opens the account menu with Raku's bar brought over the expanded view while
+  the menu is open (the class `rk-bar-over` on the page); the post stays expanded, and Escape closes only the menu.
+- **Full screen** (PG7): the expanded view's Full screen holds only the post's slot, so when Raku needs to ask (the save
+  prompt, or the menu from the sprite button) it leaves full screen first, keeping the post expanded. With Always, a
+  save needs no prompt and full screen stays.
 - **Signing in from a post** (PG3): as in a tab, a blocked sign-in window offers Try again or "Sign in in this tab
   instead", which says the run won't be kept. **No wording changes** (PG4): the About page's lines never said "in a tab".
-- Files: `src/app.js` (the post's branch in the message listener; `endGame`; the post's prompt host; feeding),
-  `src/game-saves.js` (`runningTile`), `src/game-save-ui.js` (`wide`, `onClosed`), `src/signin-ui.js` (`openDialog`'s
-  `cls`), `src/discover.js` (`shrink`), `src/style.css` (`.rk-dialog.rk-wide`). Unit tests: `test/game-saves.test.mjs`.
+- Files: `src/app.js` (the post's branch in the message listener; `endGame`; the post's prompt host; feeding;
+  `barOver`, `leaveFullscreen`), `src/game-saves.js` (`runningTile`), `src/game-save-ui.js` (`wide`, `beforeOpen`,
+  `onClosed`), `src/signin-ui.js` (`openDialog`'s `cls`), `src/account-menu.js` (`whenClosed`; Escape heard by the menu
+  alone), `src/style.css` (`.rk-dialog.rk-wide`, `.rk-bar-over .chrome`). Unit tests: `test/game-saves.test.mjs`.
   Browser: `test/browser/check_play_here_games.py` (below).
 
 ## Try it
@@ -1048,13 +1052,15 @@ and the next run saved without asking (the menu's "Saves without asking", Turn o
 address (no can-save, not-allowed), a made-up record (invalid). The sign-in stand-in's `standin-nogames` leaves game
 runs out of the grant.
 
-`check_play_here_games.py` (40 checks, Nov 2026: games in tile posts) runs as `check_game_saves.py` does (same three
+`check_play_here_games.py` (48 checks, Nov 2026: games in tile posts) runs as `check_game_saves.py` does (same three
 arguments), with Cosmic Junkyard posted as a tile post on Discover → Tile posts, and a post of a tile whose way leads to
 it: Play here, the character (the account's own record) and can-save, the sprite button and the menu; a real run saved
 with its moves (the prompt over the window, the post dimmed, Allow once, the record's game and its replay, Close giving
 the keys back, See it); the way post (no can-save on its own tile, not-allowed; through the way to Cosmic Junkyard inside
-the post, then can-save; expanded, the sprite button shrinking the post and opening the menu; the prompt over the
-expanded view; No; Stop mid-prompt saving nothing); signed out (the button opens the menu to sign in). Two real runs at
+the post, then can-save; expanded, the sprite button opening the menu with Raku's bar over the expanded view, Escape
+closing only the menu; from Full screen, full screen left first; the prompt over the expanded view; No; Stop mid-prompt
+saving nothing); the game's own post in Full screen (a save leaves full screen for the prompt; Always; the next save
+without a prompt, still in full screen); signed out (the button opens the menu to sign in). Two real runs at
 once (about 45 seconds).
 
 `check_prepare.py` (39 checks, Nov 2026: preparing a tile while its card shows) runs as `check_post_links.py` does (a

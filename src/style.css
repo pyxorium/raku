@@ -1655,6 +1655,9 @@ button.way-door:hover, button.way-door:focus-visible { border-color: var(--glaze
 /* A game in a tile post saving a run (claude/raku-play-here-games-plan.md, PG2): Raku's prompt over its whole window, the
    post dimmed behind with the page; over an expanded post too (.pane.tp-x-on is 50, the link message 60). */
 .stage > .rk-dialog.rk-wide { position: fixed; inset: 0; z-index: 70; }
+/* A game in an expanded tile post opening the account menu (PG6): Raku's bar over the expanded view (.pane.tp-x-on, 50)
+   while the menu is open, so the menu opens from its usual place; under the save prompt (70). */
+.rk-bar-over .chrome { z-index: 65; }
 @media (max-width: 640px) {
   .post-btn { order: 4; width: 36px; height: 36px; padding: 0; justify-content: center; }
   .post-btn .lbl { display: none; }

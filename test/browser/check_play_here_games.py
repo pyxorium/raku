@@ -7,12 +7,15 @@
 # naming the game's address and the version the post plays, whose moves replay to its score; "Saved to @… ✓", Close gives
 # the keys back to the post, See it opens Raku's "Open in" message. A post of a tile with ways: its own tile gets no
 # can-save and is refused (not-allowed); its way leads to Cosmic Junkyard inside the post, which then gets can-save; there,
-# expanded, the sprite button shrinks the post and opens the menu; a run's prompt sits over the expanded view; No → "Not
-# saved."; Stop mid-prompt closes the prompt and saves nothing. Signed out: the button opens the menu to sign in (SG2).
+# expanded, the sprite button opens the menu with Raku's bar over the expanded view, the post staying expanded, and
+# Escape closes only the menu (PG6); from Full screen it leaves full screen first (PG7); a run's prompt sits over the
+# expanded view; No → "Not saved."; Stop mid-prompt closes the prompt and saves nothing. Back on the game's own post,
+# expanded and in Full screen: a save leaves full screen for the prompt (PG7), Always; then, in Full screen again, the
+# next save goes without a prompt and full screen stays. Signed out: the button opens the menu to sign in (SG2).
 #
 # Usage: python3 test/browser/check_play_here_games.py <work folder> <tiles-loading-server folder> <cosmic-junkyard-tile folder>
 #   (as check_game_saves.py: Playwright with Chromium, esbuild, node_modules with @dasl/tile-loader and rooms-lab, port 80 free)
-import base64, hashlib, io, json, os, shutil, subprocess, sys, time
+import base64, datetime, hashlib, io, json, os, shutil, subprocess, sys, time, zoneinfo
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 from PIL import Image
@@ -216,6 +219,13 @@ try:
             """What sits on top at the post's slot's centre: 'dialog' if Raku's prompt covers it."""
             return page.evaluate('''() => { const s = document.querySelector('.tile-post .tp-slot:has(iframe.tp-frame)'); const r = s.getBoundingClientRect();
               const e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return e && e.closest('.rk-dialog') ? 'dialog' : (e ? e.className || e.tagName : 'none'); }''')
+        def menu_on_top(page):
+            """The account menu open and on top at its own centre (not under the expanded view)."""
+            return page.evaluate('''() => { const m = document.querySelector('.account-menu'); if (!m || m.hidden) return false; const r = m.getBoundingClientRect();
+              const e = document.elementFromPoint(r.left + r.width / 2, r.top + Math.min(r.height / 2, 60)); return !!(e && m.contains(e)); }''')
+        def full(page): return page.evaluate('() => document.fullscreenElement ? document.fullscreenElement.className : null')
+        def go_full(page):
+            page.click('.tp-x .tp-x-full'); return wait_for(lambda: full(page) and 'tp-slot' in full(page), 5)
         def dialog_box(page): return page.eval_on_selector('.rk-dialog', 'd => { const r = d.getBoundingClientRect(); return [r.left, r.top, r.width, r.height, d.parentElement.className]; }')
 
         # Three pages at once: A signed in (a run saved), B signed in (the way post; expanded; Stop), C signed out.
@@ -251,12 +261,22 @@ try:
         check('...there, its hello gets can-save (the place reached by the way is the game\'s own address)', {'kind': 'can-save', 'collections': [RUN]} in got, str(got))
         check('...and the character', wait_for(lambda: status(B) == f'Playing as @{T_H}', 15), str(status(B)))
         game(B).click('#spriteBtn')
-        check('expanded, the sprite button: the post goes back to its place and the menu opens', wait_for(lambda: B.query_selector('.tp-x') is None and B.is_visible('.account-menu .acct-reason'), 5))
-        B.keyboard.press('Escape'); wait_for(lambda: not B.is_visible('.account-menu'), 3)
-        if B.is_visible('.account-menu'): B.click('.account-btn')
-        check('...the game kept running in its post', is_cj(B) and status(B) == f'Playing as @{T_H}')
-        B.click(f'{WAYP} .tp-expand')
-        check('expanded again', wait_for(lambda: B.query_selector('.tp-x') is not None, 5))
+        check('PG6: expanded, the sprite button opens the menu over the expanded view, the post staying expanded',
+              wait_for(lambda: B.is_visible('.account-menu .acct-reason') and menu_on_top(B), 5) and B.query_selector('.tp-x') is not None
+              and B.evaluate("() => document.documentElement.classList.contains('rk-bar-over')"))
+        B.screenshot(path=str(OUT / 'post-menu-expanded.png'))
+        B.keyboard.press('Escape')
+        check('...Escape closes only the menu: still expanded, Raku\'s bar back under', wait_for(lambda: not B.is_visible('.account-menu'), 3)
+              and B.query_selector('.tp-x') is not None and not B.evaluate("() => document.documentElement.classList.contains('rk-bar-over')"))
+        check('...the game kept running, expanded', is_cj(B) and status(B) == f'Playing as @{T_H}')
+        check('Full screen: the post\'s slot alone in full screen', go_full(B))
+        # (in full screen, Playwright's own click lands off the button; the button clicked from inside the game instead)
+        game(B).evaluate('() => document.getElementById("spriteBtn").click()')
+        check('PG7: in full screen, the sprite button leaves full screen first, then the menu over the expanded view',
+              wait_for(lambda: full(B) is None and B.is_visible('.account-menu') and menu_on_top(B), 5) and B.query_selector('.tp-x') is not None, str(full(B)))
+        B.click('.tp-x-hole', position={'x': 5, 'y': 5}, force=True)
+        check('...a click outside closes the menu (and the bar goes back), still expanded', wait_for(lambda: not B.is_visible('.account-menu'), 3)
+              and not B.evaluate("() => document.documentElement.classList.contains('rk-bar-over')") and B.query_selector('.tp-x') is not None)
 
         # ======== C: signed out ========
         C.click(f'{CJP} .tp-play')
@@ -299,21 +319,42 @@ try:
         game(A).click('#seeIt')
         check('See it: Raku\'s "Open in" message for that record, naming the game', wait_for(lambda: A.is_visible('.link-msg') and uri in A.inner_text('.link-msg')
               and '"Cosmic Junkyard" asked to open' in A.inner_text('.link-msg'), 5), A.inner_text('.link-msg') if A.is_visible('.link-msg') else '')
+        # PG7 with the game's own post: expanded, Full screen; a save leaves full screen for the prompt; Always; then the next
+        # save in full screen goes without a prompt and full screen stays. (Saves sent as the game sends them.)
+        A.keyboard.press('Escape'); wait_for(lambda: not A.is_visible('.link-msg'), 3)
+        if A.is_visible('.link-msg'): A.click('.link-msg button:has-text("Close")')
+        A.click(f'{CJP} .tp-expand'); wait_for(lambda: A.query_selector('.tp-x') is not None, 5)
+        check('the game\'s own post, expanded, in Full screen', go_full(A))
+        today = str(datetime.datetime.now(zoneinfo.ZoneInfo('America/Denver')).date())
+        now = lambda: datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+        before = len(runs(T))
+        game(A).evaluate(TALK, [{'kind': 'write-record', 'id': 'fs1', 'action': 'create', 'collection': RUN, 'record': {'score': 12, 'day': today, 'playedAt': now()}}, 300])
+        check('PG7: a save in full screen leaves full screen and shows the prompt over the expanded view',
+              wait_for(lambda: full(A) is None and A.is_visible('.rk-dialog') and topmost_at_post(A) == 'dialog', 5) and A.query_selector('.tp-x') is not None, str(full(A)))
+        A.click('.rk-dialog button:text-is("Always")')
+        check('...Always: saved', wait_for(lambda: len(runs(T)) == before + 1 and 'Saved to' in A.inner_text('.rk-dialog'), 8))
+        A.click('.rk-dialog button:text-is("Close")')
+        check('Full screen again', go_full(A))
+        game(A).evaluate(TALK, [{'kind': 'write-record', 'id': 'fs2', 'action': 'create', 'collection': RUN, 'record': {'score': 13, 'day': today, 'playedAt': now()}}, 1500])
+        check('...the next save, with Always: no prompt, saved, still in full screen', wait_for(lambda: len(runs(T)) == before + 2, 8)
+              and not A.is_visible('.rk-dialog') and full(A) and 'tp-slot' in full(A), str(full(A)))
+        A.evaluate('() => document.exitFullscreen()')
         check('no errors on the page (a run saved from a post)', not errsA, str(errsA))
 
         # B: expanded: the prompt over the expanded view; No; again, then Stop mid-prompt
+        saved_b = len(runs(T))
         game(B).click('#saveBtn')
         check('expanded: the prompt opens over the expanded view', wait_for(lambda: B.is_visible('.rk-dialog'), 5) and topmost_at_post(B) == 'dialog'
               and B.evaluate('''() => { const e = document.elementFromPoint(640, 30); return !!(e && e.closest('.rk-dialog')); }'''), topmost_at_post(B))
         B.screenshot(path=str(OUT / 'post-save-expanded.png'))
         B.click('.rk-dialog button:text-is("No")')
-        check('No: "Not saved." and nothing written', wait_for(lambda: save_status(B) == 'Not saved.', 5) and len(runs(T)) == 1, save_status(B))
+        check('No: "Not saved." and nothing written', wait_for(lambda: save_status(B) == 'Not saved.', 5) and len(runs(T)) == saved_b, save_status(B))
         check('...the keys back to the post', wait_for(lambda: B.evaluate('() => document.activeElement && document.activeElement.classList.contains("tp-frame")'), 3))
         game(B).click('#saveBtn')
         wait_for(lambda: B.is_visible('.rk-dialog'), 5)
         B.evaluate('''() => document.querySelector('.tile-post .tp-stop').click()''')      # (as Autoplay or the × would)
         check('Stop mid-prompt: the post stops, the prompt closes, nothing saved', wait_for(lambda: not B.is_visible('.rk-dialog') and not B.query_selector('iframe.tp-frame'), 5)
-              and len(runs(T)) == 1)
+              and len(runs(T)) == saved_b)
         check('no errors on the page (the way post)', not errsB, str(errsB))
         b.close()
 finally:
