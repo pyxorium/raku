@@ -61,6 +61,9 @@ import { setLeaveWarning } from './signin-ui.js';
 import { isInstalled } from './app-shell.js';
 import { playVerdict, createOneAtATime, wayPlan, createTrail, tabFor, createAutoplaySetting } from './play-here.js';
 import { createPrefetcher } from './prefetch.js';
+import { readSaveMessage, gamesForTile, canSaveMessage, statusMessage as saveStatusMessage, resultMessage, decideWrite, decideOpen, createSaveBudget } from './game-saves.js';
+import { createGameSaver } from './game-save-ui.js';
+import { GAME_SAVE_LIMITS } from './config.js';
 import { readSpriteGameMessage, statusMessage as spriteStatusMessage, spriteMessage, createCharacters, createCharacterSwitch, createAnswerBudget, answerHello, answerRequest } from './sprite-games.js';
 
 export function mountRaku(root, { mothership, resolver, moderation, files, shelf, auth, storage = null, session = null, returned = null, keepForReturn = () => {}, loc = globalThis.location, hist = globalThis.history, tableDeps = {}, install = null }) {
@@ -362,7 +365,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (!p) {
       const el = h('section', { class: 'pane', 'data-tab': tab.id });
       p = { el, uri: undefined, attempt: 0, timers: [], frame: null, title: 'New tab', icon: null, shownAddress: '', state: 'new', keep: null, dispose: null, panel: null, table: null, mark: null, record: null, renderer: null,
-        ways: null, screen: null, arrival: null, freshWay: false, tripStarted: null, spriteGame: null, onlyReady: null };
+        ways: null, screen: null, arrival: null, freshWay: false, tripStarted: null, spriteGame: null, gameSave: null, onlyReady: null };
       panes.set(tab.id, p);
       // Step 5b-2: a page can put a quiet mark on its tab (Daisy's lounge: someone arrived while it was behind).
       const pane = p;
@@ -387,6 +390,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     p.renderer = null;
     p.ways = null;
     p.spriteGame = null;
+    if (p.gameSave) { p.gameSave.saver.dispose(); p.gameSave = null; }
     p.onlyReady = null;
     if (p.screen?.url) URL.revokeObjectURL(p.screen.url);
     p.screen = null;
@@ -540,7 +544,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (!d.ok) { if (way) { wayBlocked(p, tab, d.reason); return; } p.state = 'error'; status(p, 'error', d.reason); return; }
     // A door through a place opens exactly the version the place points at (as the travel page, and the tables' pins).
     if (way && way.door.pinned && record.cid !== way.door.pinned) { wayBlocked(p, tab, 'The tile there has changed since its place was pointed at it.'); return; }
-    const keep = { kind: 'tile', did, rkey: parsed.rkey, name: d.name, by: '' };
+    // (cid: the version that will run, for a game's saved records: CJ2-9)
+    const keep = { kind: 'tile', did, rkey: parsed.rkey, name: d.name, by: '', cid: record.cid };
     p.keep = keep;
     if (way) {
       if (p.screen) screenPicture(p, did, account.pds, d.manifest);
@@ -1451,6 +1456,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       // it has sent, the pill goes again.
       if (pane.panel && pane.onlyReady) pane.panel.button.hidden = true;
       feedGame(pane, true);
+      // A game that may save its own records here (CJ2-14: an addition a host can leave out) is told so.
+      const games = runningGames(pane);
+      if (games.length) sendGame(pane, canSaveMessage(games));
       return;
     }
     // The game's button (SG2 to SG4): Raku has no search box, so the game's "Search for your handle…" goes at once,
@@ -1483,6 +1491,49 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   auth.onChange(feedAllGames);
   character.onChange(feedAllGames);
 
+  // ---------- game saves (claude/cosmic-junkyard-v2-plan.md, CJ2-5 to CJ2-11) ----------
+  // A game tile's write-record: only the tile at a game's own address, only into that game's collection (CJ2-9), the
+  // record checked and its game filled in from the version running (game-saves.js), then Raku's own prompt (Allow once /
+  // Always, CJ2-10; game-save-ui.js), the answers going back to the tile. Its "See it" (open-record) opens only an address
+  // Raku wrote for it in this load, with the usual "Open in" choices (CJ2-11). Answered, not logged, like a game's other
+  // messages (the Messages pill would sit on the game's own button).
+  const runningTile = (pane) => (pane.keep && pane.keep.kind === 'tile' && typeof pane.keep.cid === 'string' ? { did: pane.keep.did, rkey: pane.keep.rkey, cid: pane.keep.cid } : null);
+  function runningGames(pane) { const t = runningTile(pane); return t ? gamesForTile(t.did, t.rkey) : []; }
+  function gameSaveFor(pane) {
+    if (!pane.gameSave || pane.gameSave.attempt !== pane.attempt) {
+      if (pane.gameSave) pane.gameSave.saver.dispose();
+      pane.gameSave = { attempt: pane.attempt, budget: createSaveBudget(), written: new Set(), gate: createOpenGate({ gapMs: GAME_SAVE_LIMITS.openGapMs }),
+        saver: createGameSaver({ auth, host: pane.el, say }) };
+    }
+    return pane.gameSave;
+  }
+  function fromGameSave(pane, msg) {
+    const mine = pane.attempt;
+    const reply = (m) => { if (mine === pane.attempt) sendGame(pane, m); };
+    const running = runningTile(pane);
+    if (msg.kind === 'open') {
+      const g = pane.gameSave && pane.gameSave.attempt === mine ? pane.gameSave : null;
+      const uri = g && decideOpen(msg, g.written);
+      if (uri && g.gate.take()) linkMessage.show({ record: { uri }, from: `"${pane.title}" asked to open the record Raku just saved for it.` });
+      return;
+    }
+    if (!msg.id) return;
+    const decided = decideWrite(msg, running);
+    if (decided.error) {
+      if (decided.problem) console.warn(`[raku] a game's record was refused (${decided.problem})`);
+      reply(resultMessage(msg.id, { ok: false, error: decided.error }));
+      return;
+    }
+    const g = gameSaveFor(pane);
+    if (!g.budget.start(msg.id)) { reply(resultMessage(msg.id, { ok: false, error: 'failed' })); return; }
+    g.saver.request({ game: decided.game, record: decided.record, tell: (state, extra) => {
+      if (state === 'asking' || state === 'saving') { reply(saveStatusMessage(msg.id, state)); return; }
+      g.budget.end();
+      if (state === 'saved') { g.written.add(extra.uri); reply(resultMessage(msg.id, { ok: true, uri: extra.uri, handle: extra.handle })); }
+      else reply(resultMessage(msg.id, { ok: false, error: state === 'declined' ? 'declined' : 'failed' }));
+    } });
+  }
+
   // Messages from ordinary tiles (tiles-protocol-up-…): logged on their tab's panel. Raku doesn't answer
   // other protocols yet; the panel just shows what was asked. (A renderer's are answered: fromRenderer; a tile with
   // ways has its way messages answered: fromWayTile.)
@@ -1495,6 +1546,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       if (!pane.frame || pane.frame.contentWindow !== e.source) continue;
       if (pane.renderer) { fromRenderer(pane, d); return; }
       if (pane.ways && d.action === WAY_UP) { fromWayTile(pane, id, d); return; }
+      // A game saving a record (CJ2-5): answered, whichever tile asks (only its own game's tile is allowed).
+      const saving = readSaveMessage(d);
+      if (saving && pane.frame) { fromGameSave(pane, saving); return; }
       // A game asking for a character (sprite games, SG7): any tile that says the hello.
       const game = readSpriteGameMessage(d);
       if (game && pane.frame) { fromSpriteGame(pane, game); return; }

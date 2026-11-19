@@ -237,5 +237,5 @@ test('what a hello and the button lead to (SG2 to SG4)', () => {
 });
 
 test('the sign-in promise says only what Raku does, the character included (SG5)', () => {
-  assert.equal(SIGNIN_PROMISE, 'Signing in lets Raku save your match results, show you in rooms and game lounges, bring your rpg.actor character into games, post tiles from your accounts, and heart tile posts.');
+  assert.equal(SIGNIN_PROMISE, 'Signing in lets Raku save your match results and game runs, show you in rooms and game lounges, bring your rpg.actor character into games, post tiles from your accounts, and heart tile posts.');
 });

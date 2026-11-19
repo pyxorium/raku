@@ -4,21 +4,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runPublish, readLexicons, ACCOUNT, SCHEMA, PUBLISHED_FILE } from '../scripts/publish-lexicons.mjs';
-import { TABLES, ROOMS, rakuSet } from '../src/config.js';
+import { TABLES, ROOMS, GAME_SAVES, rakuSet } from '../src/config.js';
 import { POST_COLLECTION } from '../src/tile-posts.js';
 import { HEART_COLLECTION } from '../src/hearts.js';
 
 const PDS = 'https://fibercap.us-west.host.bsky.network';
 const ID = 'cafe.thunderbird.authRaku';
 
-test('the set: "Raku", the wording agreed (WP6; hearts added HT15), only repo and rpc, no wildcards', () => {
+test('the set: "Raku", the wording agreed (WP6; hearts added HT15; game runs, Nov 19 2026), only repo and rpc, no wildcards', () => {
   const [l, ...more] = readLexicons();
   assert.equal(more.length, 0);
   assert.equal(l.id, ID);
   const m = l.defs.main;
   assert.equal(m.type, 'permission-set');
   assert.equal(m.title, 'Raku');
-  assert.equal(m.detail, 'Lets Raku save your match results, show you in rooms and game lounges, post tiles from your account, and heart tile posts. Nothing else in your account is changed.');
+  assert.equal(m.detail, 'Lets Raku save your match results and game runs, show you in rooms and game lounges, post tiles from your account, and heart tile posts.');
   assert.deepEqual(m.permissions.map((p) => p.resource).sort(), ['repo', 'rpc']);
   for (const p of m.permissions) {
     assert.equal(p.type, 'permission');
@@ -34,7 +34,8 @@ test("the set covers exactly what Raku writes and asks passes for (config.js), a
   const repo = m.permissions.find((p) => p.resource === 'repo');
   const rpc = m.permissions.find((p) => p.resource === 'rpc');
   const lounges = Object.values(TABLES).filter((t) => t.lounge);
-  assert.deepEqual([...repo.collection].sort(), [...Object.values(TABLES).map((t) => t.collection), ...lounges.map((t) => t.lounge.collection), POST_COLLECTION, HEART_COLLECTION].sort());
+  assert.deepEqual([...repo.collection].sort(), [...Object.values(TABLES).map((t) => t.collection), ...lounges.map((t) => t.lounge.collection), POST_COLLECTION, HEART_COLLECTION,
+    ...Object.values(GAME_SAVES).map((g) => g.collection)].sort());
   assert.deepEqual([...rpc.lxm].sort(), [...lounges.map((t) => t.lounge.enter), ROOMS.join].sort());
   // and the same lists config.js reads a grant against
   assert.deepEqual([...repo.collection].sort(), [...rakuSet().repo].sort());

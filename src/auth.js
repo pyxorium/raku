@@ -15,7 +15,7 @@
 //   - "Always" choices per account and game, in this browser (Q37).
 // Uses @atproto/oauth-client-browser 0.5.8 (as the site and the Foundry). createAuth takes the library's
 // exports (loaded when needed), so the browser checks can hand in a stand-in (test/browser/oauth-standin.js).
-import { SIGNIN, fullScope, RAKU_SCOPE, coversTable, coversLounge, coversRooms, coversPosts, coversHearts, coversRaku, TABLES, ROOMS } from './config.js';
+import { SIGNIN, fullScope, RAKU_SCOPE, coversTable, coversLounge, coversRooms, coversPosts, coversHearts, coversRaku, coversGame, TABLES, GAME_SAVES, ROOMS } from './config.js';
 
 export class SignInNeeded extends Error {}
 export class SignInStopped extends Error {}
@@ -51,7 +51,7 @@ const guarded = (f, fallback = null) => { try { return f(); } catch { return fal
  * sign-ins themselves in IndexedDB). DIDs count; handles are for showing.
  *   localStorage raku-accounts  [{ did, handle }]   (newest first, at most 10)
  *   localStorage raku-account   the current account's DID
- *   localStorage raku-always    { "<did> <table id>": true }  ("Always" for that game, Q37)
+ *   localStorage raku-always    { "<did> <table or game id>": true }  ("Always" for that game, Q37; game saves, CJ2-10)
  */
 export function createAccounts(storage) {
   const read = (key, fallback) => guarded(() => JSON.parse(storage.getItem(key)) ?? fallback, fallback);
@@ -87,11 +87,11 @@ export function createAccounts(storage) {
       if (on) a[`${did} ${tableId}`] = true; else delete a[`${did} ${tableId}`];
       return write(SIGNIN.alwaysKey, a);
     },
-    /** [{ did, tableId }] for the accounts still signed in here, games still on Raku's list. */
+    /** [{ did, tableId }] for the accounts still signed in here, tables and games (GAME_SAVES) still on Raku's list. */
     alwaysList() {
       const dids = new Set(list().map((a) => a.did));
       return Object.keys(always()).map((k) => { const [did, tableId] = k.split(' '); return { did, tableId }; })
-        .filter((e) => dids.has(e.did) && TABLES[e.tableId]);
+        .filter((e) => dids.has(e.did) && (TABLES[e.tableId] || GAME_SAVES[e.tableId]));
     },
   };
 }
@@ -220,6 +220,8 @@ export function createAuth(getLib, { storage, loc = globalThis.location, win = g
     /** Does this account's sign-in cover writing tile posts (claude/raku-write-posts-plan.md)? (Known without waiting.) */
     coversPosts(did) { return coversPosts(scopes.get(did)); },
     coversHearts(did) { return coversHearts(scopes.get(did)); },
+    /** Does this account's sign-in cover saving this game's records (GAME_SAVES, CJ2-10)? (Known without waiting.) */
+    coversGame(did, gameId) { return coversGame(scopes.get(did), GAME_SAVES[gameId]); },
     /** Does this account's sign-in cover everything Raku does (the whole "Raku" set)? */
     coversAll(did) { return coversRaku(scopes.get(did)); },
 

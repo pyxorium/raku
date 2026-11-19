@@ -188,7 +188,7 @@ try:
               page.inner_text('.account-menu') if page.is_visible('.account-menu') else 'closed')
         check('...with the sign-in form in front (the handle box has the focus)', page.evaluate("() => document.activeElement?.classList.contains('signin-handle')"))
         check('...the game\u2019s "Search for your handle" line is gone at once ("cancelled")', wait_for(lambda: 'Search for your handle' not in (cj_status(page) or ''), 3), str(cj_status(page)))
-        check('...the promise is the new one (SG5)', page.inner_text('.account-menu .rk-promise') == 'Signing in lets Raku save your match results, show you in rooms and game lounges, bring your rpg.actor character into games, post tiles from your accounts, and heart tile posts.')
+        check('...the promise is the new one (SG5)', page.inner_text('.account-menu .rk-promise') == 'Signing in lets Raku save your match results and game runs, show you in rooms and game lounges, bring your rpg.actor character into games, post tiles from your accounts, and heart tile posts.')
         page.screenshot(path=str(OUT / 'sprite-signed-out-menu.png'))
         page.keyboard.press('Escape')
         check('closing the menu: the line goes with it', wait_for(lambda: not page.is_visible('.account-menu'), 3))

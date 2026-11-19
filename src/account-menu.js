@@ -7,7 +7,7 @@
 // the Look row and the Light style row (claude/raku-light-mode-plan.md, LM7, LM14, LM18). Sprite games
 // (claude/raku-sprite-games-plan.md, SG2 to SG4): the current account's "Show my character in games" switch, and
 // openFor(reason), the menu opened by a game's "Load my sprite" button with a line saying why.
-import { SIGNIN_PROMISE, TABLES, LIGHT_STYLES } from './config.js';
+import { SIGNIN_PROMISE, LIGHT_STYLES, savesName } from './config.js';
 import { h } from './cards.js';
 import { icon } from './icons.js';
 import { signInForm, avatarEl } from './signin-ui.js';
@@ -144,8 +144,8 @@ export function createAccountMenu({ auth, moderation, keepForReturn, say, onAbou
     if (always.length) {
       parts.push(h('h3', {}, 'Saves without asking'), h('ul', { class: 'acct-always' }, ...always.map((e) => {
         const a = auth.accounts.get(e.did);
-        return h('li', {}, h('span', {}, `${TABLES[e.tableId].name} · @${a?.handle || e.did}`),
-          h('button', { type: 'button', class: 'linkish', onclick: () => { auth.accounts.setAlways(e.did, e.tableId, false); draw(); say(`${TABLES[e.tableId].name} asks again before saving.`); } }, 'Turn off'));
+        return h('li', {}, h('span', {}, `${savesName(e.tableId)} · @${a?.handle || e.did}`),
+          h('button', { type: 'button', class: 'linkish', onclick: () => { auth.accounts.setAlways(e.did, e.tableId, false); draw(); say(`${savesName(e.tableId)} asks again before saving.`); } }, 'Turn off'));
       })));
     }
     const cur = auth.current();

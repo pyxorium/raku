@@ -868,6 +868,43 @@ signed-in account's rpg.actor character, with no handle to type. Proved with Cos
   (`SPRITE_GAMES`, `SIGNIN_PROMISE`), `src/about-page.js`. Unit tests: `test/sprite-games.test.mjs`. Browser:
   `test/browser/check_sprite_games.py` (below).
 
+## Game saves (Nov 2026): saving a Cosmic Junkyard run to your account
+
+Decided in `claude/cosmic-junkyard-v2-plan.md` (CJ2-1 to CJ2-14) with Cosmic Junkyard version 2 (its repo,
+https://github.com/pyxorium/cosmic-junkyard-tile, has the game, the lexicon `cafe.thunderbird.cosmicjunkyard.run`,
+the replay script and a README for game developers). A game tile asks Raku to save a record of its own kind; Raku decides.
+
+- **The messages** (tp-data, the same envelopes as sprite games'): Raku answers a game's hello with `{ kind: "can-save",
+  collections }` only when that tile may save; the game's "Save this run" sends `{ kind: "write-record", id, action:
+  "create", collection, record }` (shaped like sōm's `writeRecord`, CJ2-5); Raku answers `{ kind: "write-record-status",
+  id, state: "asking" | "saving" }` and `{ kind: "write-record-result", id, ok, uri, handle }` or `{ …, ok: false, error }`
+  (`declined`, `not-allowed`, `invalid`, `failed`); its "See it" sends `{ kind: "open-record", uri }`. The four sprite
+  messages are unchanged (CJ2-14). Answered, not logged on the Messages panel.
+- **Only the game's own tile, only its own collection** (CJ2-9): `GAME_SAVES` in `src/config.js` names each game's
+  address (any version of it) and collection. A copy of the game elsewhere isn't told it can save and is refused
+  (`not-allowed`). **Raku takes only the game's own fields** (score, day, playedAt, tally, moves), fills in `game` (the
+  tile's address and the version actually running) and `createdAt`, and checks the record exactly
+  (`src/games/cosmicjunkyard-run.js`, a copy of the game repo's `scripts/run-record.mjs`); anything else is `invalid`,
+  before asking. At most 20 saves per tile load, one at a time.
+- **Asking** (CJ2-10), as the tables do: Raku's own prompt, outside the tile, with what will be saved; signed out, it signs
+  you in first; Allow once / Always (per account and game, in this browser; listed in the account menu's "Saves without
+  asking") / No; "Use another account". A sign-in from before game runs joined "Raku" approves it again in the small
+  window first. Every save says "Saved to @x" with a link to the record; with Always, a note says it saved without asking.
+- **"See it"** (CJ2-11) opens only an address Raku wrote for that tile in that load, in the link message with its usual
+  "Open in" choices (PDSls, Taproot).
+- **The permission set** `cafe.thunderbird.authRaku` gains `cafe.thunderbird.cosmicjunkyard.run`, and its detail now reads
+  "Lets Raku save your match results and game runs, show you in rooms and game lounges, post tiles from your account, and
+  heart tile posts." The promise: "Signing in lets Raku save your match results and game runs, show you in rooms and game
+  lounges, bring your rpg.actor character into games, post tiles from your accounts, and heart tile posts." Earlier
+  sign-ins keep working for everything else; only saving a run asks to approve "Raku" again. Each new game that saves
+  means another collection here and another approval.
+- **Not here:** Play here (tile posts), rooms and lounges don't answer games' saves; a "Your runs" list; checking runs.
+- Files: `src/game-saves.js` (no DOM: the messages, which tile may save, the record decided, "See it", the allowance),
+  `src/game-save-ui.js` (the prompt), `src/games/cosmicjunkyard-run.js` (the copy), `src/app.js` (`fromGameSave`, the
+  hello's `can-save`), `src/config.js` (`GAME_SAVES`, `GAME_SAVE_LIMITS`, `coversGame`, `savesName`), `src/auth.js`
+  (`coversGame`, Always for games), `src/account-menu.js`, `src/about-page.js` (`SAVES_LINE`). Unit tests:
+  `test/game-saves.test.mjs`. Browser: `test/browser/check_game_saves.py` (below).
+
 ## Try it
 
 ```
@@ -925,6 +962,7 @@ and open http://127.0.0.1:5181/.
 | `src/renderers.js` | renderer tiles: what a renderer is handed, what it may ask for (tp-data) |
 | `src/ways.js` | ways: reading a tile's `/ways.json`, signposts, places and doors; the way messages; test signposts |
 | `src/sprite-games.js` | sprite games: a game's messages, the character from rpg.actor's Compendium or the account's own record, the switch |
+| `src/game-saves.js`, `src/game-save-ui.js`, `src/games/` | game saves: which tile may save what, the record checked and filled in, Raku's prompt; each game's record check (a copy from the game's repo) |
 | `src/about-page.js` | the About page: what Raku keeps, who it talks to, how tiles are kept in their box, installing Raku |
 | `src/app-shell.js` | stage 9: installed or not, the service worker's registration, the update rule, the install offer, the tabs in the title bar |
 | `src/room-tab.js`, `src/room-words.js` | rooms step 1: the room tab hosting rooms-lab's room (the join screen, invites, one room at a time, the rejoin after a reload); the words and links, tested in Node |
@@ -970,6 +1008,15 @@ stand-in loader, `servers.mjs`, everything outside a Playwright route; the sign-
 hearts out of the grant): the row's place, counts (distinct, hidden accounts left out), giving and taking back, the
 record, quick taps, a failed save, Refresh, the Share menu leftward, switching accounts, a post's page, signed out,
 an older sign-in (approved again, or not), the light look, the phone.
+
+`check_game_saves.py` (42 checks, Nov 2026: game saves) runs as `check_sprite_games.py` does (the real tile loader, the
+loader replica with the loading server's `hosts.js` and `public\`, `servers.mjs` and the bundle made by the check
+itself), with Cosmic Junkyard version 2's repo folder as its third argument (its `tile\` and `scripts\check-run.mjs`):
+four real runs at once (about 45 seconds), then signed out (sign in, then ask; No; Allow once with moves, the record's
+game and its replay; "Saved ✓" and See it), a sign-in from before game runs (approved again in the small window), Always
+and the next run saved without asking (the menu's "Saves without asking", Turn off), a copy of the game at another
+address (no can-save, not-allowed), a made-up record (invalid). The sign-in stand-in's `standin-nogames` leaves game
+runs out of the grant.
 
 `check_prepare.py` (39 checks, Nov 2026: preparing a tile while its card shows) runs as `check_post_links.py` does (a
 bundle with a stand-in loader that asks Raku for a tile's page and then its other files, as the real worker would;

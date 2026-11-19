@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseTarget } from '../src/address.js';
-import { TALKS_TO, EXCEPTION, MESSAGES_LINE, NO_ACCOUNT_LINE } from '../src/about-page.js';
+import { TALKS_TO, EXCEPTION, MESSAGES_LINE, NO_ACCOUNT_LINE, SAVES_LINE } from '../src/about-page.js';
 import { TYPEAHEAD_URL } from '../src/typeahead.js';
 import { SIGNIN_PROMISE, PLC_DIRECTORY, HIDE_LIST_URL, SEARCH, RECENT, TILE_LOAD_DOMAIN, TABLES, ROOMS, MADE_BY, SOURCE_CODE, BLOG_POST, TILE_POPUPS } from '../src/config.js';
 
@@ -44,4 +44,10 @@ test("\"You don't need an account\" repeats the sign-in promise word for word (W
   assert.ok(NO_ACCOUNT_LINE.endsWith(SIGNIN_PROMISE));
   assert.match(NO_ACCOUNT_LINE, /^Browsing, searching, joining a room with a typed name, and playing the tables against the bot need no sign-in\. /);
   assert.match(NO_ACCOUNT_LINE, /bring your rpg\.actor character into games, post tiles from your accounts, and heart tile posts\.$/);
+});
+
+test('the About page says what a game may ask Raku to save (game saves, Nov 19 2026)', () => {
+  assert.match(SAVES_LINE, /Cosmic Junkyard: a run/);
+  assert.match(SAVES_LINE, /asks first, unless you chose “Always”/);
+  assert.match(SAVES_LINE, /never gets your sign-in/);
 });

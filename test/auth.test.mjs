@@ -1,20 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createAccounts, createAuth, clientIdFor, isSignInReturn, cleanHandle, SignInNeeded } from '../src/auth.js';
-import { SIGNIN, fullScope, RAKU_SCOPE, coversTable, coversLounge, coversRooms, coversPosts, coversRaku, readGrant, rakuSet, TABLES, ROOMS } from '../src/config.js';
+import { SIGNIN, fullScope, RAKU_SCOPE, coversTable, coversLounge, coversRooms, coversPosts, coversHearts, coversGame, coversRaku, readGrant, rakuSet, TABLES, ROOMS, GAME_SAVES } from '../src/config.js';
 
 const memStore = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k), m }; };
 const A = 'did:plc:aaaaaaaaaaaaaaaaaaaaaaaa', B = 'did:plc:bbbbbbbbbbbbbbbbbbbbbbbb';
 
 // The grant Bluesky handed back in the probe (claude/raku-write-posts-plan.md, "Build", Nov 8 2026), on two servers.
-// The grant Bluesky handed back in the Nov 8 probe, with hearts' collection added as the set has it since Nov 11 (HT2).
-const PROBE = 'repo?collection=cafe.thunderbird.daisy.lounge&collection=cafe.thunderbird.daisy.match&collection=cafe.thunderbird.sevenup.match&collection=cafe.thunderbird.tile.post&collection=cafe.thunderbird.tile.like rpc?lxm=cafe.thunderbird.daisy.lounge.enter&lxm=cafe.thunderbird.rooms.join&aud=* atproto';
+// The grant Bluesky handed back in the Nov 8 probe, with hearts' collection added as the set has it since Nov 11 (HT2), and
+// Cosmic Junkyard's runs since Nov 19 (claude/cosmic-junkyard-v2-plan.md).
+const PROBE = 'repo?collection=cafe.thunderbird.daisy.lounge&collection=cafe.thunderbird.daisy.match&collection=cafe.thunderbird.sevenup.match&collection=cafe.thunderbird.tile.post&collection=cafe.thunderbird.tile.like&collection=cafe.thunderbird.cosmicjunkyard.run rpc?lxm=cafe.thunderbird.daisy.lounge.enter&lxm=cafe.thunderbird.rooms.join&aud=* atproto';
 
 test('the permission (WP3): one set, "Raku", for every sign-in', () => {
   assert.equal(fullScope(), 'atproto include:cafe.thunderbird.authRaku');
   assert.equal(RAKU_SCOPE, fullScope());
   assert.deepEqual(rakuSet(), {
-    repo: ['cafe.thunderbird.sevenup.match', 'cafe.thunderbird.daisy.match', 'cafe.thunderbird.daisy.lounge', 'cafe.thunderbird.tile.post', 'cafe.thunderbird.tile.like'],
+    repo: ['cafe.thunderbird.sevenup.match', 'cafe.thunderbird.daisy.match', 'cafe.thunderbird.daisy.lounge', 'cafe.thunderbird.tile.post', 'cafe.thunderbird.tile.like', 'cafe.thunderbird.cosmicjunkyard.run'],
     rpc: ['cafe.thunderbird.daisy.lounge.enter', 'cafe.thunderbird.rooms.join'],
   });
 });
@@ -23,12 +24,15 @@ test("reading a grant: every form a server writes, the probe's grouped form too"
   assert.ok(coversRaku(PROBE));
   assert.ok(coversTable(PROBE, TABLES.sevenup) && coversTable(PROBE, TABLES.daisy) && coversLounge(PROBE, TABLES.daisy) && coversRooms(PROBE) && coversPosts(PROBE));
   assert.ok(coversRaku(RAKU_SCOPE), 'the set by name, before a server expands it');
-  assert.ok(coversRaku('atproto repo:cafe.thunderbird.sevenup.match repo:cafe.thunderbird.daisy.match repo:cafe.thunderbird.daisy.lounge?action=create&action=delete repo:cafe.thunderbird.tile.post repo:cafe.thunderbird.tile.like rpc:cafe.thunderbird.daisy.lounge.enter?aud=did:web:relay.daisy.thunderbird.cafe%23daisy_relay rpc:cafe.thunderbird.rooms.join?aud=*'), 'the colon forms');
+  assert.ok(coversRaku('atproto repo:cafe.thunderbird.sevenup.match repo:cafe.thunderbird.daisy.match repo:cafe.thunderbird.daisy.lounge?action=create&action=delete repo:cafe.thunderbird.tile.post repo:cafe.thunderbird.tile.like repo:cafe.thunderbird.cosmicjunkyard.run rpc:cafe.thunderbird.daisy.lounge.enter?aud=did:web:relay.daisy.thunderbird.cafe%23daisy_relay rpc:cafe.thunderbird.rooms.join?aud=*'), 'the colon forms');
   assert.ok(coversRaku('atproto repo:* rpc:*?aud=*'), 'wildcards');
   assert.ok(coversRaku('atproto transition:generic'), 'an old-style wide grant');
   assert.ok(!coversRaku('atproto include:cafe.thunderbird.daisy.authPlay'), 'a sign-in from before WP5');
   assert.ok(!coversRaku(PROBE.replace('&collection=cafe.thunderbird.tile.post', '')), 'no tile posts');
   assert.ok(!coversRaku(PROBE.replace('&collection=cafe.thunderbird.tile.like', '')), 'a sign-in from before hearts (HT14)');
+  assert.ok(!coversRaku(PROBE.replace('&collection=cafe.thunderbird.cosmicjunkyard.run', '')), 'a sign-in from before game runs');
+  assert.ok(!coversGame(PROBE.replace('&collection=cafe.thunderbird.cosmicjunkyard.run', ''), GAME_SAVES.cosmicjunkyard) && coversGame(PROBE, GAME_SAVES.cosmicjunkyard));
+  assert.ok(coversPosts(PROBE.replace('&collection=cafe.thunderbird.cosmicjunkyard.run', '')) && coversHearts(PROBE.replace('&collection=cafe.thunderbird.cosmicjunkyard.run', '')), 'posts and hearts still work for a sign-in from before game runs');
   assert.ok(!coversPosts(PROBE.replace('&collection=cafe.thunderbird.tile.post', '')));
   assert.ok(!coversRaku(PROBE.replace('&lxm=cafe.thunderbird.rooms.join', '')), 'no rooms pass');
   assert.ok(!coversRaku(''), 'nothing');

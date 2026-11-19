@@ -34,6 +34,8 @@ export const TALKS_TO = Object.freeze([
 export const MESSAGES_LINE = 'A tile can only talk to Raku. If it sends anything, a Messages button appears on its tab and shows what it sent. At a table, the Messages button in the table’s bar shows everything passing between its tiles.';
 
 /** Sprite games (claude/raku-sprite-games-plan.md, SG4, SG8): what a game that asks is handed. */
+// Game saves (claude/cosmic-junkyard-v2-plan.md, CJ2-10): what a game may ask Raku to write.
+export const SAVES_LINE = 'A game can ask Raku to save a record of its own kind to your account (Cosmic Junkyard: a run). Raku shows what it will save and asks first, unless you chose “Always” for that game; the game never gets your sign-in.';
 export const GAMES_LINE = 'A game that asks gets your rpg.actor character and handle while you’re signed in, unless you turn off “Show my character in games” in the account menu.';
 
 /** Play here (Nov 2026): when a tile runs on Discover. */
@@ -76,7 +78,7 @@ export function drawAbout(ctx) {
         h('li', {}, 'A seat at a Daisy table you’ve joined, for a day.'),
         h('li', {}, h('b', {}, 'A room you’re in'), ', for that tab only, so a reload brings you back in (for the host, also the host key).'),
         h('li', {}, h('b', {}, 'The name you typed'), ' for rooms, for next time.'),
-        h('li', {}, 'Which of your accounts have “Show my character in games” turned off.'),
+        h('li', {}, 'Which of your accounts have “Show my character in games” turned off, and the games you chose “Always” for.'),
         h('li', {}, 'If you install Raku: its “Raku needs the internet” screen, for when there’s no connection.'))),
     sect('Who Raku talks to, and why',
       h('dl', { class: 'ab-who' }, ...TALKS_TO.flatMap(([who, what]) => [h('dt', {}, who), h('dd', {}, what)]))),
@@ -86,6 +88,7 @@ export function drawAbout(ctx) {
         h('li', {}, 'A tile can’t reach the internet on its own: no fetching, no pictures from elsewhere, no tracking pixels. What it shows comes from its author’s account.'),
         h('li', {}, MESSAGES_LINE),
         h('li', {}, GAMES_LINE),
+        h('li', {}, SAVES_LINE),
         h('li', {}, 'Large tiles ask before they load.'),
         h('li', {}, PLAY_LINE),
         h('li', {}, 'Raku asks for your microphone only when you unmute in a room, and for your screen only when you choose to share it.')),

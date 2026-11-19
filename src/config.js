@@ -1,4 +1,5 @@
 // Raku: every setting in one place.
+import { RUN_COLLECTION as COSMIC_JUNKYARD_RUN, hostRecord as cosmicJunkyardRun } from './games/cosmicjunkyard-run.js';
 //
 // Raku's own address lives here and only here (SITE.origin): public/CNAME, the
 // sign-in description (oauth.json, written from oauthMetadata() below by vite.config.js on build) and
@@ -223,10 +224,10 @@ export const SIGNIN = Object.freeze({
 });
 // Shown beside sign-in, in the account menu and on the About page (Q43; since WP11, Nov 2026: one sign-in, tile posts;
 // since HT15, Nov 2026: hearts; since SG5, Nov 17 2026: your rpg.actor character in games, and only what Raku does:
-// claude/raku-sprite-games-plan.md).
-export const SIGNIN_PROMISE = 'Signing in lets Raku save your match results, show you in rooms and game lounges, bring your rpg.actor character into games, post tiles from your accounts, and heart tile posts.';
+// claude/raku-sprite-games-plan.md; since Nov 19 2026: game runs, claude/cosmic-junkyard-v2-plan.md).
+export const SIGNIN_PROMISE = 'Signing in lets Raku save your match results and game runs, show you in rooms and game lounges, bring your rpg.actor character into games, post tiles from your accounts, and heart tile posts.';
 // The line under a sign-in form naming the one permission (post box, hearts, tables; HT15).
-export const PERMISSION_LINE = 'saving your match results, showing you in rooms and game lounges, posting tiles from your account, and hearting tile posts';
+export const PERMISSION_LINE = 'saving your match results and game runs, showing you in rooms and game lounges, posting tiles from your account, and hearting tile posts';
 export const recordLink = (uri) => `https://pdsls.dev/${uri}`;
 
 /** Everything Raku asks for, at every sign-in (client-metadata.json's scope too): the one set, "Raku". */
@@ -236,7 +237,8 @@ export const fullScope = () => RAKU_SCOPE;
 export function rakuSet() {
   const lounges = Object.values(TABLES).filter((t) => t.lounge).map((t) => t.lounge);
   return {
-    repo: [...Object.values(TABLES).map((t) => t.collection), ...lounges.map((L) => L.collection), TILE_POSTS.collection, HEARTS.collection],
+    repo: [...Object.values(TABLES).map((t) => t.collection), ...lounges.map((L) => L.collection), TILE_POSTS.collection, HEARTS.collection,
+      ...Object.values(GAME_SAVES).map((g) => g.collection)],
     rpc: [...lounges.map((L) => L.enter), ROOMS.join],
   };
 }
@@ -287,6 +289,8 @@ export function coversLounge(scope, table) {
 }
 /** Does a sign-in's permissions cover writing tile posts? */
 export function coversPosts(scope) { return has(readGrant(scope), 'repo', TILE_POSTS.collection); }
+/** Does a sign-in's permissions cover saving this game's records (CJ2-10)? A sign-in from before the game joined doesn't. */
+export function coversGame(scope, game) { return !!game && has(readGrant(scope), 'repo', game.collection); }
 /** Does a sign-in's permissions cover hearts (HT14)? A sign-in from before hearts doesn't: "Sign in again to heart". */
 export function coversHearts(scope) { return has(readGrant(scope), 'repo', HEARTS.collection); }
 /** Does a sign-in's permissions cover everything in "Raku"? (A sign-in from before WP5 doesn't, nor a refused one.) */
@@ -591,6 +595,25 @@ export const SPRITE_GAMES = Object.freeze({
   maxSide: 4096, answersMax: 6,
   switchKey: 'raku-character-off',
 });
+// Game saves (claude/cosmic-junkyard-v2-plan.md, CJ2-5 to CJ2-11): a game tile may ask Raku to save a record of its own
+// kind to the signed-in account (game-saves.js). Each game: its own collection and lexicon (CJ2-6), published by the game
+// (here pyxorium/cosmic-junkyard-tile), and only the tile at its own address may save into it, any version (CJ2-9);
+// recordFrom makes the record from what the game sends (a copy of the game's own check), filling in the game's address
+// and the version running. Its collection is part of the "Raku" set (rakuSet below), so each new game means republishing
+// cafe.thunderbird.authRaku and signed-in people approving once more. The id names the game in "Always" (per account and
+// game, as the tables', CJ2-10). perLoad: saves a tile may ask for per load (one at a time); idChars: the longest id a
+// write-record may carry; openGapMs: "See it" requests closer together than this are ignored.
+export const GAME_SAVES = Object.freeze({
+  cosmicjunkyard: Object.freeze({
+    id: 'cosmicjunkyard', name: 'Cosmic Junkyard', what: 'run', collection: COSMIC_JUNKYARD_RUN,
+    tile: Object.freeze({ did: 'did:plc:6vxjigxrqizmbo56gojxico3', rkey: '3mwvoqidyqd24' }),
+    recordFrom: cosmicJunkyardRun,
+    repo: 'https://github.com/pyxorium/cosmic-junkyard-tile',
+  }),
+});
+export const GAME_SAVE_LIMITS = Object.freeze({ perLoad: 20, idChars: 64, openGapMs: 1000 });
+/** A table's or a game's name, by its id (the account menu's "Saves without asking"). */
+export const savesName = (id) => (TABLES[id] || GAME_SAVES[id])?.name || id;
 // Ways (claude/raku-ways-plan.md, RW1 to RW8): Raku carries travellers between tiles with ways, as the travel pages do
 // (maze-tiles site/travel.js). After a place says hello and Raku sends its arrival, the screen between places stays
 // revealMs (the tile plays its own arrival under it), then fades over fadeMs; a destination without ways shows plainMs

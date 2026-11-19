@@ -26,15 +26,18 @@ const SETS = {
   'include:cafe.thunderbird.rooms.authJoin?aud=did:web:relay.rooms.thunderbird.cafe%23rooms_relay': 'rpc:cafe.thunderbird.rooms.join?aud=did:web:relay.rooms.thunderbird.cafe%23rooms_relay',
 };
 // "Raku" (claude/raku-write-posts-plan.md, WP3): expanded in the grouped form Bluesky handed back in the probe (Nov 8 2026),
-// with hearts' collection since Nov 11 (claude/raku-hearts-plan.md, HT2).
+// with hearts' collection since Nov 11 (claude/raku-hearts-plan.md, HT2), and Cosmic Junkyard's runs since Nov 19
+// (claude/cosmic-junkyard-v2-plan.md).
 // localStorage standin-partial: the server leaves tile posts out (a refused or older grant, for the "approve again" path);
-// standin-nohearts: it leaves hearts out (a sign-in from before hearts, or "Raku" refused again, HT14).
-SETS['include:cafe.thunderbird.authRaku'] = 'repo?collection=cafe.thunderbird.daisy.lounge&collection=cafe.thunderbird.daisy.match&collection=cafe.thunderbird.sevenup.match&collection=cafe.thunderbird.tile.post&collection=cafe.thunderbird.tile.like rpc?lxm=cafe.thunderbird.daisy.lounge.enter&lxm=cafe.thunderbird.rooms.join&aud=*';
+// standin-nohearts: it leaves hearts out (a sign-in from before hearts, or "Raku" refused again, HT14); standin-nogames: it
+// leaves the game runs out ("Raku" refused again, after game runs joined).
+SETS['include:cafe.thunderbird.authRaku'] = 'repo?collection=cafe.thunderbird.daisy.lounge&collection=cafe.thunderbird.daisy.match&collection=cafe.thunderbird.sevenup.match&collection=cafe.thunderbird.tile.post&collection=cafe.thunderbird.tile.like&collection=cafe.thunderbird.cosmicjunkyard.run rpc?lxm=cafe.thunderbird.daisy.lounge.enter&lxm=cafe.thunderbird.rooms.join&aud=*';
 const expandOne = (s) => {
   if (s !== 'include:cafe.thunderbird.authRaku') return SETS[s] || s;
   let g = SETS[s];
   if (localStorage.getItem('standin-partial')) g = g.replace('&collection=cafe.thunderbird.tile.post', '');
   if (localStorage.getItem('standin-nohearts')) g = g.replace('&collection=cafe.thunderbird.tile.like', '');
+  if (localStorage.getItem('standin-nogames')) g = g.replace('&collection=cafe.thunderbird.cosmicjunkyard.run', '');
   return g;
 };
 const expand = (scope) => String(scope || '').split(' ').filter(Boolean).map(expandOne).join(' ');

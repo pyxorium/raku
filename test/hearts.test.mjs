@@ -54,7 +54,7 @@ test('the permission set includes hearts; old sign-ins do not cover them (HT14)'
   assert.ok(rakuSet().repo.includes('cafe.thunderbird.tile.like'));
   const old = 'atproto repo?collection=cafe.thunderbird.daisy.lounge&collection=cafe.thunderbird.daisy.match&collection=cafe.thunderbird.sevenup.match&collection=cafe.thunderbird.tile.post rpc?lxm=cafe.thunderbird.daisy.lounge.enter&lxm=cafe.thunderbird.rooms.join&aud=*';
   assert.ok(coversPosts(old) && !coversHearts(old));
-  const now = old.replace('&collection=cafe.thunderbird.tile.post', '&collection=cafe.thunderbird.tile.post&collection=cafe.thunderbird.tile.like');
+  const now = old.replace('&collection=cafe.thunderbird.tile.post', '&collection=cafe.thunderbird.tile.post&collection=cafe.thunderbird.tile.like&collection=cafe.thunderbird.cosmicjunkyard.run');
   assert.ok(coversHearts(now) && coversRaku(now));
   assert.ok(coversHearts('atproto repo:cafe.thunderbird.tile.like'));
   assert.ok(!coversHearts('atproto repo:cafe.thunderbird.tile.likes'));
