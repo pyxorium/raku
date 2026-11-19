@@ -1652,6 +1652,9 @@ button.way-door:hover, button.way-door:focus-visible { border-color: var(--glaze
 .wp-row-when { color: var(--muted); font-size: 12.5px; }
 .rk-dialog .wp-more-accounts { margin-top: 14px; }
 .stage > .rk-dialog { z-index: 40; }
+/* A game in a tile post saving a run (claude/raku-play-here-games-plan.md, PG2): Raku's prompt over its whole window, the
+   post dimmed behind with the page; over an expanded post too (.pane.tp-x-on is 50, the link message 60). */
+.stage > .rk-dialog.rk-wide { position: fixed; inset: 0; z-index: 70; }
 @media (max-width: 640px) {
   .post-btn { order: 4; width: 36px; height: 36px; padding: 0; justify-content: center; }
   .post-btn .lbl { display: none; }

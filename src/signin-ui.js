@@ -7,11 +7,11 @@ import { cleanHandle, SignInStopped } from './auth.js';
 import { attachTypeahead } from './typeahead.js';
 
 /** A dialog over `host` (a table's area). → { box, body, close() } */
-export function openDialog(host, { label, onClose } = {}) {
+export function openDialog(host, { label, onClose, cls = '' } = {}) {
   const body = h('div', { class: 'rk-dialog-body' });
   const closeBtn = h('button', { type: 'button', class: 'rk-dialog-x', 'aria-label': 'Close', onclick: () => close() }, icon('close', 18));
   const box = h('div', { class: 'rk-dialog-box', role: 'dialog', 'aria-modal': 'true', 'aria-label': label || 'Raku' }, closeBtn, body);
-  const el = h('div', { class: 'rk-dialog', onclick: (e) => { if (e.target === el) close(); } }, box);
+  const el = h('div', { class: cls ? `rk-dialog ${cls}` : 'rk-dialog', onclick: (e) => { if (e.target === el) close(); } }, box);
   const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
   el.addEventListener('keydown', onKey);
   host.append(el);

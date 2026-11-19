@@ -862,7 +862,8 @@ signed-in account's rpg.actor character, with no handle to type. Proved with Cos
   and game lounges, bring your rpg.actor character into games, post tiles from your accounts, and heart tile posts."
   No new permission (sprites and the Compendium are public reads). The About page names rpg.actor among who Raku talks
   to, the switch among what stays in the browser, and what a game is handed.
-- **Not here:** tiles playing in a tile post (Play here), rooms, lounges, emotes, stats, rpg.actor's own message format.
+- **Not here:** rooms, lounges, emotes, stats, rpg.actor's own message format. (Tiles playing in a tile post answer
+  games too since Nov 19: "Games in tile posts" below.)
 - Files: `src/sprite-games.js` (no DOM: the messages, the Compendium, the account's own record, the checks, the switch),
   `src/app.js` (`fromSpriteGame`, `feedGame`), `src/account-menu.js` (the switch, `openFor`), `src/config.js`
   (`SPRITE_GAMES`, `SIGNIN_PROMISE`), `src/about-page.js`. Unit tests: `test/sprite-games.test.mjs`. Browser:
@@ -898,12 +899,41 @@ the replay script and a README for game developers). A game tile asks Raku to sa
   lounges, bring your rpg.actor character into games, post tiles from your accounts, and heart tile posts." Earlier
   sign-ins keep working for everything else; only saving a run asks to approve "Raku" again. Each new game that saves
   means another collection here and another approval.
-- **Not here:** Play here (tile posts), rooms and lounges don't answer games' saves; a "Your runs" list; checking runs.
+- **Not here:** rooms and lounges don't answer games' saves; a "Your runs" list; checking runs. (Tile posts do since
+  Nov 19: "Games in tile posts" below.)
 - Files: `src/game-saves.js` (no DOM: the messages, which tile may save, the record decided, "See it", the allowance),
   `src/game-save-ui.js` (the prompt), `src/games/cosmicjunkyard-run.js` (the copy), `src/app.js` (`fromGameSave`, the
   hello's `can-save`), `src/config.js` (`GAME_SAVES`, `GAME_SAVE_LIMITS`, `coversGame`, `savesName`), `src/auth.js`
   (`coversGame`, Always for games), `src/account-menu.js`, `src/about-page.js` (`SAVES_LINE`). Unit tests:
   `test/game-saves.test.mjs`. Browser: `test/browser/check_game_saves.py` (below).
+
+## Games in tile posts (Nov 2026): the character and saving in Play here
+
+Decided in `claude/raku-play-here-games-plan.md` (PG1 to PG4). A game playing in a tile post on Discover (Play here,
+expanded or not, also Autoplay) is answered as in a tab; the game itself is unchanged.
+
+- **The same answers** (PG1): the tile playing in a post gets the sprite games' messages (the signed-in player's
+  character, "Show my character in games" as in a tab, the button opening the account menu) and the game saves' (for a
+  game at its own address, `can-save` and saving). Answered only from the post's own frame, not logged (a post has no
+  Messages panel); its way messages are answered first, as before. Signing in, switching accounts or turning the switch
+  on feeds the post's game too. Autoplay's tile gets the character at once; saving still needs the player's tap and
+  Raku's prompt.
+- **Which tile, which version:** the place the post is at now (`runningTile` in `src/game-saves.js`): the post's own tile
+  at the version it was posted with (a changed tile can't be shown, so a run names a version that replays), or a place
+  reached by a way, at the version read on arrival. Only Cosmic Junkyard's own address is offered saving, as in tabs.
+  A new frame there (a way, Try again, Reload) or Stop drops the last one's game states: an open prompt closes, nothing
+  saved.
+- **The prompt over Raku's window** (PG2): "Save this run?" is centred over the whole window, the post dimmed behind
+  (also over an expanded post); when it closes, the keys go back to the post (its ring). "See it" uses the link message,
+  already page-wide.
+- **An expanded post's sprite button** goes back to its place first, then opens the account menu (the menu hangs from
+  Raku's bar, which the expanded view covers).
+- **Signing in from a post** (PG3): as in a tab, a blocked sign-in window offers Try again or "Sign in in this tab
+  instead", which says the run won't be kept. **No wording changes** (PG4): the About page's lines never said "in a tab".
+- Files: `src/app.js` (the post's branch in the message listener; `endGame`; the post's prompt host; feeding),
+  `src/game-saves.js` (`runningTile`), `src/game-save-ui.js` (`wide`, `onClosed`), `src/signin-ui.js` (`openDialog`'s
+  `cls`), `src/discover.js` (`shrink`), `src/style.css` (`.rk-dialog.rk-wide`). Unit tests: `test/game-saves.test.mjs`.
+  Browser: `test/browser/check_play_here_games.py` (below).
 
 ## Try it
 
@@ -962,7 +992,7 @@ and open http://127.0.0.1:5181/.
 | `src/renderers.js` | renderer tiles: what a renderer is handed, what it may ask for (tp-data) |
 | `src/ways.js` | ways: reading a tile's `/ways.json`, signposts, places and doors; the way messages; test signposts |
 | `src/sprite-games.js` | sprite games: a game's messages, the character from rpg.actor's Compendium or the account's own record, the switch |
-| `src/game-saves.js`, `src/game-save-ui.js`, `src/games/` | game saves: which tile may save what, the record checked and filled in, Raku's prompt; each game's record check (a copy from the game's repo) |
+| `src/game-saves.js`, `src/game-save-ui.js`, `src/games/` | game saves: which tile may save what, the tile running in a tab or a tile post, the record checked and filled in, Raku's prompt (in a tab, or over the window for a tile post); each game's record check (a copy from the game's repo) |
 | `src/about-page.js` | the About page: what Raku keeps, who it talks to, how tiles are kept in their box, installing Raku |
 | `src/app-shell.js` | stage 9: installed or not, the service worker's registration, the update rule, the install offer, the tabs in the title bar |
 | `src/room-tab.js`, `src/room-words.js` | rooms step 1: the room tab hosting rooms-lab's room (the join screen, invites, one room at a time, the rejoin after a reload); the words and links, tested in Node |
@@ -1017,6 +1047,15 @@ game and its replay; "Saved ✓" and See it), a sign-in from before game runs (a
 and the next run saved without asking (the menu's "Saves without asking", Turn off), a copy of the game at another
 address (no can-save, not-allowed), a made-up record (invalid). The sign-in stand-in's `standin-nogames` leaves game
 runs out of the grant.
+
+`check_play_here_games.py` (40 checks, Nov 2026: games in tile posts) runs as `check_game_saves.py` does (same three
+arguments), with Cosmic Junkyard posted as a tile post on Discover → Tile posts, and a post of a tile whose way leads to
+it: Play here, the character (the account's own record) and can-save, the sprite button and the menu; a real run saved
+with its moves (the prompt over the window, the post dimmed, Allow once, the record's game and its replay, Close giving
+the keys back, See it); the way post (no can-save on its own tile, not-allowed; through the way to Cosmic Junkyard inside
+the post, then can-save; expanded, the sprite button shrinking the post and opening the menu; the prompt over the
+expanded view; No; Stop mid-prompt saving nothing); signed out (the button opens the menu to sign in). Two real runs at
+once (about 45 seconds).
 
 `check_prepare.py` (39 checks, Nov 2026: preparing a tile while its card shows) runs as `check_post_links.py` does (a
 bundle with a stand-in loader that asks Raku for a tile's page and then its other files, as the real worker would;

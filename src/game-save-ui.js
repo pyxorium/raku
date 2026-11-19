@@ -10,6 +10,8 @@
 //   - a blocked sign-in window offers Try again only in effect: signing in in this tab reloads it, and the run would go
 //     with the tile (it lives in the tile until it is saved), so the box says so.
 // tell(state, extra) answers the tile: 'asking', 'saving', then 'saved' ({ uri, handle }) or one of 'declined', 'failed'.
+// host: where the prompt goes (a tab's pane); wide: over Raku's whole window instead (a game in a tile post, PG2:
+// claude/raku-play-here-games-plan.md), the post dimmed behind with the rest of the page; onClosed(): after it closes.
 import { SIGNIN_PROMISE, recordLink } from './config.js';
 import { SignInNeeded } from './auth.js';
 import { h } from './cards.js';
@@ -19,7 +21,7 @@ import { describeRun } from './game-saves.js';
 
 const at = (hd) => `@${hd}`;
 
-export function createGameSaver({ auth, host, say = () => {}, newKey = () => newTid() }) {
+export function createGameSaver({ auth, host, wide = false, onClosed = () => {}, say = () => {}, newKey = () => newTid() }) {
   let dialog = null;
   let job = null;                       // { game, record, tell, done }
 
@@ -29,7 +31,8 @@ export function createGameSaver({ auth, host, say = () => {}, newKey = () => new
 
   function show(build) {
     if (!dialog || dialog.closed) {
-      dialog = openDialog(host, { label: `Save this ${job.game.name} ${job.game.what}`, onClose: () => { const j = job; job = null; if (j && !j.done) { j.done = true; j.tell('declined'); } } });
+      dialog = openDialog(host, { label: `Save this ${job.game.name} ${job.game.what}`, cls: wide ? 'rk-wide' : '',
+        onClose: () => { const j = job; job = null; if (j && !j.done) { j.done = true; j.tell('declined'); } onClosed(); } });
     }
     dialog.body.replaceChildren(...build().filter(Boolean));
     dialog.body.querySelector('button.primary, input:not([readonly])')?.focus();

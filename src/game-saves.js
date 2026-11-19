@@ -39,6 +39,27 @@ export function readSaveMessage(d) {
 /** The games the tile at this address may save for (its own address, any version): [] for every other tile. */
 export const gamesForTile = (did, rkey) => Object.values(GAME_SAVES).filter((g) => g.tile.did === did && g.tile.rkey === rkey);
 
+/**
+ * The tile running in a pane, as saves name it: { did, rkey, cid } (cid: the version running), or null.
+ *   - a tab: what it opened (pane.keep, a tile, with the record's CID it ran);
+ *   - a tile post playing on Discover (Play here, claude/raku-play-here-games-plan.md, PG1): the place it is at now
+ *     (pane.trail.here), the post's own tile or one reached by a way, with the version it plays (a post plays exactly the
+ *     version it was posted with; a place reached by a way, the version read on arrival).
+ */
+export function runningTile(pane) {
+  if (!pane) return null;
+  if (pane.post) {
+    const here = pane.trail && pane.trail.here;
+    if (!here || typeof here.did !== 'string' || typeof here.uri !== 'string') return null;
+    const parts = here.uri.split('/');                        // at://<did or handle>/ing.dasl.masl/<rkey>
+    const cid = here.d && typeof here.d.cid === 'string' ? here.d.cid : null;
+    if (parts.length !== 5 || parts[3] !== TILES || !parts[4] || !cid) return null;
+    return { did: here.did, rkey: parts[4], cid };
+  }
+  const k = pane.keep;
+  return k && k.kind === 'tile' && typeof k.cid === 'string' ? { did: k.did, rkey: k.rkey, cid: k.cid } : null;
+}
+
 export const canSaveMessage = (games) => ({ action: DOWN, payload: { kind: 'can-save', collections: games.map((g) => g.collection) } });
 export function statusMessage(id, state) {
   if (!SAVE_STATES.includes(state)) throw new Error(`not a save status: ${state}`);

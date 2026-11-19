@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  readSaveMessage, gamesForTile, canSaveMessage, statusMessage, resultMessage, decideWrite, decideOpen, createSaveBudget, describeRun,
+  readSaveMessage, gamesForTile, runningTile, canSaveMessage, statusMessage, resultMessage, decideWrite, decideOpen, createSaveBudget, describeRun,
 } from '../src/game-saves.js';
 import { UP, DOWN } from '../src/renderers.js';
 import { GAME_SAVES, GAME_SAVE_LIMITS, rakuSet, savesName } from '../src/config.js';
@@ -44,6 +44,39 @@ test('only the game\'s own tile is offered saving, any version (CJ2-9, CJ2-14)',
   assert.deepEqual(gamesForTile(RUNNING.did, '3mwvoqidyqd25'), []);
   assert.deepEqual(gamesForTile('did:plc:someoneelseaaaaaaaaaaaaa', RUNNING.rkey), []);
   assert.deepEqual(canSaveMessage([CJ]), { action: DOWN, payload: { kind: 'can-save', collections: ['cafe.thunderbird.cosmicjunkyard.run'] } });
+});
+
+test('the tile running: a tab\'s (what it opened) or a tile post\'s place now (Play here, PG1)', () => {
+  const D = RUNNING.did, CID = RUNNING.cid;
+  // a tab: its keep, a tile with the version it ran
+  assert.deepEqual(runningTile({ keep: { kind: 'tile', did: D, rkey: RUNNING.rkey, name: 'x', by: '', cid: CID } }), RUNNING);
+  assert.equal(runningTile({ keep: { kind: 'tile', did: D, rkey: RUNNING.rkey } }), null, 'no version: no saving');
+  assert.equal(runningTile({ keep: { kind: 'table' } }), null);
+  assert.equal(runningTile({ keep: null }), null);
+  assert.equal(runningTile(null), null);
+  // a tile post: the place it is at now (the post's own tile, the version it was posted with)
+  const place = (uri, did, cid) => ({ uri, did, d: { cid, name: 'Cosmic Junkyard' }, name: 'Cosmic Junkyard' });
+  const trail = (...places) => ({ get here() { return places[places.length - 1]; } });
+  const post = (...places) => ({ post: true, keep: undefined, trail: trail(...places) });
+  const own = place(`at://${D}/ing.dasl.masl/${RUNNING.rkey}`, D, CID);
+  assert.deepEqual(runningTile(post(own)), RUNNING);
+  assert.deepEqual(gamesForTile(runningTile(post(own)).did, runningTile(post(own)).rkey), [CJ], 'the game at its own address may save from a post');
+  // ...its address may name the account by handle: the did is the place's own
+  assert.deepEqual(runningTile(post(place(`at://thunderbird.cafe/ing.dasl.masl/${RUNNING.rkey}`, D, CID))), RUNNING);
+  // ...a place reached by a way: that place, with the version read on arrival; elsewhere, no game of its own
+  const away = place(`at://${D}/ing.dasl.masl/3elsewhereaaa`, D, 'bafyreielsewhere');
+  assert.deepEqual(runningTile(post(own, away)), { did: D, rkey: '3elsewhereaaa', cid: 'bafyreielsewhere' });
+  assert.deepEqual(gamesForTile(D, '3elsewhereaaa'), []);
+  // ...and back again: the game's own tile once more
+  assert.deepEqual(runningTile(post(own, away, own)), RUNNING);
+  // nothing usable: no saving
+  assert.equal(runningTile(post(place(`at://${D}/ing.dasl.masl/${RUNNING.rkey}`, D, null))), null, 'no version');
+  assert.equal(runningTile(post(place(`at://${D}/app.bsky.feed.post/${RUNNING.rkey}`, D, CID))), null, 'not a tile');
+  assert.equal(runningTile(post(place(`at://${D}/ing.dasl.masl/`, D, CID))), null);
+  assert.equal(runningTile({ post: true, trail: trail() }), null);
+  assert.equal(runningTile({ post: true }), null);
+  // a post never reads a keep (a post's pane has none; a stray one is ignored)
+  assert.equal(runningTile({ post: true, keep: { kind: 'tile', did: D, rkey: RUNNING.rkey, cid: CID }, trail: trail() }), null);
 });
 
 test('the answers, as the tile reads them', () => {

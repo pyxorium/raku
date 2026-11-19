@@ -61,7 +61,7 @@ import { setLeaveWarning } from './signin-ui.js';
 import { isInstalled } from './app-shell.js';
 import { playVerdict, createOneAtATime, wayPlan, createTrail, tabFor, createAutoplaySetting } from './play-here.js';
 import { createPrefetcher } from './prefetch.js';
-import { readSaveMessage, gamesForTile, canSaveMessage, statusMessage as saveStatusMessage, resultMessage, decideWrite, decideOpen, createSaveBudget } from './game-saves.js';
+import { readSaveMessage, gamesForTile, runningTile, canSaveMessage, statusMessage as saveStatusMessage, resultMessage, decideWrite, decideOpen, createSaveBudget } from './game-saves.js';
 import { createGameSaver } from './game-save-ui.js';
 import { GAME_SAVE_LIMITS } from './config.js';
 import { readSpriteGameMessage, statusMessage as spriteStatusMessage, spriteMessage, createCharacters, createCharacterSwitch, createAnswerBudget, answerHello, answerRequest } from './sprite-games.js';
@@ -807,9 +807,11 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   //   | 'place' (detail: { name, by, travelled, backTo, tab }: the place now, after a trip or Back) | 'note' (detail: words)
   // expand(): the slot expanded to Raku's window (a promise, once it has grown); expanded(): whether it is.
   // quiet (Autoplay, AU3): started by itself, so it takes no keys until it is clicked or tapped (or expanded).
-  function playInPost({ slot, uri, did, pds, d, onState, expand = null, expanded = () => false, quiet = false }) {
+  // shrink(): the expanded view closed at once (a game's button opening the account menu, which sits in Raku's bar).
+  // Games in tile posts (claude/raku-play-here-games-plan.md, PG1 to PG4): spriteGame and gameSave as a tab's, per frame.
+  function playInPost({ slot, uri, did, pds, d, onState, expand = null, expanded = () => false, shrink = null, quiet = false }) {
     const pane = { post: true, el: slot, slot, frame: null, ways: null, attempt: 0, arrival: null, timers: [], observer: null, state: 'loading', failed: null,
-      onState, expand, expanded, quiet, inView: true, big: false, screen: null, tripStarted: null, trip: 0,
+      onState, expand, expanded, shrink, quiet, inView: true, big: false, screen: null, tripStarted: null, trip: 0, spriteGame: null, gameSave: null,
       trail: createTrail({ uri, did, pds, d, name: d.name, by: null }) };
     postSlots.start(slot, () => endPost(pane));
     playing = pane;
@@ -833,6 +835,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     pane.timers = [];
     if (pane.frame) { pane.frame.remove(); pane.frame = null; }
     for (const n of pane.slot.querySelectorAll(':scope > .record-hint')) n.remove();   // (PT5's note belongs to the tile left)
+    endGame(pane);                      // (a way, Try again, Reload: the tile left takes its game states and prompt with it)
     pane.ways = null;
     pane.arrival = arrival;
     pane.state = 'loading';
@@ -894,6 +897,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   }
   function endPost(pane) {
     if (playing === pane) playing = null;
+    endGame(pane);                      // (Stop mid-prompt: the prompt closes, nothing saved)
     pane.timers.forEach(clearTimeout);
     if (pane.observer) pane.observer.disconnect();
     if (pane.frame) { pane.frame.remove(); pane.frame = null; }
@@ -1465,7 +1469,10 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     // and the account menu opens: sign in, turn the switch on, or choose another account.
     sendGameStatus(pane, 'cancelled');
     const a = auth.current();
-    menu.openFor(answerRequest(a, a ? character.isOn(a.did) : false));
+    const why = answerRequest(a, a ? character.isOn(a.did) : false);
+    // A game in an expanded tile post: back to its post first (the menu opens from Raku's bar, under the expanded view).
+    if (pane.post && pane.expanded() && pane.shrink) Promise.resolve(pane.shrink()).then(() => menu.openFor(why), () => menu.openFor(why));
+    else menu.openFor(why);
   }
   // force: answer even when nothing has changed since this game's last answer (its hello).
   async function feedGame(pane, force = false) {
@@ -1487,7 +1494,15 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (!c) { sendGameStatus(pane, 'no-sprite'); return; }
     sendGame(pane, spriteMessage({ image: new Blob([c.bytes], { type: 'image/png' }), ...c.sizes, handle }));
   }
-  const feedAllGames = () => { for (const p of panes.values()) if (p.spriteGame) feedGame(p); };
+  const feedAllGames = () => {
+    for (const p of panes.values()) if (p.spriteGame) feedGame(p);
+    if (playing && playing.spriteGame) feedGame(playing);          // (a game in a tile post, PG1)
+  };
+  // A pane's game states, gone with its tile (a tab's clearPane does the same; a post's frame ends: endPost, runInPost).
+  function endGame(pane) {
+    pane.spriteGame = null;
+    if (pane.gameSave) { const g = pane.gameSave; pane.gameSave = null; g.saver.dispose(); }
+  }
   auth.onChange(feedAllGames);
   character.onChange(feedAllGames);
 
@@ -1497,13 +1512,16 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   // Always, CJ2-10; game-save-ui.js), the answers going back to the tile. Its "See it" (open-record) opens only an address
   // Raku wrote for it in this load, with the usual "Open in" choices (CJ2-11). Answered, not logged, like a game's other
   // messages (the Messages pill would sit on the game's own button).
-  const runningTile = (pane) => (pane.keep && pane.keep.kind === 'tile' && typeof pane.keep.cid === 'string' ? { did: pane.keep.did, rkey: pane.keep.rkey, cid: pane.keep.cid } : null);
   function runningGames(pane) { const t = runningTile(pane); return t ? gamesForTile(t.did, t.rkey) : []; }
   function gameSaveFor(pane) {
     if (!pane.gameSave || pane.gameSave.attempt !== pane.attempt) {
       if (pane.gameSave) pane.gameSave.saver.dispose();
       pane.gameSave = { attempt: pane.attempt, budget: createSaveBudget(), written: new Set(), gate: createOpenGate({ gapMs: GAME_SAVE_LIMITS.openGapMs }),
-        saver: createGameSaver({ auth, host: pane.el, say }) };
+        // A tile post's game (PG2): the prompt over Raku's window, not in the post's small slot; when it closes, the
+        // keys back to the tile (its ring, PH4), unless the post has stopped or moved on meanwhile.
+        saver: pane.post
+          ? createGameSaver({ auth, host: stage, wide: true, say, onClosed: () => { if (playing === pane) focusPost(pane); } })
+          : createGameSaver({ auth, host: pane.el, say }) };
     }
     return pane.gameSave;
   }
@@ -1514,7 +1532,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (msg.kind === 'open') {
       const g = pane.gameSave && pane.gameSave.attempt === mine ? pane.gameSave : null;
       const uri = g && decideOpen(msg, g.written);
-      if (uri && g.gate.take()) linkMessage.show({ record: { uri }, from: `"${pane.title}" asked to open the record Raku just saved for it.` });
+      const title = pane.post ? pane.trail.here.name : pane.title;
+      if (uri && g.gate.take()) linkMessage.show({ record: { uri }, from: `"${title}" asked to open the record Raku just saved for it.` });
       return;
     }
     if (!msg.id) return;
@@ -1540,8 +1559,17 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   addEventListener('message', (e) => {
     const d = e.data;
     if (!d || typeof d.action !== 'string' || !d.action.startsWith('tiles-protocol-up-')) return;
-    // The tile playing in a tile post (Play here): only its way messages are answered.
-    if (playing && playing.frame && playing.frame.contentWindow === e.source) { if (playing.ways && d.action === WAY_UP) fromWayPost(playing, d); return; }
+    // The tile playing in a tile post (Play here): its way messages, and a game's, as a tab's (PG1: the character and,
+    // for a game at its own address, saving); nothing logged (a post has no Messages panel).
+    if (playing && playing.frame && playing.frame.contentWindow === e.source) {
+      const pane = playing;
+      if (pane.ways && d.action === WAY_UP) { fromWayPost(pane, d); return; }
+      const saving = readSaveMessage(d);
+      if (saving) { fromGameSave(pane, saving); return; }
+      const game = readSpriteGameMessage(d);
+      if (game) fromSpriteGame(pane, game);
+      return;
+    }
     for (const [id, pane] of panes) {
       if (!pane.frame || pane.frame.contentWindow !== e.source) continue;
       if (pane.renderer) { fromRenderer(pane, d); return; }

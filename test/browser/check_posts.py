@@ -230,7 +230,7 @@ with sync_playwright() as pw:
     page.goto(POSTS_URL); page.wait_for_selector('.discover')
     check('raku:discover/posts opens Tile posts in the centre, the source on', texts(page, '.dv-centre h1') == ['Tile posts'] and texts(page, '.dv-src.on') == ['Tile posts'], str(texts(page, '.dv-src.on')))
     check('...Tile posts sits among the sources with its own icon, after Tile news, before Recent tiles', texts(page, '.dv-src:not(.dv-make)')[:3] == ['Tile news', 'Tile posts', 'Recent tiles'] and page.eval_on_selector('.dv-src[data-source="posts"] svg', 's => s.classList.contains("icon-posts")'), str(texts(page, '.dv-src')))
-    check('...its blurb', 'from their own accounts' in page.inner_text('.dv-head .sub'))
+    check('...its blurb', "own accounts with Raku or the Foundry" in page.inner_text('.dv-head .sub'))
     wait_for(lambda: len(page.query_selector_all('.tile-post')) >= 6, page=page)
     got = post_texts(page)
     check('the posts, newest first: the relay\'s, the owner\'s, the shelf\'s; hidden ones left out', got[:3] == ['Found by the relay: the maze', 'From thunderbird.cafe, my coaster', LONG[:300] + '…'] and len(got) == 6, str(got))
