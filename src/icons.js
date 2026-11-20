@@ -39,6 +39,8 @@ const PATHS = {
   link: ['M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1', 'M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1'],
   // a tile post's heart (claude/raku-hearts-plan.md, HT4): an outline; filled by CSS when it's yours
   heart: ['M12 20.2s-7.6-4.6-9.4-9.3C1.4 7.6 3.6 4.4 7 4.4c2.1 0 3.7 1.2 5 3 1.3-1.8 2.9-3 5-3 3.4 0 5.6 3.2 4.4 6.5-1.8 4.7-9.4 9.3-9.4 9.3z'],
+  // opening a .tile file (claude/tile-files-plan.md): a page with its corner turned, an arrow coming out of it
+  'file-open': ['M14 3.5H7.5A1.5 1.5 0 0 0 6 5v14a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 18 19V7.5z', 'M14 3.5v4h4', 'M12 17.5v-6', 'M9.5 14l2.5-2.5 2.5 2.5'],
 };
 const FILLED = new Set(['star-filled']);
 export const ICON_NAMES = Object.keys(PATHS);

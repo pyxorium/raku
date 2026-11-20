@@ -939,6 +939,35 @@ expanded or not, also Autoplay) is answered as in a tab; the game itself is unch
   alone), `src/style.css` (`.rk-dialog.rk-wide`, `.rk-bar-over .chrome`). Unit tests: `test/game-saves.test.mjs`.
   Browser: `test/browser/check_play_here_games.py` (below).
 
+## Tile files (Nov 2026): opening a .tile file
+
+Planned in `claude/tile-files-plan.md` (part 1, the Foundry slice). A tile saved as a file, a `.tile` "CARball" as the
+tiles spec describes it (a CAR whose header is the tile's manifest, every file inside as a block; the Web Tile
+Foundry's "Save as .tile" writes them, as does Robin's `atile bundle`), opens in Raku without any account server.
+
+- **Opening one:** the button beside the address box (the owner's choice A; "Open a tile file… (Ctrl+O)"), Ctrl+O (⌘O
+  on a Mac), or dropping the file anywhere on Raku: while a file is dragged over Raku a cover goes over the stage, so it
+  can be dropped over a running tile too. On a phone the button sits after the address box and opens the file picker.
+  The picker has no type filter (phones grey out files of a type they don't know, and `.tile` has none); a file that
+  isn't a tile gets a plain note. An empty tab takes the tile; otherwise it opens in a new tab.
+- **Read in a worker** (`src/tile-file-worker.js`, a worker of its own per file, ended afterwards), off the page that
+  holds the sign-in: `src/tile-file.js` checks the size (100 MB at most), reads the manifest warily (its size, depth,
+  count, no repeated names, only CID tags), accepts only plain sha-256 file addresses (`bafkrei…`, as atproto blobs),
+  checks **every file's bytes against its address**, and requires a name, a `/` page and every listed file inside;
+  paths start with `/` and none may be under the loading server's `/.well-known/web-tiles/`. A refusal is one sentence
+  in the note line ("Couldn't open “x.tile”: …"), and no tab opens.
+- **Running it:** the same `Tile`, mothership, loading server and sandboxed frame as any tile; its files come from the
+  file (`filePathLoader`), so nothing about it is fetched. The tab's address is `raku:file/<id>`; it shows the tile's
+  name and icon (from the file), the file name in the address box, no star and no Post, and a note at the top:
+  "Opened from a file (name) · author not verified" (it can be put away).
+- **After a reload** Raku keeps no copy yet: the tab stays and says "This tile was opened from a file. Raku doesn't keep
+  a copy, so open the file again to see it.", with the button.
+- Files: `src/tile-file.js` (the reader, the path loader, the opened files, no DOM), `src/tile-file-worker.js`,
+  `src/address.js` (`raku:file/…`, kind `file`), `src/app.js` (the button and picker, `openTileFile`, `openFileTile`,
+  Ctrl+O, dropping; `ownPage` leaves a file's tab alone for rooms; `makeTileFileWorker`), `src/icons.js` (`file-open`),
+  `src/style.css` (`.file-btn`, `.file-hint`, `.dropping-file`). Unit tests: `test/tile-files.test.mjs`. Browser:
+  `test/browser/check_tile_files.py` (below).
+
 ## Try it
 
 ```
@@ -1005,6 +1034,7 @@ and open http://127.0.0.1:5181/.
 | `.github/workflows/deploy.yml` | test, build, check the policy is on the page and the sign-in file (`client-metadata.json`) names Raku's address, publish to GitHub Pages |
 | `lexicons/`, `scripts/publish-lexicons.mjs`, `lexicons-published.json` | Raku's one permission set, "Raku", and its publish script (Nov 2026) |
 | `src/tile-post-write.js`, `src/post-box.js` | writing tile posts: the record and writing it (no DOM), the post box and Write a post |
+| `src/tile-file.js`, `src/tile-file-worker.js` | tile files (Nov 2026): reading a `.tile` file (checked file by file, in a worker), the files for its tile, the files opened this visit |
 
 ## Browser checks (in the chat sandbox)
 
@@ -1062,6 +1092,16 @@ closing only the menu; from Full screen, full screen left first; the prompt over
 saving nothing); the game's own post in Full screen (a save leaves full screen for the prompt; Always; the next save
 without a prompt, still in full screen); signed out (the button opens the menu to sign in). Two real runs at
 once (about 45 seconds).
+
+`check_tile_files.py` (29 checks, Nov 2026: tile files) sets itself up as `check_renderer.py` does (a copy of Raku
+bundled with the stand-in sign-in, and the reader's worker bundled beside it as Vite builds it; `servers.mjs` and the
+loader replica), with three arguments: the work folder, the loading server folder and a `.tile` file saved by the
+Foundry (a Glass Lantern): the button beside the address box; opening with it, with Ctrl+O and by dropping (the cover
+over a running tile); the lantern running on its own random name under the loading server, its program and config from
+the file, nothing fetched from any account server; the tab's name, icon, address and note; no star and no Post; the
+worker used; a changed file and a text file refused with a note and no tab; after a reload, the tab's "open the file
+again" and its button; the phone (the button after the address box). `--break=hash` or `--break=drop` builds a copy
+with one safeguard removed, to show the check catches it.
 
 `check_prepare.py` (39 checks, Nov 2026: preparing a tile while its card shows) runs as `check_post_links.py` does (a
 bundle with a stand-in loader that asks Raku for a tile's page and then its other files, as the real worker would;

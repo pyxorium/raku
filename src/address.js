@@ -118,6 +118,10 @@ export const accountPageUri = (actor) => `raku:tiles/${actor}`;
 // A room (rooms step 1, RR2): just raku:room. The room code stays out of Raku's address (this browser tab keeps
 // it); an invite link (Raku's own https://raku.lexicographer.space/#r=…, or the lab page's) opens a room tab.
 export const ROOM_URI = 'raku:room';
+// A tile opened from a .tile file (claude/tile-files-plan.md, part 1): raku:file/<id>, the id of the file as read while
+// Raku is open (tile-file.js createOpenedFiles). After a reload the tab stays, saying to open the file again.
+export const FILE_PREFIX = 'raku:file/';
+export const fileUri = (id) => `${FILE_PREFIX}${id}`;
 const ROOMS_LAB_PAGE = { host: 'thunderbird.cafe', path: '/webtiles/rooms-lab/' };
 const ROOM_CODE = /^[A-Za-z0-9_-]{10,64}$/;           // as rooms-lab's formats.js (isRoomCode)
 const HOST_KEY = /^[A-Za-z0-9_-]{32,128}$/;           // as rooms-lab's formats.js (isHostKey)
@@ -302,7 +306,7 @@ function looksLikeWords(s) {
  * lexicographer.space / appmosphe.re link to an account), Discover, a post (stage 6), or words to search
  * for; since the open-links round, a record or collection that isn't tiles, and links from PDSls, Taproot and
  * profile pages; since ways, a way taken (raku:way/…). → { ok, kind: 'tile' | 'shelf' | 'account' | 'table' |
- * 'discover' | 'search' | 'post' | 'record' | 'collection' | 'way' | 'tile-post', uri, … }. 'post', 'record' and 'collection' open
+ * 'discover' | 'search' | 'post' | 'record' | 'collection' | 'way' | 'tile-post' | 'file', uri, … }. 'post', 'record' and 'collection' open
  * outside Raku (opensOutside), never in a tab; a tile post (Nov 2026, SL1) opens in its own tab.
  */
 export function parseTarget(input, { inner = false } = {}) {
@@ -312,6 +316,10 @@ export function parseTarget(input, { inner = false } = {}) {
   if (s === ROOM_URI) return { ok: true, kind: 'room', uri: ROOM_URI };
   if (s === DISCOVER_URI) return { ok: true, kind: 'discover', source: null, uri: DISCOVER_URI };
   if (s.startsWith(WAY_PREFIX)) return way(s);
+  if (s.startsWith(FILE_PREFIX)) {
+    const id = s.slice(FILE_PREFIX.length);
+    return /^[a-z0-9]{8,40}$/.test(id) ? { ok: true, kind: 'file', id, uri: fileUri(id) } : fail("That tile file's address isn't one Raku can read.");
+  }
   const disc = s.match(/^raku:discover\/([a-z]{1,20})$/);
   if (disc) {
     if (!DISCOVER_SOURCES.includes(disc[1])) return fail("That Discover address isn't one Raku knows.");

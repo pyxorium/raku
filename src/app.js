@@ -31,11 +31,12 @@ import { Tile } from '@dasl/tile-loader';
 import { SITE, LIMITS, TIMES, PICKS, TAKEDOWNS_PAGE, TILE_POPUPS, TABLES, ROOMS, tableForTile, isRoomHouse, appmosphereCopy,
   rendererFor, pinnedRenderers, RENDER, RECORD_APPS, RECORD_APP_KEY, recordApp, explorerLink, WAYS, KEYS_AFTER_MS, PLAY_HERE } from './config.js';
 import { bakedPick, bakedPictureUrl } from './picks.js';
-import { parseAddress, parseTarget, atUri, SHELF_URI, ABOUT_URI, ROOM_URI, roomInHash, tableUri, DISCOVER_URI, discoverUri, wayUri, WAY_PREFIX } from './address.js';
+import { parseAddress, parseTarget, atUri, SHELF_URI, ABOUT_URI, ROOM_URI, roomInHash, tableUri, DISCOVER_URI, discoverUri, wayUri, WAY_PREFIX, FILE_PREFIX, fileUri } from './address.js';
 import { createTabs, current, stateAt } from './tabs.js';
 import { WAY_UP, readWays, entranceFor, readWayMessage, statusMessage, arriveMessage, testSignposts, createWayReader, chosenDoor, keepDoor,
   signpostGoTo, parseAtUri } from './ways.js';
 import { describeTile, sizeVerdict, createPathLoader, blobCidOf } from './tiles.js';
+import { readTileFileInWorker, filePathLoader, createOpenedFiles, draggingFiles } from './tile-file.js';
 import { formatBytes, NetError, fetchLimited } from './net.js';
 import { sniffPicture } from './moderation.js';
 import { icon, ICON_WITH_PIP, brandPot, refreshBrandPots } from './icons.js';
@@ -66,7 +67,9 @@ import { createGameSaver } from './game-save-ui.js';
 import { GAME_SAVE_LIMITS } from './config.js';
 import { readSpriteGameMessage, statusMessage as spriteStatusMessage, spriteMessage, createCharacters, createCharacterSwitch, createAnswerBudget, answerHello, answerRequest } from './sprite-games.js';
 
-export function mountRaku(root, { mothership, resolver, moderation, files, shelf, auth, storage = null, session = null, returned = null, keepForReturn = () => {}, loc = globalThis.location, hist = globalThis.history, tableDeps = {}, install = null }) {
+export function mountRaku(root, { mothership, resolver, moderation, files, shelf, auth, storage = null, session = null, returned = null, keepForReturn = () => {}, loc = globalThis.location, hist = globalThis.history, tableDeps = {}, install = null,
+  // Tile files (claude/tile-files-plan.md): each picked or dropped .tile is read in a worker of its own, off this page.
+  makeTileFileWorker = () => new Worker(new URL('./tile-file-worker.js', import.meta.url), { type: 'module' }) }) {
   // Preparing a tile while its card shows (claude/raku-prepare-tiles-plan.md): the early downloads (prefetch.js), asked
   // for by the cards (cards.js prepareCard) and by the Places renderer's { get } (answerGet).
   const prefetch = createPrefetcher({ files, resolver, moderation });
@@ -114,6 +117,14 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   const postBtn = h('button', { class: 'post-btn', type: 'button', hidden: true, title: 'Post this tile to Tile posts', 'aria-label': 'Post this tile to Tile posts',
     onclick: () => { const k = paneFor(tabs.active).keep; if (k && k.kind === 'tile') postBox.openForTile({ did: k.did, rkey: k.rkey }); } },
   icon('posts', 16), h('span', { class: 'lbl' }, 'Post'));
+  // Tile files (claude/tile-files-plan.md, part 1, owner's choice A): "Open a tile file…" beside the address box, and
+  // Ctrl+O; dropping a file anywhere on Raku does the same. No accept filter on the picker: phones' pickers grey out
+  // files whose type they don't know, and .tile has none; the reader says plainly when a file isn't a tile.
+  const filePicker = h('input', { type: 'file', class: 'file-picker', hidden: true, tabindex: '-1', 'aria-hidden': 'true',
+    onchange: () => { const f = filePicker.files && filePicker.files[0]; filePicker.value = ''; if (f) openTileFile(f); } });
+  const openFileBtn = h('button', { class: 'nav-btn file-btn', type: 'button', title: 'Open a tile file… (Ctrl+O)', 'aria-label': 'Open a tile file',
+    onclick: () => pickTileFile() }, icon('file-open', 18));
+  const openedFiles = createOpenedFiles();
   // Ways (RW8): a quiet mark while some signposts come from the address (this computer only).
   const testMark = h('span', { class: 'testmark', hidden: !wayOverrides.size, title: 'This computer only: some signposts come from the address (?sign=…)' }, 'test signposts');
   // Handle suggestions under the box (typeahead.js): choosing one opens that account's tiles.
@@ -176,7 +187,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       // moves by the Raku label, the free space beside the tabs and this grip, which tabs never cover.
       h('div', { class: 'strip-row' }, brand, strip, newTabBtn, h('span', { class: 'wco-grip', 'aria-hidden': 'true' })),
       h('div', { class: 'bar' }, h('span', { class: 'brand brand-small' }, pot(), SITE.name),
-        h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn, shelfBtn, discoverBtn), form, postBtn, openIn, testMark, menu.button),
+        h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn, shelfBtn, discoverBtn), form, openFileBtn, filePicker, postBtn, openIn, testMark, menu.button),
       updateLine, noteLine, menu.panel),
     callSlot, stage, toolbar, sheet);
   // The bowls are drawn before they're in the page: now in place, each takes its own colours (Smoke and clay's dark bar).
@@ -207,7 +218,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   // Rooms (rooms step 1): at most one room in this window (RR6). A raku:page tab (not a room) or a first screen can
   // become the room tab; otherwise a new tab.
   // Raku's own pages: the first screen, raku:… (not the room), and a tile post's page (SL1, at its AT URI).
-  const ownPage = (uri) => !uri || (uri.startsWith('raku:') && uri !== ROOM_URI) || parseTarget(uri).kind === 'tile-post';
+  const ownPage = (uri) => !uri || (uri.startsWith('raku:') && uri !== ROOM_URI && !uri.startsWith(FILE_PREFIX)) || parseTarget(uri).kind === 'tile-post';
   function openRoomTab() {
     if (ownPage(current(tabs.active))) rawGo(tabs.active.id, ROOM_URI);
     else openNew(ROOM_URI);
@@ -418,6 +429,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (target.ok && target.kind === 'tile-post') { drawTilePostPage(pageContext(p, tab), target); return; }
     if (target.ok && target.kind === 'record' && rendererFor(target.collection)) { openRecord(p, tab, target); return; }
     if (target.ok && target.kind === 'way') { openWay(p, tab, target, arrival); return; }
+    if (target.ok && target.kind === 'file') { openFileTile(p, tab, target); return; }
     openTile(p, tab, uri, { arrival });
   }
   // Back along a trail (ways): the place you go back to puts you at the portal you left it by (the next leg's exit),
@@ -669,6 +681,78 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       h('button', { type: 'button', class: 'table-hint-x', 'aria-label': 'Hide this note', onclick: () => hint.remove() }, icon('close', 14)));
     holder.append(hint);
     return hint;
+  }
+
+  // ---------- tile files (claude/tile-files-plan.md, part 1) ----------
+  // A .tile file, picked with the button beside the address box (or Ctrl+O) or dropped on Raku, is read in a worker
+  // (tile-file.js: its size, its manifest, every file against its address), then runs in a tab through the same loader,
+  // loading server and sandbox as any other tile; its files come from the file, so nothing about it is fetched. The tab's
+  // address is raku:file/<id>; Raku keeps no copy, so after a reload the tab says to open the file again.
+  function pickTileFile() {
+    try { if (typeof filePicker.showPicker === 'function') { filePicker.showPicker(); return; } } catch { /* fall back */ }
+    filePicker.click();
+  }
+  let readingFile = false;
+  async function openTileFile(file) {
+    if (readingFile) { say('Still reading the last file…'); return; }
+    readingFile = true;
+    const fileName = String(file && file.name ? file.name : 'tile file').slice(0, 120);
+    say(`Opening “${fileName}”…`);
+    let r;
+    try { r = await readTileFileInWorker(file, { makeWorker: makeTileFileWorker }); }
+    catch { r = { ok: false, reason: "This file couldn't be read as a tile file." }; }
+    finally { readingFile = false; }
+    if (!r.ok) { say(`Couldn't open “${fileName}”: ${r.reason}`); return; }
+    const uri = fileUri(openedFiles.add({ fileName, name: r.name, manifest: r.manifest, files: r.files }));
+    say('');
+    const tab = tabs.active;
+    if (!current(tab) && !rooms.isRoomTab(tab.id)) tabs.go(tab.id, uri);
+    else openNew(uri);
+  }
+  function openFileTile(p, tab, target) {
+    const mine = p.attempt;
+    const alive = () => mine === p.attempt;
+    const f = openedFiles.get(target.id);
+    if (!f) {
+      p.title = 'Tile file';
+      p.shownAddress = '';
+      p.state = 'error';
+      status(p, 'file-gone', "This tile was opened from a file. Raku doesn't keep a copy, so open the file again to see it.",
+        button('Open a tile file…', () => pickTileFile(), 'primary'));
+      drawChrome();
+      return;
+    }
+    p.title = f.name;
+    p.shownAddress = f.fileName;
+    p.state = 'loading';
+    status(p, 'loading', 'Opening the tile…');
+    const loader = filePathLoader(f, (path, ok) => {
+      if (!alive() || path !== '/') return;
+      if (ok) {
+        p.state = 'ready'; hideStatus(p); drawChrome();
+        for (const ms of KEYS_AFTER_MS) p.timers.push(setTimeout(() => { if (alive()) focusIfFront(p); }, ms));
+      } else { p.state = 'error'; status(p, 'error', "This tile file's page couldn't be shown."); }
+    });
+    const tile = new Tile(mothership, target.uri, f.manifest, loader);
+    const frame = tile.renderContent(600);
+    frame.className = 'tile-frame';
+    frame.removeAttribute('style');
+    frame.title = f.name;
+    frame.setAttribute('allow', '');
+    frame.setAttribute('referrerpolicy', 'no-referrer');
+    if (!TILE_POPUPS) frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-downloads');
+    p.frame = frame;
+    p.el.prepend(frame);
+    // Its icon, from the file (a picture by its bytes, at most 512 KB, as loadIcon).
+    const ic = Array.isArray(f.manifest.icons) && f.manifest.icons[0] ? f.files.get(f.manifest.icons[0].src) : null;
+    const type = ic && ic.length <= 512 * 1024 ? sniffPicture(ic) : null;
+    if (type) p.icon = URL.createObjectURL(new Blob([ic], { type }));
+    // Said plainly, and kept to the tab: nobody vouches for a file's maker.
+    const hint = h('div', { class: 'table-hint file-hint', role: 'note', 'data-kind': 'file' },
+      icon('info', 16), h('span', {}, 'Opened from a file', h('span', { class: 'file-hint-name' }, ` (${f.fileName})`), ' · author not verified'),
+      h('button', { type: 'button', class: 'table-hint-x', 'aria-label': 'Hide this note', title: 'Hide this note', onclick: () => hint.remove() }, icon('close', 14)));
+    p.el.append(hint);
+    drawChrome();
   }
 
   // ---------- ways (claude/raku-ways-plan.md, RW1 to RW8) ----------
@@ -1881,11 +1965,28 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     }
   }
   if (returned) say(returned.did && auth.current() ? `Signed in as @${auth.current().handle}.` : "Sign-in didn't finish. Try again.");
+  // Tile files: Ctrl+O (⌘O on a Mac), and a file dropped anywhere on Raku. While a file is dragged over Raku a cover goes
+  // over the stage, so it can be dropped over a running tile too (a tile's own frame would otherwise take the drop).
+  globalThis.addEventListener?.('keydown', (ev) => {
+    if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && !ev.shiftKey && String(ev.key).toLowerCase() === 'o') { ev.preventDefault(); pickTileFile(); }
+  });
+  let dragDepth = 0;
+  const dropping = (on) => root.classList.toggle('dropping-file', on);
+  root.addEventListener('dragenter', (ev) => { if (!draggingFiles(ev.dataTransfer)) return; ev.preventDefault(); dragDepth++; dropping(true); });
+  root.addEventListener('dragover', (ev) => { if (!draggingFiles(ev.dataTransfer)) return; ev.preventDefault(); ev.dataTransfer.dropEffect = 'copy'; });
+  root.addEventListener('dragleave', () => { if (dragDepth > 0 && --dragDepth === 0) dropping(false); });
+  root.addEventListener('drop', (ev) => {
+    if (!draggingFiles(ev.dataTransfer)) return;
+    ev.preventDefault();
+    dragDepth = 0; dropping(false);
+    const f = ev.dataTransfer.files && ev.dataTransfer.files[0];
+    if (f) openTileFile(f);
+  });
   globalThis.addEventListener?.('hashchange', () => {
     const inv = roomInHash(loc.hash);
     if (inv) { hist.replaceState(null, '', tabs.toHash()); rooms.takeInvite(inv); return; }
     if (loc.hash !== tabs.toHash()) tabs.fromHash(loc.hash);
   });
   // (for the checks and curious eyes: the table in the front tab, if any; the rooms)
-  return { tabs, openNew, say, menu, showUpdate, rooms, get table() { return paneFor(tabs.active).table; } };
+  return { tabs, openNew, say, menu, showUpdate, rooms, openTileFile, get table() { return paneFor(tabs.active).table; } };
 }

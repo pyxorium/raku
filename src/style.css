@@ -1664,3 +1664,23 @@ button.way-door:hover, button.way-door:focus-visible { border-color: var(--glaze
   .dv-write .lbl-long { display: none; }
   .wp-tile-pic { width: 80px; }
 }
+
+/* ---------- tile files (claude/tile-files-plan.md, part 1) ---------- */
+/* "Open a tile file…" beside the address box; the cover while a file is dragged over Raku (over a running tile too, whose
+   own frame would otherwise take the drop); the note on a tile opened from a file, at the top, clear of a tile's own
+   controls along its bottom. */
+.file-picker { display: none; }
+.file-btn { flex: none; }
+.file-hint { top: 12px; bottom: auto; gap: 8px; }
+.file-hint > svg { flex: none; color: var(--glaze); }
+.file-hint-name { color: var(--muted); }
+.dropping-file .stage::after {
+  content: 'Drop a .tile file to open it'; position: fixed; inset: 0; z-index: 80; display: grid; place-items: center;
+  background: rgba(var(--scrim-rgb), .6); color: var(--glaze-light); font-size: 18px; font-weight: 600;
+  outline: 3px dashed var(--glaze); outline-offset: -16px;
+}
+@media (max-width: 640px) {
+  .file-btn { order: 4; width: 36px; height: 36px; }   /* after the address box, as on a computer (the bar's order: 1 to 3) */
+  .file-hint { font-size: 12.5px; }
+  .file-hint-name { display: none; }
+}
