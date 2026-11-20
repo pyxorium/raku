@@ -226,8 +226,9 @@ with sync_playwright() as p:
     check("...the copied ones aren't downloaded from the authors' servers", not copied_blobs, str(copied_blobs[:2]))
     check('first screen: "by @handle" only after the handle checks both ways', wait_for(lambda: page.eval_on_selector_all('.picks .card-by', "els => els.length === 6 && els[0].textContent === 'by @gabriellanonino.com' && els[5].textContent === 'by @pyxorium.com'"), 10))
     check('computer: no bottom toolbar; arrows in the top bar', not page.is_visible('.toolbar') and page.is_visible('.bar .nav'))
-    # (tile files, Nov 2026: "Open a tile file" beside the address box is the seventh)
-    check('computer: back, forward, reload, the shelf, Discover, + and Open a tile file are drawn icons, not text', page.eval_on_selector_all('.bar .nav-btn, .newtab', "bs => bs.length === 7 && bs.every(b => b.querySelector('svg.icon') && b.textContent.trim() === '')"))
+    # (tile files, Nov 2026: "Open a tile file" beside the address box is the seventh, "Save this tile as a file" the eighth,
+    # shown on a tile's tab only)
+    check('computer: back, forward, reload, the shelf, Discover, +, Open a tile file and Save this tile as a file are drawn icons, not text', page.eval_on_selector_all('.bar .nav-btn, .newtab', "bs => bs.length === 8 && bs.every(b => b.querySelector('svg.icon') && b.textContent.trim() === '')"))
     check('page title "Raku", no lab label (public since the go-public commit)', page.title() == 'Raku' and '(lab)' not in page.inner_text('.strip-row') and '(lab)' not in page.inner_text('.first h1'))
     icons = page.eval_on_selector_all('link[rel~=icon], link[rel=apple-touch-icon]', 'ls => ls.map(l => l.getAttribute("href"))')
     check('icons for other sites: favicon.ico, a PNG, the SVG and the Apple icon are linked', icons == ['/favicon.ico', '/favicon-32.png', '/icon.svg', '/apple-touch-icon.png'], str(icons))
@@ -388,8 +389,9 @@ with sync_playwright() as p:
     mp.wait_for_selector('.count')
     check('phone: no tab strip, a tab count button', not mp.is_visible('.strip-row') and mp.is_visible('.count') and mp.inner_text('.count') == '2')
     # (stage 9, S8: the pot beside the small Raku label takes about 20 px of the row: over 260 px, was 280; tile files, Nov
-    # 2026: the Open a tile file button after it takes 44 px more, so over 215 px: 226 at this width)
-    check('phone: no arrows in the top bar; the address gets the row (beside the account button and Open a tile file)', not mp.is_visible('.bar .nav') and mp.eval_on_selector('.addr', 'a => a.getBoundingClientRect().width') > 215)
+    # 2026: the Open a tile file button after it takes 44 px more (226 at this width), and on a tile's tab, as here, Save
+    # this tile as a file 44 px more again (part 2a, D1): over 170 px, about 182)
+    check('phone: no arrows in the top bar; the address gets the row (beside the account button and the two file buttons)', not mp.is_visible('.bar .nav') and mp.eval_on_selector('.addr', 'a => a.getBoundingClientRect().width') > 170)
     sizes = mp.eval_on_selector_all('.toolbar button', 'bs => bs.map(b => { const r = b.getBoundingClientRect(); return [b.title, Math.round(r.width), Math.round(r.height)]; })')
     check('phone: a bottom toolbar with back, forward, reload, the shelf, Discover and tabs, each at least 44 px', [x[0] for x in sizes] == ['Back', 'Forward', 'Reload this tile', 'Your shelf', 'Discover', 'Open tabs'] and all(w >= 44 and hh >= 44 for _, w, hh in sizes), str(sizes))
     icons = mp.eval_on_selector_all('.toolbar .tool-btn svg.icon', 'is => is.map(i => { const r = i.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })')

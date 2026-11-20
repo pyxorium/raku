@@ -37,6 +37,7 @@ import { WAY_UP, readWays, entranceFor, readWayMessage, statusMessage, arriveMes
   signpostGoTo, parseAtUri } from './ways.js';
 import { describeTile, sizeVerdict, createPathLoader, blobCidOf } from './tiles.js';
 import { readTileFileInWorker, filePathLoader, createOpenedFiles, draggingFiles } from './tile-file.js';
+import { buildSavedTile, savedNotes, downloadFile, TILE_COLLECTION as TILE_RECORDS } from './tile-save.js';
 import { formatBytes, NetError, fetchLimited } from './net.js';
 import { sniffPicture } from './moderation.js';
 import { icon, ICON_WITH_PIP, brandPot, refreshBrandPots } from './icons.js';
@@ -125,6 +126,10 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   const openFileBtn = h('button', { class: 'nav-btn file-btn', type: 'button', title: 'Open a tile file… (Ctrl+O)', 'aria-label': 'Open a tile file',
     onclick: () => pickTileFile() }, icon('file-open', 18));
   const openedFiles = createOpenedFiles();
+  // Saving a published tile as a file (part 2a, owner's D1: a second button after the open-file one), on an ordinary
+  // tile's tab only (not tables, renderer tiles or rooms); anyone's tile (D2).
+  const saveFileBtn = h('button', { class: 'nav-btn save-file-btn', type: 'button', hidden: true, title: 'Save this tile as a file', 'aria-label': 'Save this tile as a file',
+    onclick: () => saveTileFile() }, icon('file-save', 18));
   // Ways (RW8): a quiet mark while some signposts come from the address (this computer only).
   const testMark = h('span', { class: 'testmark', hidden: !wayOverrides.size, title: 'This computer only: some signposts come from the address (?sign=…)' }, 'test signposts');
   // Handle suggestions under the box (typeahead.js): choosing one opens that account's tiles.
@@ -187,7 +192,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       // moves by the Raku label, the free space beside the tabs and this grip, which tabs never cover.
       h('div', { class: 'strip-row' }, brand, strip, newTabBtn, h('span', { class: 'wco-grip', 'aria-hidden': 'true' })),
       h('div', { class: 'bar' }, h('span', { class: 'brand brand-small' }, pot(), SITE.name),
-        h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn, shelfBtn, discoverBtn), form, openFileBtn, filePicker, postBtn, openIn, testMark, menu.button),
+        h('div', { class: 'nav' }, backBtn, fwdBtn, reloadBtn, shelfBtn, discoverBtn), form, openFileBtn, saveFileBtn, filePicker, postBtn, openIn, testMark, menu.button),
       updateLine, noteLine, menu.panel),
     callSlot, stage, toolbar, sheet);
   // The bowls are drawn before they're in the page: now in place, each takes its own colours (Smoke and clay's dark bar).
@@ -403,6 +408,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     p.spriteGame = null;
     if (p.gameSave) { p.gameSave.saver.dispose(); p.gameSave = null; }
     p.onlyReady = null;
+    p.saveSource = null;
     if (p.screen?.url) URL.revokeObjectURL(p.screen.url);
     p.screen = null;
     p.arrival = null;
@@ -601,6 +607,9 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     p.keep = keep;
     p.arrival = arrival;
     if (screen) { p.screen = screen; p.el.append(screen.el); }
+    // What "Save this tile as a file" saves (part 2a): this tile, at the version read (an ordinary tile only: tables,
+    // renderer tiles and the rooms house open elsewhere and never reach here).
+    p.saveSource = keep && keep.kind === 'tile' ? { did, rkey: keep.rkey, pds, tile: d.manifest, recordCid: d.cid, name: d.name } : null;
     const mine = p.attempt;
     const alive = () => mine === p.attempt;
     p.state = 'loading';
@@ -753,6 +762,43 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       h('button', { type: 'button', class: 'table-hint-x', 'aria-label': 'Hide this note', title: 'Hide this note', onclick: () => hint.remove() }, icon('close', 14)));
     p.el.append(hint);
     drawChrome();
+  }
+
+  // Part 2a: the tile in the front tab, saved as a file. Its files come through Raku's kept files (most are there already,
+  // fetched to run it), each checked against its address; the author's server is asked for the record's signed proof,
+  // carried in the file unchecked (2b checks it). D3: a line says what won't work from the file, when Raku can tell.
+  let savingFile = false;
+  async function saveTileFile() {
+    const tab = tabs.active;
+    const p = paneFor(tab);
+    const src = p.saveSource;
+    if (!src) return;
+    if (savingFile) { say('Still saving the last tile…'); return; }
+    savingFile = true;
+    saveFileBtn.disabled = true;
+    const name = src.name;
+    try {
+      const r = await buildSavedTile({
+        source: src,
+        getFile: (cid, budget) => files.get(src.pds, src.did, cid, budget),
+        fetchProof: async () => {
+          const url = `${src.pds}/xrpc/com.atproto.sync.getRecord?did=${encodeURIComponent(src.did)}&collection=${TILE_RECORDS}&rkey=${encodeURIComponent(src.rkey)}`;
+          const got = await fetchLimited(url, { timeoutMs: LIMITS.lookupMs, maxBytes: 256 * 1024 });
+          return got.ok ? got.bytes : null;
+        },
+        onProgress: (n, total) => { if (total > 3) say(`Saving “${name}”… ${n} of ${total} files`); },
+      });
+      if (!r.ok) { say(`Couldn't save “${name}”: ${r.reason}`); return; }
+      downloadFile(r.bytes, r.fileName);
+      const by = p.keep && p.keep.by ? `@${p.keep.by}` : src.did;
+      const notes = savedNotes(src.tile, { did: src.did, rkey: src.rkey, games: gamesForTile });
+      say([`Saved “${r.fileName}”. It's ${by}'s tile; it records where it came from.`, ...notes].join(' '));
+    } catch {
+      say(`Couldn't save “${name}” just now. Try again in a moment.`);
+    } finally {
+      savingFile = false;
+      saveFileBtn.disabled = false;
+    }
   }
 
   // ---------- ways (claude/raku-ways-plan.md, RW1 to RW8) ----------
@@ -1877,6 +1923,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     const k = p.keep;
     starBtn.hidden = !k;
     postBtn.hidden = !(k && k.kind === 'tile' && canPostTile(k.did, auth.list()));
+    saveFileBtn.hidden = !p.saveSource;
     openIn.hidden = !p.record;
     if (!p.record && !openInMenu.hidden) toggleOpenIn(false);
     if (k) {
@@ -1988,5 +2035,5 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     if (loc.hash !== tabs.toHash()) tabs.fromHash(loc.hash);
   });
   // (for the checks and curious eyes: the table in the front tab, if any; the rooms)
-  return { tabs, openNew, say, menu, showUpdate, rooms, openTileFile, get table() { return paneFor(tabs.active).table; } };
+  return { tabs, openNew, say, menu, showUpdate, rooms, openTileFile, saveTileFile, get table() { return paneFor(tabs.active).table; } };
 }

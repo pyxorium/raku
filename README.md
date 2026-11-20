@@ -968,6 +968,32 @@ Foundry's "Save as .tile" writes them, as does Robin's `atile bundle`), opens in
   `src/style.css` (`.file-btn`, `.file-hint`, `.dropping-file`). Unit tests: `test/tile-files.test.mjs`. Browser:
   `test/browser/check_tile_files.py` (below).
 
+## Saving a tile as a file (Nov 2026)
+
+Planned in `claude/tile-files-plan.md` (part 2a, decisions D1 to D3). On an ordinary tile's tab (not tables, renderer
+tiles or rooms) a second button after "Open a tile file", "Save this tile as a file" (D1), saves anyone's tile (D2) as a
+`.tile` the Foundry's way, so it opens wherever Foundry files do.
+
+- **Its files** come through Raku's kept files (most are already there, fetched to run it; none is fetched twice), each
+  checked against its address; a tile over 100 MB (what Raku opens as a file) is refused before anything is fetched. A
+  file that doesn't match its address, or can't be fetched: nothing saved, said in the note line.
+- **Where it came from**, in the header under `savedFrom`: the tile's `at://` address, its author's DID, the record's CID
+  (the version saved), when, `savedBy: "Raku"`, and `proof`: the root of the signed proof the author's server gives
+  (`com.atproto.sync.getRecord`: the record, the repo's signed commit and the path between them), carried as extra
+  DAG-CBOR blocks when it holds this very record, else left out. **Nothing checks the proof yet** (part 2b): a saved file
+  still opens as "author not verified". Raku's reader keeps such blocks aside (hash-checked, never served as a tile's
+  file; a tile file pointing at one is refused).
+- **The note line:** "Saved “name.tile”. It's @handle's tile; it records where it came from.", and, when Raku can tell
+  (D3), what won't work from the file: "Its ways to other places won't work from the file." (a `/ways.json`), "Saving
+  runs won't work from the file." (a game Raku knows, config `GAME_SAVES`).
+- **A game opened from a file** still gets Raku's answer to its hello (the character, by the same switch as in a tab); it
+  is never told it can save (a file has no address Raku can trust until 2b).
+- Files: `src/tile-save.js` (new: the DAG-CBOR writer, the manifest from a record, the proof's CAR read and checked,
+  `buildSavedTile`, `savedNotes`, `saveFileName`, `downloadFile`; no DOM but the download), `src/tile-file.js` (the
+  reader: DAG-CBOR blocks kept aside, `savedFrom`, `decodeDagCbor`), `src/tile-file-worker.js`, `src/app.js` (the
+  button, `p.saveSource` set in `startTile`, `saveTileFile`), `src/icons.js` (`file-save`), `src/style.css`. Unit
+  tests: `test/tile-save.test.mjs`, `test/tile-files.test.mjs`. Browser: `test/browser/check_tile_save.py` (below).
+
 ## Try it
 
 ```
@@ -1035,6 +1061,7 @@ and open http://127.0.0.1:5181/.
 | `lexicons/`, `scripts/publish-lexicons.mjs`, `lexicons-published.json` | Raku's one permission set, "Raku", and its publish script (Nov 2026) |
 | `src/tile-post-write.js`, `src/post-box.js` | writing tile posts: the record and writing it (no DOM), the post box and Write a post |
 | `src/tile-file.js`, `src/tile-file-worker.js` | tile files (Nov 2026): reading a `.tile` file (checked file by file, in a worker), the files for its tile, the files opened this visit |
+| `src/tile-save.js` | saving a published tile as a `.tile` (Nov 2026): its files, where it came from, the signed proof carried unchecked |
 
 ## Browser checks (in the chat sandbox)
 
@@ -1102,6 +1129,16 @@ the file, nothing fetched from any account server; the tab's name, icon, address
 worker used; a changed file and a text file refused with a note and no tab; after a reload, the tab's "open the file
 again" and its button; the phone (the button after the address box). `--break=hash` or `--break=drop` builds a copy
 with one safeguard removed, to show the check catches it.
+
+`check_tile_save.py` (28 checks, Nov 2026: saving a tile as a file) sets itself up as `check_tile_files.py` does, with
+two arguments (the work folder and the loading server folder) and a stand-in account server (records, files, and the
+proof as a CAR): a probe game at Cosmic Junkyard's address (it says the sprite games' hello and shows Raku's answers); the
+button only on a tile's tab, after "Open a tile file"; the download and its name; the note line (the author, the game's
+note, the ways note); no file fetched twice; the proof asked once; the file read back by Raku's reader (its files, where
+it came from, the proof) and by Robin's `CARTileLoader` (when `/home/claude/interop/robin-reads.mjs` is there); the file
+opened again (running, the hello answered, never "can-save", "author not verified", no save button there); a file that
+doesn't match its address (nothing saved); no proof from the server (saved without it); the phone. `--break=hash` builds
+a copy that skips checking each file against its address, to show the check catches it.
 
 `check_prepare.py` (39 checks, Nov 2026: preparing a tile while its card shows) runs as `check_post_links.py` does (a
 bundle with a stand-in loader that asks Raku for a tile's page and then its other files, as the real worker would;

@@ -1670,7 +1670,8 @@ button.way-door:hover, button.way-door:focus-visible { border-color: var(--glaze
    own frame would otherwise take the drop); the note on a tile opened from a file, at the top, clear of a tile's own
    controls along its bottom. */
 .file-picker { display: none; }
-.file-btn { flex: none; }
+.file-btn, .save-file-btn { flex: none; }
+.save-file-btn[hidden] { display: none; }
 .file-hint { top: 12px; bottom: auto; gap: 8px; }
 .file-hint > svg { flex: none; color: var(--glaze); }
 .file-hint-name { color: var(--muted); }
@@ -1680,7 +1681,7 @@ button.way-door:hover, button.way-door:focus-visible { border-color: var(--glaze
   outline: 3px dashed var(--glaze); outline-offset: -16px;
 }
 @media (max-width: 640px) {
-  .file-btn { order: 4; width: 36px; height: 36px; }   /* after the address box, as on a computer (the bar's order: 1 to 3) */
+  .file-btn, .save-file-btn { order: 4; width: 36px; height: 36px; }   /* after the address box, as on a computer (the bar's order: 1 to 3) */
   .file-hint { font-size: 12.5px; }
   .file-hint-name { display: none; }
 }

@@ -110,12 +110,29 @@ test("paths must start with / and stay out of the loading server's /.well-known/
   assert.equal(r.ok, false); assert.match(r.reason, /path Raku won't use/);
 });
 
-test('only plain sha-256 file addresses: a dag-cbor block is refused', async () => {
+test('a tile\'s files must be raw sha-256 blocks; a DAG-CBOR block (a saved tile\'s proof) is kept aside, never served', async () => {
+  // a file pointing at a DAG-CBOR block: refused
   const page = rawCidBytes(PAGE, 0x71);
   const header = { version: 1, roots: [], name: 'x', resources: { '/': { src: link(page), 'content-type': 'text/html' } } };
-  const r = await readTileFile(car(header, [[page, PAGE]]));
+  let r = await readTileFile(car(header, [[page, PAGE]]));
+  assert.equal(r.ok, false);
+  assert.match(r.reason, /points at something that isn't a file/);
+  // any other kind of block (dag-pb, 0x70): refused
+  const pb = rawCidBytes(PAGE, 0x70);
+  r = await readTileFile(car(header, [[rawCidBytes(PAGE), PAGE], [pb, PAGE]]));
   assert.equal(r.ok, false);
   assert.match(r.reason, /only plain sha-256/);
+  // an extra DAG-CBOR block beside a good tile: opens, the block isn't among its files, and still hash-checked
+  const proof = te.encode('a stand-in proof block');
+  const good = goodFile({ edit: (h) => ({ ...h, savedFrom: { uri: 'at://did:plc:aaa/ing.dasl.masl/3abc', proof: link(rawCidBytes(proof, 0x71)) } }),
+    blocks: [[rawCidBytes(PAGE), PAGE], [rawCidBytes(PIC), PIC], [rawCidBytes(proof, 0x71), proof]] });
+  r = await readTileFile(good);
+  assert.equal(r.ok, true, r.reason);
+  assert.deepEqual([...r.files.keys()].sort(), ['/', '/icon.png']);
+  assert.deepEqual(r.savedFrom, { uri: 'at://did:plc:aaa/ing.dasl.masl/3abc', proof: true });
+  const bad = good.slice(); bad[bad.length - 3] ^= 0xff;
+  r = await readTileFile(bad);
+  assert.equal(r.ok, false); assert.match(r.reason, /doesn't match its address/);
 });
 
 test('too large, empty, not a tile file, cut short: refused with a sentence, never thrown', async () => {

@@ -22,7 +22,8 @@ export const TILE_FILE_LIMITS = Object.freeze({
 });
 
 const RESERVED = '/.well-known/web-tiles/';
-const CID_RAW = 0x55, HASH_SHA256 = 0x12, SHA256_LEN = 32;
+const CID_RAW = 0x55, CID_DAG_CBOR = 0x71, HASH_SHA256 = 0x12, SHA256_LEN = 32;
+const MAX_EXTRA_BLOCKS = 256;   // part 2a: a saved tile's signed proof (DAG-CBOR blocks, a dozen or so)
 const B32 = 'abcdefghijklmnopqrstuvwxyz234567';
 
 export class TileFileError extends Error {
@@ -121,6 +122,9 @@ function decodeHeader(buf, limits) {
   return value;
 }
 
+/** Decodes one DAG-CBOR value with the reader's limits (used for a CAR's header). Throws TileFileError. */
+export function decodeDagCbor(bytes, limits = TILE_FILE_LIMITS) { return decodeHeader(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes), limits); }
+
 const plain = (v) => v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Uint8Array);
 
 // Plain objects again (the decoder makes prototype-free ones, so a key like "__proto__" is just a key).
@@ -170,21 +174,25 @@ export async function readTileFile(input, limits = TILE_FILE_LIMITS) {
     checkManifest(head, limits);
 
     const blocks = new Map();
-    let at = hstart + hlen, count = 0;
+    const extras = new Map();
+    let at = hstart + hlen, count = 0, extraCount = 0;
     while (at < buf.length) {
       if (++count > limits.maxFiles) refuse(`This tile file has more than ${limits.maxFiles} files inside.`);
       const [len, s] = readVarint(buf, at, 'a file');
       const end = s + len;
       if (end > buf.length || len < 4) refuse('This tile file is cut short, or damaged.');
-      // A file's address: CIDv1, raw, sha-256 (each part a one-byte varint here).
-      if (buf[s] !== 0x01 || buf[s + 1] !== CID_RAW || buf[s + 2] !== HASH_SHA256 || buf[s + 3] !== SHA256_LEN || len < 4 + SHA256_LEN) {
+      // A block's address: CIDv1, sha-256, raw (the tile's files) or DAG-CBOR (since part 2a: a saved tile's signed proof,
+      // kept aside, never served as one of the tile's files). Each part a one-byte varint here.
+      const codec = buf[s + 1];
+      if (buf[s] !== 0x01 || (codec !== CID_RAW && codec !== CID_DAG_CBOR) || buf[s + 2] !== HASH_SHA256 || buf[s + 3] !== SHA256_LEN || len < 4 + SHA256_LEN) {
         refuse("This tile file has a file stored a way Raku doesn't accept (only plain sha-256 file addresses).");
       }
+      if (codec === CID_DAG_CBOR && ++extraCount > MAX_EXTRA_BLOCKS) refuse('This tile file has too many extra blocks inside.');
       const digest = buf.subarray(s + 4, s + 4 + SHA256_LEN);
       const data = buf.subarray(s + 4 + SHA256_LEN, end);
       const got = await sha256(data);
       for (let i = 0; i < SHA256_LEN; i++) if (got[i] !== digest[i]) refuse("A file inside this tile doesn't match its address: the tile file has been changed or damaged.");
-      blocks.set('b' + base32Lower(buf.subarray(s, s + 4 + SHA256_LEN)), data);
+      (codec === CID_RAW ? blocks : extras).set('b' + base32Lower(buf.subarray(s, s + 4 + SHA256_LEN)), data);
       at = end;
     }
 
@@ -193,11 +201,14 @@ export async function readTileFile(input, limits = TILE_FILE_LIMITS) {
     let totalBytes = 0;
     for (const [path, entry] of Object.entries(manifest.resources)) {
       const data = blocks.get(entry.src.$link);
+      if (!data && extras.has(entry.src.$link)) refuse(`This tile file lists ${path.slice(0, 60)} as one of its files, but it points at something that isn't a file.`);
       if (!data) refuse(`This tile file lists ${path.slice(0, 60)}, but the file isn't inside.`);
       files.set(path, data);
       totalBytes += data.length;
     }
-    return { ok: true, name: manifest.name.trim().slice(0, 120), manifest, files, totalBytes };
+    // Where a saved tile came from (part 2a), as the file says: not checked (2b), so never shown as the real author.
+    const said = plain(manifest.savedFrom) && typeof manifest.savedFrom.uri === 'string' ? { uri: manifest.savedFrom.uri.slice(0, 300), proof: extras.size > 0 && plain(manifest.savedFrom.proof) } : null;
+    return { ok: true, name: manifest.name.trim().slice(0, 120), manifest, files, totalBytes, savedFrom: said };
   } catch (err) {
     if (err instanceof TileFileError) return { ok: false, reason: err.message };
     return { ok: false, reason: "This file couldn't be read as a tile file." };
@@ -265,7 +276,7 @@ export async function readTileFileInWorker(file, { makeWorker, limits = TILE_FIL
       worker.postMessage({ id: 1, bytes }, [bytes]);
     });
     if (!answer.ok) return { ok: false, reason: String(answer.reason || "This file couldn't be read as a tile file.") };
-    return { ok: true, name: answer.name, manifest: answer.manifest, files: new Map(answer.files.map(([p, d]) => [p, new Uint8Array(d)])), totalBytes: answer.totalBytes };
+    return { ok: true, name: answer.name, manifest: answer.manifest, files: new Map(answer.files.map(([p, d]) => [p, new Uint8Array(d)])), totalBytes: answer.totalBytes, savedFrom: answer.savedFrom || null };
   } finally {
     worker.terminate();
   }

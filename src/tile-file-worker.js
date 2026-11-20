@@ -14,5 +14,5 @@ self.onmessage = async (ev) => {
     files.push([path, own]);
     transfer.push(own.buffer);
   }
-  self.postMessage({ id, ok: true, name: r.name, manifest: r.manifest, files, totalBytes: r.totalBytes }, transfer);
+  self.postMessage({ id, ok: true, name: r.name, manifest: r.manifest, files, totalBytes: r.totalBytes, savedFrom: r.savedFrom }, transfer);
 };
