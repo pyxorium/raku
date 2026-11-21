@@ -17,6 +17,8 @@
 #
 # It sets everything up itself: a copy of this Raku folder with a test pin in RENDERERS (the real pin is filled in
 # after publishing), bundled with esbuild and the stand-in sign-in, then servers.mjs and loader-replica.mjs.
+# Since Nov 20 (Part B, PB1 to PB5): song posts in Tile posts (the song's card; Play here running Tracks in the post's
+# slot with that song, in its compact layout; Expand giving its full page; Stop), step 6e.
 # Usage: python3 test/browser/check_renderer.py <work folder> <tiles-loading-server folder> <renderer-tiles folder> <maze-tiles folder>
 #   (needs Playwright with Chromium, esbuild (NODE_PATH or /opt/npm-tools), node_modules with @dasl/tile-loader and
 #   rooms-lab, and port 80 free for the loader replica)
@@ -146,6 +148,15 @@ records[(P, PLYR, 'plyr1')] = ('bafyreiplyrone', {'title': 'Jackson Station', 'a
 records[(P, AUDIO, 'notaudio')] = ('bafyreinotaudio', song('A picture, not a song', {**COVER_BLOB, 'mimeType': 'audio/mpeg'}))
 records[(P, AUDIO, 'changed')] = ('bafyreichanged', song('A file that changed', {**song_blob, 'ref': {'$link': FAKE_CID}}))
 records[(P, AUDIO, 'huge')] = ('bafyreihuge', song('A very long jam', {**song_blob, 'size': 200 * 1024 * 1024}))
+# ---- song posts (claude/mixtape-3c-track-renderer-notes.md, R3c-11, PB1 to PB5): tile posts in thunderbird.cafe's account
+#      naming a song in `record` and Tracks in `tile`; one whose song is gone ----
+POST = 'cafe.thunderbird.tile.post'
+def spost(rkey, text, song_key, kind=AUDIO, cid='bafyreisongoneaaaaaaaaaaaaaaaaaaaaaaaa', when='2026-11-21T10:00:00.000Z'):   # (a CID of the right shape)
+    return {'uri': f'at://{A}/{POST}/{rkey}', 'cid': 'bafyreipost' + 'a' * 20, 'value': {'$type': POST, 'tile': {'uri': f'at://{A}/{TILE}/{TRACK_RKEY}', 'cid': TRACK_CID},
+            'record': {'uri': f'at://{P}/{kind}/{song_key}', 'cid': cid}, 'text': text, 'createdAt': when}}
+song_posts = [spost('3n2songpostc', 'Lord Only Knows, from the Fillmore', 'song1'),
+              spost('3n2songpostb', 'Jackson Station', 'plyr1', kind=PLYR, cid='bafyreiplyroneaaaaaaaaaaaaaaaaaaaaaaaa', when='2026-11-21T09:00:00.000Z'),
+              spost('3n2songposta', 'A song I took down again', 'gonesong', when='2026-11-21T08:00:00.000Z')]
 PROBE = 'cafe.thunderbird.test.audioprobe'
 PROBE_RKEY = '3mzprobetest'
 PROBE_CID = 'bafyreiaudioprobetestpinaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
@@ -219,6 +230,8 @@ def route(r):
         handle = {A: A_HANDLE, P: P_HANDLE, B: B_HANDLE}.get(did)
         if not handle: return js({'message': 'not found'}, 404)
         return js({'id': did, 'alsoKnownAs': [f'at://{handle}'], 'service': [{'id': '#atproto_pds', 'type': 'AtprotoPersonalDataServer', 'serviceEndpoint': PDS}]})
+    # Discover's Recent tiles list (the song-post visit in 6e): an empty list, as this check stands in for no one's tiles there
+    if u.hostname == 'appmosphe.re' and u.path == '/api/tiles': return js({'page': 1, 'pages': 1, 'total': 0, 'tiles': []})
     if u.hostname == 'public.api.bsky.app':
         if u.path.endswith('resolveHandle'):
             did = {A_HANDLE: A, P_HANDLE: P, B_HANDLE: B}.get(q.get('handle'))
@@ -242,7 +255,11 @@ def route(r):
             bb = blobs.get(q.get('cid'))
             if bb is None: return r.fulfill(status=404, headers=cors, body='')
             return r.fulfill(status=200, headers={**cors, 'content-type': 'application/octet-stream'}, body=bb)
-        if u.path.endswith('listRecords'): return js({'records': []})
+        if u.path.endswith('listRecords'):
+            if q.get('collection') == POST and q.get('repo') == A: return js({'records': song_posts})
+            return js({'records': []})
+    if u.hostname == 'relay1.us-east.bsky.network':          # Tile posts' relay: nobody else
+        return js({'repos': []})
     if u.hostname in ('pdsls.dev', 'atproto.at'):          # the explorers: stand-ins (the sandbox can't reach them)
         return r.fulfill(status=200, headers={'content-type': 'text/html'}, body=f'<!doctype html><title>{u.hostname}</title>explorer')
     r.fulfill(status=404, headers=cors, body='')
@@ -269,7 +286,7 @@ try:
     with sync_playwright() as pw:
         b = pw.chromium.launch(args=['--host-resolver-rules=MAP *.localhost 127.0.0.1'])
         ctx = b.new_context(viewport={'width': 1280, 'height': 800})
-        for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**', 'https://appmosphe.re/**', 'https://typeahead.waow.tech/**', 'https://pdsls.dev/**', 'https://atproto.at/**']:
+        for host in ['https://plc.directory/**', 'https://public.api.bsky.app/**', 'https://pds.fakepds.net/**', 'https://lexicographer.space/**', 'https://cdn.bsky.app/**', 'https://appmosphe.re/**', 'https://typeahead.waow.tech/**', 'https://pdsls.dev/**', 'https://atproto.at/**', 'https://relay1.us-east.bsky.network/**']:
             ctx.route(host, route)
         popups = []
         ctx.on('page', lambda pg: popups.append(pg))
@@ -544,6 +561,50 @@ try:
         check('Tracks opened as a tile on its own: what it is, with two songs to try in Raku', wait_for(lambda: inner() and inner().locator('#track[data-state="nohost"]').count() == 1, 15)
               and tile_text('h1') == 'Tracks' and inner().locator('.tries a').count() == 2, str(tile_text('h1')))
         page.screenshot(path=str(OUT / 'renderer-track-alone.png'))
+
+        # 6e. Song posts (R3c-11, PB1 to PB5): in Discover's Tile posts, a song post shows the song's card; Play here runs the
+        #     pinned Tracks in the post's slot, handed that song, in its compact layout; Expand gives it the full page
+        page.goto(RAKU + '?loader=' + LOADER + '#t=raku%3Adiscover%2Fposts&a=0')
+        song_card = lambda: page.query_selector('.tp-song-card[data-song$="/song1"]')
+        check('6e. a song post: the song\'s card in Tile posts', wait_for(lambda: song_card() and song_card().query_selector('.card-title').inner_text() == 'Lord Only Knows (Pt. 1)', 15))
+        c = song_card()
+        check('...its line: band, where, when', c.query_selector('.card-desc').inner_text() == 'Yonder Mountain String Band · The Fillmore Auditorium, Denver, CO · April 20, 2002 · 0:24', c.query_selector('.card-desc').inner_text())
+        check('...shared by the song\'s account', wait_for(lambda: song_card().query_selector('.card-by').inner_text() == 'Shared by @pyxorium.com', 5), song_card().query_selector('.card-by').inner_text())
+        check('...the song\'s picture in the slot (its title, Tracks\' jukebox)', c.query_selector('.tp-song .tp-song-title').inner_text() == 'Lord Only Knows (Pt. 1)'
+              and wait_for(lambda: song_card().query_selector('.tp-song-pic img') and song_card().eval_on_selector('.tp-song-pic img', 'i => i.complete && i.naturalWidth === 256'), 10))
+        plyr_card = page.query_selector('.tp-song-card[data-song$="/plyr1"]')
+        check('a plyr.fm song post: "Uploaded through plyr.fm · Shared by"', plyr_card and wait_for(lambda: page.query_selector('.tp-song-card[data-song$="/plyr1"] .card-by').inner_text().startswith('Uploaded through plyr.fm · Shared by'), 5))
+        check('a song post whose song is gone: "This song can\'t be shown."', wait_for(lambda: any(e.inner_text() == "This song can't be shown." for e in page.query_selector_all('.tp-gone')), 10))
+        page.screenshot(path=str(OUT / 'renderer-song-posts.png'))
+        def post_inner():
+            for f in page.frames:
+                if f.url.endswith('.tiles.lex.localhost/') and f.parent_frame and f.parent_frame.parent_frame == page.main_frame:
+                    try:
+                        if f.parent_frame.frame_element().evaluate('e => e.classList.contains("tp-frame")'): return f
+                    except Exception: pass
+            return None
+        before_calls = len(song_calls())
+        c.query_selector('.tp-play').click()
+        check('Play here: Tracks in the slot, handed the song', wait_for(lambda: post_inner() and post_inner().locator('.strip-words b').count() == 1 and post_inner().locator('.strip-words b').inner_text() == 'Lord Only Knows (Pt. 1)', 20))
+        f = post_inner()
+        check('...in its compact layout (the slot is short)', f.locator('#track').evaluate('e => e.classList.contains("is-compact")'))
+        check('...the slot playing, with Expand and Stop', wait_for(lambda: song_card().query_selector('.tp-slot.playing .tp-expand') and song_card().query_selector('.tp-stop'), 5))
+        check('...nothing of the song fetched before ▶', len(song_calls()) == before_calls)
+        f.locator('.play').click()
+        played = wait_for(lambda: f.locator('.play').get_attribute('aria-label') == 'Pause' or (f.locator('.status').inner_text() or '') == 'Ready: press ▶ to play.', 15)
+        if played and f.locator('.play').get_attribute('aria-label') != 'Pause': f.locator('.play').click()
+        check('▶ in the strip: the song from its author\'s server, played in the post', wait_for(lambda: f.locator('.play').get_attribute('aria-label') == 'Pause', 10) and len(song_calls()) == before_calls + 1)
+        f.locator('.looks select[aria-label="Look"]').select_option('aurora')
+        time.sleep(1)
+        page.screenshot(path=str(OUT / 'renderer-song-post-playing.png'))
+        song_card().query_selector('.tp-expand').click()
+        check('Expand: Tracks grows to Raku\'s window and shows its full page (no compact layout)', wait_for(lambda: page.query_selector('.tp-x') and not post_inner().locator('#track').evaluate('e => e.classList.contains("is-compact")'), 10))
+        check('...the same Tracks, never reloaded (the song still playing)', post_inner().locator('.play').get_attribute('aria-label') == 'Pause')
+        page.screenshot(path=str(OUT / 'renderer-song-post-expanded.png'))
+        page.keyboard.press('Escape')
+        check('Escape: back in the post, compact again', wait_for(lambda: not page.query_selector('.tp-x') and post_inner() and post_inner().locator('#track').evaluate('e => e.classList.contains("is-compact")'), 10))
+        song_card().query_selector('.tp-stop').click()
+        check('Stop: the song\'s picture and Play here again', wait_for(lambda: song_card().query_selector('.tp-song') and song_card().query_selector('.tp-play') and not post_inner(), 10))
 
         # 7. a renderer that changed since it was pinned is refused
         state['renderer_cid'] = 'bafyreisomethingelseentirelyaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'

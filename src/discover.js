@@ -12,11 +12,11 @@
 // Addresses (address.js): raku:discover, raku:discover/news, raku:discover/posts, raku:discover/recent,
 // raku:discover/following, raku:discover/make, raku:search/<words>.
 
-import { PICKS, SEARCH, RECENT, MAKE, FEED, NEWS_PINS, TILE_POSTS, PLAY_HERE, TAKEDOWNS_PAGE, siteLabel, feedUri, postApp, appmosphereCopy } from './config.js';
+import { PICKS, SEARCH, RECENT, MAKE, FEED, NEWS_PINS, TILE_POSTS, PLAY_HERE, TAKEDOWNS_PAGE, siteLabel, feedUri, postApp, appmosphereCopy, rendererFor } from './config.js';
 import { atUri, discoverUri, searchUri, accountPageUri, parseAddress, parsePost, SHELF_URI, DISCOVER_URI, ABOUT_URI, tilePostUri, TILE_POST_COLLECTION } from './address.js';
 import { shareMenu } from './post-share.js';
 import { heartRow } from './heart-row.js';
-import { describeTile } from './tiles.js';
+import { describeTile, blobCidOf } from './tiles.js';
 import { NetError, formatBytes } from './net.js';
 import { h, bannerCid } from './cards.js';
 import { icon } from './icons.js';
@@ -27,7 +27,7 @@ import { createPublicReads } from './bluesky.js';
 import { readPost, threadContext, whenText, groupThreads, ago } from './posts.js';
 import { postCard, threadCard } from './post-card.js';
 import { searchAppmosphere, localMatches } from './search.js';
-import { createTilePosts, tileState, readTilePost } from './tile-posts.js';
+import { createTilePosts, tileState, readTilePost, songOf } from './tile-posts.js';
 import { expandMotion, createAutoplayWatch, autoplaySize, autoplayMayStart } from './play-here.js';
 import { switchButton } from './account-menu.js';
 import { createExpanded } from './expand-view.js';
@@ -699,6 +699,25 @@ function tilePostCard(ctx, post, { own = false, onHandle = null } = {}) {
     else resolver.checkedHandle(post.did).then((hd) => { if (hd) gotHandle(hd); });
   }).catch(() => {});
 
+  // A song post (R3c-11, PB1, PB4): the song's card, played here by the pinned Tracks with that song; the post's own
+  // `tile` (Tracks as it was when posted) isn't run.
+  if (post.record) {
+    const r = post.record;
+    const songCard = playCard(ctx, { uri: r.uri, did: r.did, rkey: r.rkey }, { song: r });
+    body.append(songCard.el);
+    const cannot = () => songCard.el.replaceWith(h('p', { class: 'post-note tp-gone' }, "This song can't be shown."));
+    (async () => {
+      if (await moderation.isAccountHidden(r.did)) { cannot(); return; }
+      const rec = await resolver.record(r.did, r.collection, r.rkey);
+      const s = songOf(rec.value, r.collection);
+      songCard.readySong({ s, rec, alt: post.alt || '' });
+      resolver.checkedHandle(r.did).then((hd) => songCard.set({ by: hd || '' }));
+    })().catch((err) => {
+      if (err && err.code === 'not-found') cannot();
+      else songCard.set({ note: "Couldn't reach the song's server just now." });
+    });
+    return card;
+  }
   const t = post.tile;
   const tileCard = playCard(ctx, t);
   body.append(tileCard.el);
@@ -726,7 +745,25 @@ function tilePostCard(ctx, post, { own = false, onHandle = null } = {}) {
  * ×, Escape or Back shrink it back. After a trip inside the post (D), a "Now in" line with "Back to …" (EX7), and the
  * new-tab buttons open the way taken.
  */
-function playCard(ctx, t) {
+// The jukebox (Tracks' own icon), read once from the pinned renderer's record, for song cards. → { pds, did, cid } | null
+const trackIcons = new Map();
+function trackIcon(ctx, collection) {
+  const renderer = rendererFor(collection);
+  if (!renderer) return Promise.resolve(null);
+  if (!trackIcons.has(renderer.uri)) {
+    const rdid = (/^at:\/\/([^/]+)\//.exec(renderer.uri) || [])[1];
+    trackIcons.set(renderer.uri, (async () => {
+      const [rec, acct] = await Promise.all([ctx.resolver.tileRecord(rdid, renderer.uri.split('/').pop()), ctx.resolver.account(rdid)]);
+      const d = describeTile(rec);
+      const icons = d.ok && Array.isArray(d.manifest.icons) ? d.manifest.icons : [];
+      const cid = icons.length ? blobCidOf(d.manifest.resources?.[icons[0].src]) : null;
+      return cid ? { pds: acct.pds, did: rdid, cid } : null;
+    })().catch(() => null));
+  }
+  return trackIcons.get(renderer.uri);
+}
+
+function playCard(ctx, t, { song = null } = {}) {
   const { kit, tabs, tab, openNew, player, say } = ctx;
   const slot = h('div', { class: 'tp-slot' });
   const title = h('span', { class: 'card-title' }, '…');
@@ -745,7 +782,9 @@ function playCard(ctx, t) {
   const nowWhere = h('span', {});
   const nowBack = h('button', { type: 'button', onclick: () => player.back(slot) });
   const nowLine = h('div', { class: 'tp-now', hidden: true }, nowWhere, nowBack);
-  const el = h('article', { class: 'card post-tile tp-card', 'data-tile': t.uri }, slot, nowLine, main, corner);
+  const el = h('article', { class: `card post-tile tp-card${song ? ' tp-song-card' : ''}`, [song ? 'data-song' : 'data-tile']: t.uri }, slot, nowLine, main, corner);
+  if (song) corner.querySelector('button').setAttribute('aria-label', 'Open this song in a new tab');
+  let songWords = null;      // a song card: what its "Shared by" line says around the handle
   let tile = null;           // { d, pds }
   let over = null, play = null, stopBtn = null, expandBtn = null, hint = null, hintTimer = null;
   let view = null;           // the expanded view, while open (expand-view.js)
@@ -769,6 +808,7 @@ function playCard(ctx, t) {
     const v = player.verdict(tile.d.declaredBytes, t.uri);
     if (v === 'refuse') { panel(h('p', {}, `This tile is too large to open (${formatBytes(tile.d.declaredBytes)}).`)); return; }
     play = h('button', { type: 'button', class: 'tp-play', 'aria-label': `Play ${name()} here`, onclick: () => press() }, icon('play', 16), 'Play here');
+    if (song) play.dataset.song = '';
     slot.append(play);
     phase = 'banner';
   }
@@ -789,7 +829,8 @@ function playCard(ctx, t) {
     byItself = quiet;
     touched = !quiet;
     phase = 'starting';
-    player.play({ slot, uri: t.uri, did: t.did, pds: tile.pds, d: tile.d, onState, expand: () => expand(), expanded: () => !!view, quiet });
+    if (song) player.playRecord({ slot, record: song, rec: tile.rec, title: name(), onState, expand: () => expand(), expanded: () => !!view, quiet });
+    else player.play({ slot, uri: t.uri, did: t.did, pds: tile.pds, d: tile.d, onState, expand: () => expand(), expanded: () => !!view, quiet });
   }
   function showPlace(info) {
     place = info && info.travelled ? info : null;
@@ -895,8 +936,28 @@ function playCard(ctx, t) {
   return {
     el,
     set({ by: who, note }) {
-      if (who !== undefined) byLine.textContent = who ? `by @${who}` : '';
+      if (who !== undefined && songWords !== null) byLine.textContent = `${songWords}Shared by ${who ? `@${who}` : 'its account'}`;
+      else if (who !== undefined) byLine.textContent = who ? `by @${who}` : '';
       if (note !== undefined) noteLine.textContent = note;
+    },
+    // A song card (PB4): the song's own picture in the slot (the jukebox's night, the song's lines at the left, Tracks'
+    // jukebox at the right), its title, "band · where · when · length", "Shared by" (plyr.fm songs: "Uploaded through
+    // plyr.fm · Shared by"); Play here runs Tracks with it. Not offered to Autoplay: Tracks waits for its own ▶ anyway.
+    readySong({ s, rec, alt }) {
+      tile = { d: { name: s.title, description: '', declaredBytes: 0 }, rec };
+      songWords = s.plyr ? 'Uploaded through plyr.fm · ' : '';
+      title.textContent = s.title;
+      desc.textContent = [s.artist, s.where, s.when, s.length].filter(Boolean).join(' · ');
+      if (!byLine.textContent) byLine.textContent = `${songWords}Shared by its account`;
+      const pic = h('span', { class: 'tp-song-pic', 'aria-hidden': 'true' });
+      const words = h('span', { class: 'tp-song-words' },
+        h('span', { class: 'tp-song-title' }, s.title),
+        s.artist ? h('span', { class: 'tp-song-band' }, s.artist) : null,
+        s.where ? h('span', { class: 'tp-song-line' }, s.where) : null,
+        [s.when, s.length].filter(Boolean).length ? h('span', { class: 'tp-song-line' }, [s.when, s.length].filter(Boolean).join(' · ')) : null);
+      slot.append(h('div', { class: 'tp-song', role: 'img', 'aria-label': alt || [s.title, s.artist, s.where, s.when].filter(Boolean).join(', ') }, words, pic));
+      trackIcon(ctx, song.collection).then((ic) => { if (ic) kit.picture(pic, ic); });
+      banner();
     },
     ready({ d, pds, alt }) {
       tile = { d, pds };

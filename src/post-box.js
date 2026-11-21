@@ -6,14 +6,17 @@
 // The box (WP9): the tile, Your words (300, counted by graphemes), More (alt text, the tile's description as the grey
 // hint; a language box), From (your signed-in accounts, starting on the tile's own, WP2), Post to Raku. After posting
 // (WP10) it becomes a note and you stay where you are; the post is added to Tile posts straight away.
-import { SIGNIN_PROMISE, RAKU_SCOPE, PERMISSION_LINE } from './config.js';
+import { SIGNIN_PROMISE, RAKU_SCOPE, PERMISSION_LINE, rendererFor } from './config.js';
 import { h, bannerCid } from './cards.js';
 import { icon } from './icons.js';
 import { openDialog, signInForm, blockedBox } from './signin-ui.js';
 import { buildPostRecord, writePost, fromChoices, canPostTile, yourTiles, graphemeCount, POST_LIMITS } from './tile-post-write.js';
-import { describeTile } from './tiles.js';
+import { describeTile, blobCidOf } from './tiles.js';
+import { songOf } from './tile-posts.js';
 
 export const POST_HELP = 'Share it in Tile posts, where people can play it right in the post. A few words, or just the tile.';
+// A song (PB1, PB4): the post box as approved in claude/raku-song-posts-mockup.html.
+export const SONG_HELP = 'Share it in Tile posts, where people can play it right in the post, in Tracks. A few words, or just the song.';
 export const READBACK_WARNING = 'Raku couldn’t check the post afterwards. It may still have been posted; look in Tile posts before trying again.';
 
 const at = (handle) => (String(handle).startsWith('did:') ? handle : `@${handle}`);
@@ -53,7 +56,39 @@ export function createPostBox({ auth, resolver, moderation, kit, tilePosts, host
     return { did, rkey, uri: rec.uri, cid: rec.cid, name: d.name, description: d.description, manifest: d.manifest, by: by || did };
   }
 
+  /** A song ready to post (PB1): { did, uri, cid, name, description, by, song: { line, record, tile, iconFrom } }. */
+  async function songFrom({ did, collection, rkey }) {
+    const renderer = rendererFor(collection);
+    if (!renderer) throw new Error("Raku has no tile that plays this kind of record.");
+    const rec = await resolver.record(did, collection, rkey);
+    const s = songOf(rec.value, collection);
+    if (!s.playable) throw new Error("This song's audio isn't on its account's own server, so Tracks can't play it.");
+    const by = await resolver.checkedHandle(did).catch(() => null);
+    const uri = `at://${did}/${collection}/${rkey}`;
+    const line = [s.artist, s.when, s.length].filter(Boolean).join(' · ');
+    // the alt hint (PB4): the song's own words, as the card would read it aloud
+    const hint = [s.title, s.artist, s.where ? `live at ${s.where}` : '', s.when].filter(Boolean).join(', ');
+    return { did, uri, cid: rec.cid, name: s.title, description: hint, by: by || did,
+      song: { line, record: { uri, cid: rec.cid }, tile: { uri: renderer.uri, cid: renderer.cid }, renderer } };
+  }
+
   function tileLine(t) {
+    if (t.song) {
+      // the song's line (PB4): Tracks' own icon (the jukebox), the title, "band · date · length", who shares it
+      const pic = h('div', { class: 'wp-tile-pic' });
+      const rdid = (/^at:\/\/([^/]+)\//.exec(t.song.renderer.uri) || [])[1];
+      (async () => {
+        const rrec = await resolver.tileRecord(rdid, t.song.renderer.uri.split('/').pop());
+        const d = describeTile(rrec);
+        const icons = d.ok && Array.isArray(d.manifest.icons) ? d.manifest.icons : [];
+        const cid = icons.length ? blobCidOf(d.manifest.resources?.[icons[0].src]) : null;
+        const acct = await resolver.account(rdid);
+        if (cid) kit.picture(pic, { pds: acct.pds, did: rdid, cid });
+      })().catch(() => {});
+      return h('div', { class: 'wp-tile' }, pic,
+        h('div', { class: 'wp-tile-words' }, h('span', { class: 'wp-tile-name' }, t.name),
+          h('span', { class: 'wp-tile-by' }, t.song.line, h('br'), `shared by ${at(t.by)} · played by ${t.song.renderer.name}`)));
+    }
     const pic = h('div', { class: 'wp-tile-pic' });
     resolver.account(t.did).then((acct) => { const cid = bannerCid(t.manifest); if (cid) kit.picture(pic, { pds: acct.pds, did: t.did, cid }); }).catch(() => {});
     return h('div', { class: 'wp-tile' }, pic,
@@ -63,8 +98,9 @@ export function createPostBox({ auth, resolver, moderation, kit, tilePosts, host
   // ---------- the post box (WP9) ----------
   function postForm(t, { back = null, words = {} } = {}) {
     const accounts = auth.list();
+    const heading = t.song ? 'Post this song' : 'Post this tile';
     if (!canPostTile(t.did, accounts)) {
-      show('Post this tile', [h('h2', {}, 'Post this tile'), h('p', {}, "Only tiles from your accounts signed in on this browser can be posted from Raku."), actions(btn('Close', () => dialog.close(), 'primary'))]);
+      show(heading, [h('h2', {}, heading), h('p', {}, t.song ? "Only songs from your accounts signed in on this browser can be posted from Raku." : "Only tiles from your accounts signed in on this browser can be posted from Raku."), actions(btn('Close', () => dialog.close(), 'primary'))]);
       return;
     }
     const choices = fromChoices(t.did, accounts);
@@ -76,10 +112,10 @@ export function createPostBox({ auth, resolver, moderation, kit, tilePosts, host
     const lang = h('input', { class: 'wp-lang', id: 'wp-lang', placeholder: 'e.g. en', spellcheck: 'false', autocapitalize: 'off' });
     lang.value = words.lang || '';
     const more = h('details', { class: 'wp-more' }, h('summary', {}, 'More'), h('div', { class: 'wp-more-body' },
-      h('div', {}, h('label', { class: 'wp-label', for: 'wp-alt' }, h('span', {}, 'Alt text: what the tile is and does')), alt),
+      h('div', {}, h('label', { class: 'wp-label', for: 'wp-alt' }, h('span', {}, t.song ? 'Alt text: what the song is' : 'Alt text: what the tile is and does')), alt),
       h('div', {}, h('label', { class: 'wp-label', for: 'wp-lang' }, h('span', {}, 'Language')), lang)));
     if (words.alt || words.lang) more.open = true;
-    const from = h('select', { id: 'wp-from' }, ...choices.map((a) => h('option', { value: a.did }, `${at(a.handle)}${a.did === t.did ? ' (the tile’s account)' : ''}`)));
+    const from = h('select', { id: 'wp-from' }, ...choices.map((a) => h('option', { value: a.did }, `${at(a.handle)}${a.did === t.did ? (t.song ? ' (the song’s account)' : ' (the tile’s account)') : ''}`)));
     if (words.from && choices.some((a) => a.did === words.from)) from.value = words.from;
     const warn = h('div', {});
     const status = h('p', { class: 'rk-status', role: 'status', 'aria-live': 'polite' });
@@ -102,7 +138,9 @@ export function createPostBox({ auth, resolver, moderation, kit, tilePosts, host
       status.textContent = '';
       warn.replaceChildren();
       blocked.replaceChildren();
-      const made = buildPostRecord({ tile: { uri: t.uri, cid: t.cid }, text: text.value, alt: alt.value, langs: lang.value });
+      const made = t.song
+        ? buildPostRecord({ tile: t.song.tile, record: t.song.record, text: text.value, alt: alt.value, langs: lang.value })
+        : buildPostRecord({ tile: { uri: t.uri, cid: t.cid }, text: text.value, alt: alt.value, langs: lang.value });
       if (!made.ok) { status.textContent = made.why; return; }
       const who = choices.find((a) => a.did === from.value) || choices[0];
       // This sign-in doesn't (yet) allow posting (a refused or older grant): "Raku" again, from this click.
@@ -130,7 +168,7 @@ export function createPostBox({ auth, resolver, moderation, kit, tilePosts, host
         const r = await writePost({ auth, resolver, did: who.did, record: made.record });
         if (r.post) tilePosts.add(r.post);
         postedHere = true;
-        posted(r, who, back);
+        posted(r, who, back, heading);
       } catch (err) {
         busy(false);
         if (err && err.code === 'verify') { warn.replaceChildren(h('p', { class: 'wp-warn' }, READBACK_WARNING)); return; }
@@ -139,10 +177,10 @@ export function createPostBox({ auth, resolver, moderation, kit, tilePosts, host
       }
     }
 
-    show('Post this tile', [
+    show(heading, [
       back ? h('button', { type: 'button', class: 'wp-back', onclick: () => back(kept()) }, icon('back', 16), 'Your tiles') : null,
-      h('h2', {}, 'Post this tile'),
-      h('p', { class: 'wp-help' }, POST_HELP),
+      h('h2', {}, heading),
+      h('p', { class: 'wp-help' }, t.song ? SONG_HELP : POST_HELP),
       tileLine(t),
       h('label', { class: 'wp-label', for: 'wp-words' }, h('span', {}, 'Your words'), count),
       text, more,
@@ -152,11 +190,11 @@ export function createPostBox({ auth, resolver, moderation, kit, tilePosts, host
     ]);
   }
 
-  function posted(r, who, back) {
+  function posted(r, who, back, heading = 'Post this tile') {
     const addr = h('code', {}, r.uri);
     const copy = btn('Copy', async () => { try { await navigator.clipboard.writeText(r.uri); copy.textContent = 'Copied'; } catch { copy.textContent = 'Select and copy'; } });
     show('Posted', [
-      h('h2', {}, 'Post this tile'),
+      h('h2', {}, heading),
       h('div', { class: 'wp-done' },
         h('p', {}, h('b', {}, 'Posted to Tile posts.'), ' It shows there now; other people see it within a few minutes.'),
         h('div', { class: 'wp-addr' }, addr, copy)),
@@ -222,6 +260,10 @@ export function createPostBox({ auth, resolver, moderation, kit, tilePosts, host
     /** From a tile's tab (WP8 A). tile: { did, rkey } (the rest is read again, so the version is the current one). */
     async openForTile({ did, rkey }) {
       try { postForm(await tileFrom(did, rkey)); } catch (err) { say(`Couldn't open the post box: ${err.message || err}`); }
+    },
+    /** From a song's tab (PB1). song: { did, collection, rkey } (read again, so the version is the current one). */
+    async openForSong({ did, collection, rkey }) {
+      try { postForm(await songFrom({ did, collection, rkey })); } catch (err) { say(`Couldn't open the post box: ${err.message || err}`); }
     },
     /** From Tile posts (WP8 C). */
     openWrite() { if (auth.list().length) pick(); else signInFirst(); },

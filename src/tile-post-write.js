@@ -15,7 +15,7 @@ import { COLLECTION, TILE_POSTS } from './config.js';
 import { atUri, DID_PLC, DID_WEB } from './address.js';
 import { describeTile } from './tiles.js';
 import { newTid, tidTime } from './tables/daisy-shared/tid.js';
-import { readTilePost } from './tile-posts.js';
+import { readTilePost, songRefOf } from './tile-posts.js';
 import { SignInNeeded } from './auth.js';
 
 export const POST_LIMITS = Object.freeze({ text: [300, 3000], alt: [1000, 10000], langs: 3 });
@@ -47,10 +47,11 @@ function overLimit(what, s, [g, b]) {
 }
 
 /**
- * The record for a post. tile: { uri, cid } (the tile record's own uri, by DID, and its cid). → { ok: true, record } or
+ * The record for a post. tile: { uri, cid } (the tile record's own uri, by DID, and its cid). A song post (PB1, PB2) also
+ * has record: { uri, cid } (the song's, by DID), with tile the renderer that plays it (Tracks). → { ok: true, record } or
  * { ok: false, why } (in words, for the post box).
  */
-export function buildPostRecord({ tile, text = '', alt = '', langs = '', createdAt = new Date().toISOString() } = {}) {
+export function buildPostRecord({ tile, record: about = null, text = '', alt = '', langs = '', createdAt = new Date().toISOString() } = {}) {
   const m = /^at:\/\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(tile && typeof tile.uri === 'string' ? tile.uri : '');
   if (!m || !isDid(m[1]) || m[2] !== COLLECTION) return { ok: false, why: "This isn't a tile Raku can post." };
   if (!tile || typeof tile.cid !== 'string' || !CID.test(tile.cid)) return { ok: false, why: "This tile's version couldn't be read." };
@@ -61,7 +62,9 @@ export function buildPostRecord({ tile, text = '', alt = '', langs = '', created
   const l = readLangs(langs);
   if (l.bad) return { ok: false, why: `“${l.bad}” isn't a language tag (for example en, fr or pt-BR).` };
   if (l.langs.length > POST_LIMITS.langs) return { ok: false, why: `At most ${POST_LIMITS.langs} languages.` };
+  if (about && !songRefOf(about)) return { ok: false, why: "This isn't a song Raku can post." };
   const record = { $type: TILE_POSTS.collection, tile: { uri: tile.uri, cid: tile.cid } };
+  if (about) record.record = { uri: about.uri, cid: about.cid };
   if (t) record.text = t;
   if (a) record.alt = a;
   if (l.langs.length) record.langs = l.langs;

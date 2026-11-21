@@ -9,8 +9,9 @@ import { readFileSync } from 'node:fs';
 const file = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 const css = file('src/style.css');
 const COLOUR = /#[0-9a-fA-F]{3,8}\b|\brgba?\(\s*\d|\bhsla?\(|\b(?:white|black)\b(?![-\w])/g;
-// The tiles' side: a tile frame's white, the tables' cream, Make a tile's type marks, the screen between places.
-const FIXED = /^(\.tile-frame|\.tp-frame|\.seat-frame|\.seat-status( button)?|\.mk-(cream|turquoise|copper|smoke)|\.way-[\w-]+( button)?|button\.way-door:hover, button\.way-door:focus-visible)$/;
+// The tiles' side: a tile frame's white, the tables' cream, Make a tile's type marks, the screen between places, a song
+// post's picture (the jukebox's night, PB4).
+const FIXED = /^(\.tile-frame|\.tp-frame|\.tp-song(-[\w-]+)?( img)?|\.seat-frame|\.seat-status( button)?|\.mk-(cream|turquoise|copper|smoke)|\.way-[\w-]+( button)?|button\.way-door:hover, button\.way-door:focus-visible)$/;
 const LIGHT = ':root[data-look="light"]';
 
 const rootEnd = css.indexOf('}', css.indexOf(':root {')) + 1;

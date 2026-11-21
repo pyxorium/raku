@@ -559,10 +559,10 @@ export const RENDERERS = Object.freeze({
   // Foundry's importer) or plyr.fm's, played in the look the listener picks; it asks Raku for the song's audio
   // ({ audio }, R3c-4). node scripts/publish.mjs --track in C:\thunderbird-cafe\renderer-tiles prints these two values (its
   // published.json: "track-renderer"); the same tile for both kinds. Until they're filled in, songs open the link message.
-  'cafe.thunderbird.audio.track': Object.freeze({ name: 'Tracks', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3n2sdwt2j6s2f',
-    cid: 'bafyreif6fhdmyqhws2okvswacj2k6bi5c6uxt7oa2veneyn2izuxbhrhty' }),   // republished Nov 20 2026 (Aurora, the settling round)
-  'fm.plyr.track': Object.freeze({ name: 'Tracks', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3n2sdwt2j6s2f',
-    cid: 'bafyreif6fhdmyqhws2okvswacj2k6bi5c6uxt7oa2veneyn2izuxbhrhty' }),   // republished Nov 20 2026 (Aurora, the settling round)
+  'cafe.thunderbird.audio.track': Object.freeze({ name: 'Tracks', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3n2sma5syva2d',
+    cid: 'bafyreifdptbj6d5w33znfskwkm53aty4e2ggp4bqt7ph7ufwbuer22ebli' }),   // republished Nov 21 2026 (song posts: the compact layout, the new Bloom)
+  'fm.plyr.track': Object.freeze({ name: 'Tracks', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3n2sma5syva2d',
+    cid: 'bafyreifdptbj6d5w33znfskwkm53aty4e2ggp4bqt7ph7ufwbuer22ebli' }),   // republished Nov 21 2026 (song posts: the compact layout, the new Bloom)
 });
 /** The pinned renderer for records of this kind, or null (none, or not pinned yet). */
 export function rendererFor(collection, renderers = RENDERERS) {

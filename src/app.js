@@ -56,6 +56,7 @@ import { createPostBox } from './post-box.js';
 import { createHearts } from './hearts.js';
 import { createHeartSignIn } from './heart-signin.js';
 import { canPostTile } from './tile-post-write.js';
+import { SONG_KINDS, songOf } from './tile-posts.js';
 import { drawAbout } from './about-page.js';
 import { groupThreads } from './posts.js';
 import { createRooms } from './room-tab.js';
@@ -115,8 +116,15 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
   const openIn = h('span', { class: 'openin', hidden: true }, openInBtn, openInMenu);
   // Post (claude/raku-write-posts-plan.md, WP8 A): on a tile's tab, beside the address box, only when the tile belongs to
   // one of the accounts signed in on this browser (WP1); it opens the post box (post-box.js). On a phone, the icon alone.
+  // Also on a song's tab (PB1, PB3), when the song's account is signed in here and its audio is on that account's own
+  // server (Tracks can play it): the post names the song and the pinned Tracks.
   const postBtn = h('button', { class: 'post-btn', type: 'button', hidden: true, title: 'Post this tile to Tile posts', 'aria-label': 'Post this tile to Tile posts',
-    onclick: () => { const k = paneFor(tabs.active).keep; if (k && k.kind === 'tile') postBox.openForTile({ did: k.did, rkey: k.rkey }); } },
+    onclick: () => {
+      const pn = paneFor(tabs.active);
+      const k = pn.keep;
+      if (k && k.kind === 'tile') postBox.openForTile({ did: k.did, rkey: k.rkey });
+      else if (pn.record?.song) postBox.openForSong(pn.record.song);
+    } },
   icon('posts', 16), h('span', { class: 'lbl' }, 'Post'));
   // Tile files (claude/tile-files-plan.md, part 1, owner's choice A): "Open a tile file…" beside the address box, and
   // Ctrl+O; dropping a file anywhere on Raku does the same. No accept filter on the picker: phones' pickers grey out
@@ -954,6 +962,54 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       pane.observer.observe(slot);
     }
   }
+  // A song post's Play here (PB1, PB5): the pinned renderer for the record's kind (Tracks) in the slot, handed that record
+  // over the data protocol as in a tab (fromRenderer answers its ready, its audio and picture requests, its opens). The
+  // song record is the one the card read (rec), by its address with the DID. Expand, Stop and one-at-a-time as for tiles.
+  function playRecordInPost({ slot, record, rec, title = '', onState, expand = null, expanded = () => false, quiet = false }) {
+    const renderer = rendererFor(record.collection);
+    const rdid = (/^at:\/\/([^/]+)\//.exec(renderer?.uri || '') || [])[1];
+    const pane = { post: true, el: slot, slot, frame: null, ways: null, attempt: 0, arrival: null, timers: [], observer: null, state: 'loading', failed: null,
+      onState, expand, expanded, quiet, inView: true, big: false, screen: null, tripStarted: null, trip: 0, spriteGame: null, gameSave: null, renderer: null,
+      title, trail: createTrail({ uri: record.uri, did: record.did, pds: null, d: { name: title }, name: title, by: null }) };
+    postSlots.start(slot, () => endPost(pane));
+    playing = pane;
+    onState('starting');
+    const mine = ++pane.attempt;
+    const alive = () => playing === pane && pane.attempt === mine;
+    pane.timers.push(setTimeout(() => { if (alive() && pane.state === 'loading') pane.onState('slow'); }, TIMES.retry));
+    (async () => {
+      let tile = null, error = null;
+      if (!renderer || !rdid) error = new Error('Raku has no tile that plays this kind of record.');
+      else { try { tile = await mothership.loadTile(renderer.uri); } catch (err) { error = err; } }
+      if (!alive()) return;
+      if (!tile) {
+        pane.failed = error instanceof TileChanged ? `The tile that plays songs (${renderer.name}) has changed since Raku was set up to use it, so Raku doesn't run it.`
+          : (error?.message || `Raku couldn't load the tile that plays songs (${renderer?.name || 'Tracks'}).`);
+        postSlots.stop(slot);
+        return;
+      }
+      const frame = tile.renderContent(600);
+      frame.className = 'tp-frame';
+      frame.removeAttribute('style');
+      frame.title = title || renderer.name;
+      frame.setAttribute('allow', '');
+      frame.setAttribute('referrerpolicy', 'no-referrer');
+      if (!TILE_POPUPS) frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-downloads');
+      pane.frame = frame;
+      slot.prepend(frame);
+      const handleSoon = Promise.race([resolver.checkedHandle(record.did).catch(() => null), new Promise((r) => setTimeout(() => r(null), RENDER.handleMs))]);
+      handleSoon.then((hd) => { if (hd && pane.trail.here) pane.trail.here.by = hd; });
+      const given = { uri: record.uri, did: record.did, value: rec.value, handle: handleSoon };
+      pane.renderer = { payload: async () => recordPayload({ did: record.did, collection: record.collection, rkey: record.rkey, cid: rec.cid, value: rec.value, handle: await handleSoon }),
+        given, gate: createOpenGate(), gets: createGetBudget(), audios: createAudioBudget(), seen: new Map([[record.uri, { did: record.did, value: rec.value }]]) };
+    })();
+    if (typeof IntersectionObserver === 'function') {
+      pane.observer = new IntersectionObserver((entries) => {
+        for (const en of entries) { pane.inView = en.isIntersecting; postSlots.seen(slot, pane.big || en.isIntersecting); }
+      });
+      pane.observer.observe(slot);
+    }
+  }
   // Start a place's tile in the slot (the post's own, or one reached by a way): a new frame in place of the last one.
   // first: the post's own tile, as Play starts it (its "Starting…" panel, Try again on failing); a place reached by a
   // way shows the screen between places until it says hello (or a moment after, without ways), as a tab does.
@@ -1196,6 +1252,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     verdict: (bytes, key) => playVerdict(bytes, key, new Set([...largeOk, ...playOk])),
     allow: (key) => { playOk.add(key); largeOk.add(key); },
     play: playInPost,
+    playRecord: playRecordInPost,
     stop: (slot) => (slot ? postSlots.stop(slot) : postSlots.stop()),
     get current() { return postSlots.current; },
     // round C
@@ -1385,6 +1442,8 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     p.title = recordTitle(rec.value, target.rkey);
     p.shownAddress = didForm;
     p.record = { uri: didForm };                    // for "Open in ▾": the explorers are given the DID (OL3)
+    // a song (PB1): what the Post button needs
+    if (SONG_KINDS.includes(target.collection)) p.record.song = { did, collection: target.collection, rkey: target.rkey, playable: songOf(rec.value, target.collection).playable };
     drawChrome();
     const handle = resolver.checkedHandle(did).catch(() => null);
     handle.then((hd) => {
@@ -1448,6 +1507,10 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
       const payload = await r.payload();
       if (mine !== pane.attempt || !pane.frame) return;
       pane.frame.contentWindow.postMessage({ action: DOWN, payload }, '*');
+      if (pane.post) {                   // a song post's Tracks (PB1): playing in the post; the keys to it (PH4)
+        if (pane.state !== 'ready') { pane.timers.forEach(clearTimeout); pane.state = 'ready'; pane.onState('playing'); if (!pane.quiet) for (const ms of KEYS_AFTER_MS) pane.timers.push(setTimeout(() => { if (playing === pane) focusPost(pane); }, ms)); }
+        return;
+      }
       if (pane.state !== 'ready') { pane.timers.forEach(clearTimeout); pane.state = 'ready'; hideStatus(pane); drawChrome(); focusIfFront(pane); }
       return;
     }
@@ -1705,6 +1768,7 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     // for a game at its own address, saving); nothing logged (a post has no Messages panel).
     if (playing && playing.frame && playing.frame.contentWindow === e.source) {
       const pane = playing;
+      if (pane.renderer) { fromRenderer(pane, d); return; }     // a song post's Tracks (PB1)
       if (pane.ways && d.action === WAY_UP) { fromWayPost(pane, d); return; }
       const saving = readSaveMessage(d);
       if (saving) { fromGameSave(pane, saving); return; }
@@ -1922,7 +1986,11 @@ export function mountRaku(root, { mothership, resolver, moderation, files, shelf
     reloadBtn.disabled = reloadTool.disabled = !current(tab);
     const k = p.keep;
     starBtn.hidden = !k;
-    postBtn.hidden = !(k && k.kind === 'tile' && canPostTile(k.did, auth.list()));
+    const song = p.record?.song;
+    postBtn.hidden = !((k && k.kind === 'tile' && canPostTile(k.did, auth.list())) || (song && song.playable && canPostTile(song.did, auth.list())));
+    const postWhat = song && !k ? 'this song' : 'this tile';
+    postBtn.title = postBtn.ariaLabel = `Post ${postWhat} to Tile posts`;
+    postBtn.setAttribute('aria-label', `Post ${postWhat} to Tile posts`);
     saveFileBtn.hidden = !p.saveSource;
     openIn.hidden = !p.record;
     if (!p.record && !openInMenu.hidden) toggleOpenIn(false);

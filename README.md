@@ -679,6 +679,28 @@ Decisions: `claude/raku-expand-plan.md`, "After C" (AU1 to AU6, and the sound te
   `playCard` in `src/discover.js`; the quiet start (`quiet`) in `playInPost`, `src/app.js`; the menu row and
   `switchButton` in `src/account-menu.js`. Unit tests: `test/play-here.test.mjs`. Browser: `test/browser/check_posts.py`.
 
+### Song posts (Nov 2026): a song in a tile post, played by Tracks
+
+Decisions: `claude/mixtape-3c-track-renderer-notes.md`, "Part B: song posts" (PB1 to PB6; mockup
+`claude/raku-song-posts-mockup.html`).
+
+- **The record** (PB2): a tile post may carry `record`, a strongRef to the record it's about when that isn't a tile
+  itself: for now a song (`cafe.thunderbird.audio.track`, or plyr.fm's `fm.plyr.track`). Its `tile` is then the
+  renderer that plays it (Tracks, as pinned in `RENDERERS`). `buildPostRecord` refuses a `record` that isn't a song.
+- **In Tile posts** (PB3): the song's card: its title, the band, where, when and how long; "Shared by @…" (with
+  "Uploaded through plyr.fm · " before it for plyr.fm songs); in the slot, the title and words beside Tracks' jukebox.
+  Hidden accounts' songs are left out, as hidden tiles are; a song that's gone says "This song can't be shown."
+- **Play here** (PB4): runs the pinned Tracks in the post's slot, handed that song (`player.playRecord`,
+  `playRecordInPost` in `src/app.js`); nothing of the song is fetched until ▶. The slot is short, so Tracks shows
+  its compact layout (under 360 px tall: two selects, Credits, the strip); Expand gives it Raku's window and its full
+  page, the same Tracks, never reloaded. Escape, Stop and the rest work as for tiles.
+- **Post on a song's tab** (PB1): the Post button shows on a song's tab when the song belongs to one of your signed-in
+  accounts; the post box says "Post this song", shows the song's line with Tracks' icon, and writes `tile` (Tracks)
+  and `record` (the song's exact version).
+- Code: `songOf`, `songRefOf`, `SONG_KINDS` in `src/tile-posts.js`; `buildPostRecord` in `src/tile-post-write.js`;
+  `openForSong` in `src/post-box.js`; `tilePostCard`, `playCard` and `readySong` in `src/discover.js`. Unit tests:
+  `test/tile-posts.test.mjs`, `test/tile-post-write.test.mjs`. Browser: `test/browser/check_renderer.py` (6e).
+
 ## One sign-in, and writing tile posts (Nov 2026)
 
 Decisions: `claude/raku-write-posts-plan.md` (WP1 to WP13; the mockup `claude/raku-write-posts-mockup.html`).
@@ -1224,7 +1246,7 @@ and the palette bar never move, each bar in its style's colours, pointing and ta
 putting the chosen one back, the bar hidden from screen readers. The first-paint checks fail without `public/look.js`, the bowl's after a reload without
 `refreshBrandPots` once the chrome is in place.
 
-`check_renderer.py` (104 checks, renderer tiles; since Nov 20, Tracks' Aurora drawing with WebGL through the real loader and Tracks opened on its own saying what it is; since Nov 15, Tracks playing a song of ours and a plyr.fm one, the song fetched only on Play and only the record's own file, refused when it isn't audio, has changed or is too big, and a probe renderer refused what it mayn't have; since Nov 11, the Places card's tile page fetched early and not again on Step into; since ways, a signpost's "Go to" taking that way to the maze's tile; since Nov 9, a test renderer adding handlers after `listen()` gets the record from the loading server's `data.js`: fails with the stock one) sets everything up itself, like `check_daisy.py`: a copy of this folder
+`check_renderer.py` (119 checks, renderer tiles; since Nov 21, song posts in Tile posts: the song's card and picture, "Shared by", a gone song, Play here running Tracks compact in the post's slot, ▶ fetching the song, Expand to Tracks' full page and back; since Nov 20, Tracks' Aurora drawing with WebGL through the real loader and Tracks opened on its own saying what it is; since Nov 15, Tracks playing a song of ours and a plyr.fm one, the song fetched only on Play and only the record's own file, refused when it isn't audio, has changed or is too big, and a probe renderer refused what it mayn't have; since Nov 11, the Places card's tile page fetched early and not again on Step into; since ways, a signpost's "Go to" taking that way to the maze's tile; since Nov 9, a test renderer adding handlers after `listen()` gets the record from the loading server's `data.js`: fails with the stock one) sets everything up itself, like `check_daisy.py`: a copy of this folder
 with a test pin in `RENDERERS`, bundled, Raku's page and the loader replica, and the real renderers from a
 renderer-tiles folder (Winter Forest's pictures from a maze-tiles folder). Usage: `python3 test/browser/check_renderer.py
 <work folder> <tiles-loading-server folder> <renderer-tiles folder> <maze-tiles folder>`. A place typed in the box opens in its tab through the real loader; the record handed over (name, checked

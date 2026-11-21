@@ -147,3 +147,16 @@ test('Tile posts: a post written here shows at once, newest first, without Refre
   assert.deepEqual(tp.cached.items.map((x) => x.text), ['New!']);
   assert.deepEqual((await tp.load({ fresh: true })).items.map((x) => x.text), ['New!'], 'a fresh load that doesn’t find it yet still shows it');
 });
+
+// ---------- song posts (PB1, PB2) ----------
+test('a song post: the song in record, Tracks in tile; a record that isn\'t a song is refused', () => {
+  const tracks = { uri: `at://${T}/ing.dasl.masl/3n2sdwt2j6s2f`, cid: CID };
+  const song = { uri: `at://${P}/cafe.thunderbird.audio.track/3n2cz64eheg2v`, cid: CID };
+  const r = buildPostRecord({ tile: tracks, record: song, text: 'Ten minutes', createdAt: WHEN });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.record, { $type: TILE_POSTS.collection, tile: tracks, record: song, text: 'Ten minutes', createdAt: WHEN });
+  const bad = buildPostRecord({ tile: tracks, record: { uri: `at://${P}/app.bsky.feed.post/x`, cid: CID }, createdAt: WHEN });
+  assert.equal(bad.ok, false);
+  assert.match(bad.why, /isn't a song/);
+  assert.deepEqual(Object.keys(buildPostRecord({ tile: tracks, createdAt: WHEN }).record), ['$type', 'tile', 'createdAt'], 'no record: none written');
+});

@@ -1259,6 +1259,20 @@ a { color: var(--glaze-light); }
 .tp-card { flex-direction: column; isolation: isolate; }   /* the slot's layers stay inside the card (under Discover's sticky chips) */
 .tp-slot { position: relative; aspect-ratio: 16 / 9; background: var(--pic); overflow: hidden; }
 .tp-slot > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+/* A song post's picture (R3c-11, PB4, claude/raku-song-posts-mockup.html): the song's lines on the jukebox's own night,
+   Tracks' jukebox at the right. Like a tile's banner, it belongs to the tiles' side: the same in any look. */
+.tp-song { position: absolute; inset: 0; display: flex; align-items: stretch; background: linear-gradient(#2a1730, #120a14); color: #f4e7d4; }
+.tp-song-words { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 0 8px 44px 5%; }
+.tp-song-title { font: 700 26px/1.12 Georgia, "Times New Roman", serif; color: #fbf3e4; overflow-wrap: anywhere; }
+.tp-song-band { font-weight: 600; font-size: 15px; color: #e6c9a8; }
+.tp-song-line { font-size: 13px; color: rgba(244, 231, 212, .8); }
+.tp-song-pic { position: relative; flex: 0 0 42%; }
+.tp-song-pic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: center bottom; }
+@media (max-width: 640px) {
+  .tp-song-title { font-size: 21px; }
+  .tp-song-band { font-size: 14px; }
+  .tp-song-line { font-size: 12px; }
+}
 .tp-play { position: absolute; left: 10px; bottom: 10px; z-index: 2; display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 5px 14px 5px 10px;
   border: 0; border-radius: 999px; background: var(--glaze-btn); color: var(--glaze-ink); font-weight: 650; cursor: pointer; box-shadow: 0 2px 10px rgba(var(--shadow-rgb),.45); }
 .tp-play:hover { background: var(--glaze); }

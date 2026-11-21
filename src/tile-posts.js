@@ -13,13 +13,21 @@
 // whose tile is hidden. A post record that doesn't name a tile properly (a strongRef to an ing.dasl.masl record) is
 // left out. Text longer than the lexicon allows is cut. The tile itself is read when its card is drawn: a tile that
 // is gone, or whose record no longer matches the version the post names (its CID), shows "This tile can't be shown."
+//
+// Song posts (claude/mixtape-3c-track-renderer-notes.md, R3c-11, PB2): a post may also name a `record` (a strongRef),
+// the record it is about when that isn't a tile; its `tile` is then the renderer tile that showed it when posted
+// (Tracks for songs). Raku shows such a post as a song card and plays the song with its currently pinned Tracks
+// (discover.js). A `record` of a kind Raku has no card for is left aside: the post shows its tile, as before. A song
+// whose account is hidden leaves the post out, as a hidden tile does.
 
-import { TILE_POSTS, COLLECTION } from './config.js';
+import { TILE_POSTS, COLLECTION, rendererFor } from './config.js';
 import { fetchJson, NetError } from './net.js';
 import { atUri, DID_PLC, DID_WEB } from './address.js';
 import { tidTime } from './following.js';
 
 export const POST_COLLECTION = 'cafe.thunderbird.tile.post';
+// The kinds a song post can name (Tracks plays them, R3c-6).
+export const SONG_KINDS = Object.freeze(['cafe.thunderbird.audio.track', 'fm.plyr.track']);
 export const TEXT_MAX = 300;      // graphemes (the lexicon's maxGraphemes)
 export const ALT_MAX = 1000;
 
@@ -48,6 +56,57 @@ export function tileOf(uri) {
   const m = /^at:\/\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(typeof uri === 'string' ? uri : '');
   if (!m || !isDid(m[1]) || m[2] !== COLLECTION || !RKEY.test(m[3])) return null;
   return { did: m[1], rkey: m[3], uri: atUri(m[1], m[3]) };
+}
+
+/**
+ * A song post's `record` (PB2): a strongRef to a song (by DID) whose kind has a pinned renderer. → { did, collection,
+ * rkey, uri, cid } | null (not a song, not by DID, no renderer, a bad version).
+ */
+export function songRefOf(ref, renderers) {
+  if (!ref || typeof ref !== 'object' || typeof ref.cid !== 'string' || !CID.test(ref.cid)) return null;
+  const m = /^at:\/\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(typeof ref.uri === 'string' ? ref.uri : '');
+  if (!m || !isDid(m[1]) || !SONG_KINDS.includes(m[2]) || !RKEY.test(m[3])) return null;
+  if (!(renderers ? renderers[m[2]] : rendererFor(m[2]))) return null;
+  return { did: m[1], collection: m[2], rkey: m[3], uri: `at://${m[1]}/${m[2]}/${m[3]}`, cid: ref.cid };
+}
+
+const plainText = (v, max = 300) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, max) : '');
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+/** "2002-04-20" → "April 20, 2002" (as Tracks writes it); anything else as given, or ''. */
+export function longDate(d) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(typeof d === 'string' ? d.trim() : '');
+  if (!m || +m[2] < 1 || +m[2] > 12) return plainText(d, 40);
+  return `${MONTHS[+m[2] - 1]} ${+m[3]}, ${m[1]}`;
+}
+/** 437 → "7:17"; 3725 → "1:02:05"; nothing → ''. */
+export function songLength(s) {
+  if (typeof s !== 'number' || !Number.isFinite(s) || s <= 0) return '';
+  const x = Math.round(s), hh = Math.floor(x / 3600), mm = Math.floor((x % 3600) / 60), ss = x % 60;
+  return hh ? `${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}` : `${mm}:${String(ss).padStart(2, '0')}`;
+}
+/**
+ * What a song card says (the song posts mockup, PB4), from the song's record as stored. → { title, artist, where, when,
+ * length, plyr, playable } — where: "venue, place" (ours) or the show from the album without the band; when: the date
+ * written out, or the album's year; playable: its audio is on its account's own server (an audioBlob).
+ */
+export function songOf(value, collection) {
+  const v = value && typeof value === 'object' ? value : {};
+  const rec = v.recording && typeof v.recording === 'object' ? v.recording : {};
+  const title = plainText(v.title) || 'Untitled song';
+  const artist = plainText(v.artist);
+  let where = [plainText(rec.venue), plainText(rec.place)].filter(Boolean).join(', ');
+  let when = longDate(rec.date);
+  if (!where || !when) {
+    // "Band · Show · 2011-02-17" (the importer's and plyr.fm's albums): the parts after the band
+    const parts = plainText(v.album).split(' · ').map((x) => x.trim()).filter(Boolean);
+    if (parts.length && artist && parts[0] === artist) parts.shift();
+    const date = parts.length && /^\d{4}(-\d{2}-\d{2})?$/.test(parts[parts.length - 1]) ? parts.pop() : '';
+    if (!where) where = parts.join(' · ');
+    if (!when && date) when = longDate(date);
+  }
+  const blob = v.audioBlob;
+  const playable = !!(blob && typeof blob === 'object' && blob.ref && typeof blob.ref.$link === 'string');
+  return { title, artist, where, when, length: songLength(v.duration), plyr: collection === 'fm.plyr.track', playable };
 }
 
 /** When a post was made: its createdAt if sensible (after 2023, not more than a day ahead), else its key's time. */
@@ -81,6 +140,7 @@ export function readTilePost(rec, did, now = Date.now()) {
     createdAt: typeof v.createdAt === 'string' ? v.createdAt : null,
     time: postTime(v, rkey, now),
     tile: { ...tile, cid: ref.cid },
+    record: songRefOf(v.record),
   };
 }
 
@@ -181,6 +241,7 @@ export function createTilePosts({ resolver, moderation, shelf, fetchImpl = globa
           const out = [];
           for (const post of await accountPosts(did)) {
             if (await moderation.isHidden(post.tile.did, post.tile.rkey)) continue;   // a hidden tile, or its account
+            if (post.record && await moderation.isAccountHidden(post.record.did)) continue;   // a song post: the song's account
             out.push(post);
           }
           return out;

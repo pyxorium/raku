@@ -194,3 +194,61 @@ test('the relay is read 100 at a time, following its cursor, up to 500 accounts'
   assert.equal(w.calls.filter((u) => u.host === 'relay1.us-east.bsky.network').length, 5);
   assert.ok(w.calls.every((u) => u.searchParams.get('limit') === null || u.searchParams.get('limit') === '100' || u.pathname.endsWith('listRecords')));
 });
+
+// ---------- song posts (claude/mixtape-3c-track-renderer-notes.md, R3c-11, PB2, PB4) ----------
+import { songRefOf, songOf, longDate, songLength, SONG_KINDS } from '../src/tile-posts.js';
+
+const SONG_CID = 'bafyreisongnoexpectationsaaaaaaaaaaaa';
+const songRef = (kind = 'cafe.thunderbird.audio.track', did = P, rkey = '3n2cz64eheg2v', cid = SONG_CID) => ({ uri: `at://${did}/${kind}/${rkey}`, cid });
+
+test('a song post: its record read as a song (by DID, of a kind with a renderer); its tile kept as Tracks', () => {
+  const p = readTilePost(rec(A, '3n2songpost', val({ tile: { uri: tileUri(A, '3n2sdwt2j6s2f'), cid: TILE_CID }, record: songRef() })), A, NOW);
+  assert.deepEqual(p.record, { did: P, collection: 'cafe.thunderbird.audio.track', rkey: '3n2cz64eheg2v', uri: `at://${P}/cafe.thunderbird.audio.track/3n2cz64eheg2v`, cid: SONG_CID });
+  assert.equal(p.tile.rkey, '3n2sdwt2j6s2f');
+  assert.deepEqual(SONG_KINDS, ['cafe.thunderbird.audio.track', 'fm.plyr.track']);
+  assert.ok(songRefOf(songRef('fm.plyr.track')), 'a plyr.fm song too');
+});
+
+test('a record Raku has no song card for is left aside: the post shows its tile, as before', () => {
+  for (const [why, ref] of [
+    ['a handle, not a DID', songRef('cafe.thunderbird.audio.track', 'pyxorium.com')],
+    ['a place (no song card yet)', songRef('cafe.thunderbird.way.place')],
+    ['another kind', songRef('app.bsky.feed.post')],
+    ['a bad version', songRef(undefined, undefined, undefined, 'nope')],
+    ['not a strongRef', 'at://x'],
+  ]) {
+    const p = readTilePost(rec(A, '3n2other', val({ record: ref })), A, NOW);
+    assert.ok(p, why);
+    assert.equal(p.record, null, why);
+  }
+  assert.equal(songRefOf(songRef(), {}), null, 'no pinned renderer for the kind: none');
+});
+
+test('what a song card says: ours (venue, place, the date written out, length); plyr.fm\'s (the show from the album)', () => {
+  const ours = songOf({ title: 'No Expectations', artist: 'Yonder Mountain String Band', album: 'Yonder Mountain String Band · The Fillmore Auditorium · 2002-04-20', duration: 619,
+    recording: { venue: 'The Fillmore Auditorium', place: 'Denver, CO', date: '2002-04-20' }, audioBlob: { $type: 'blob', ref: { $link: 'bafkreisong' } } }, 'cafe.thunderbird.audio.track');
+  assert.deepEqual(ours, { title: 'No Expectations', artist: 'Yonder Mountain String Band', where: 'The Fillmore Auditorium, Denver, CO', when: 'April 20, 2002', length: '10:19', plyr: false, playable: true });
+  const plyr = songOf({ title: 'Jackson Station', artist: 'Band of Heathens', album: 'Band of Heathens · Grey Eagle · 2011-02-17', duration: 237, audioBlob: { ref: { $link: 'x' } } }, 'fm.plyr.track');
+  assert.deepEqual([plyr.where, plyr.when, plyr.length, plyr.plyr], ['Grey Eagle', 'February 17, 2011', '3:57', true]);
+  const old = songOf({ title: 'Old', audioUrl: 'https://plyr.fm/x.mp3' }, 'fm.plyr.track');
+  assert.equal(old.playable, false, 'audio only on plyr.fm\'s storage: Tracks can\'t play it');
+  assert.equal(songOf({}, 'cafe.thunderbird.audio.track').title, 'Untitled song');
+  assert.equal(longDate('2002-13-01'), '2002-13-01');
+  assert.equal(songLength(3725), '1:02:05');
+  assert.equal(songLength(undefined), '');
+});
+
+test("Tile posts: a song post whose song's account is hidden is left out", async () => {
+  const resolver = { account: async () => ({ pds: 'https://pds.fakepds.net' }) };
+  const moderation = { isAccountHidden: async (did) => did === H, isHidden: async () => false, profiles: async () => null };
+  const shelf = { accounts: () => [] };
+  const list = [rec(A, '3n2a', val({ text: 'song of a hidden account', record: songRef(undefined, H) })), rec(A, '3n2b', val({ text: 'song', record: songRef() }))];
+  const fetchImpl = async (url) => {
+    const u = new URL(url);
+    if (u.pathname.endsWith('listReposByCollection')) return json({ repos: [] });
+    return json({ records: u.searchParams.get('repo') === A ? list : [] });
+  };
+  const tp = createTilePosts({ resolver, moderation, shelf, fetchImpl, now: () => NOW });
+  const r = await tp.load();
+  assert.deepEqual(r.items.map((p) => p.text), ['song']);
+});
