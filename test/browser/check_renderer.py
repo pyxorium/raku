@@ -1,5 +1,5 @@
 # Renderer tiles in a browser (claude/raku-renderer-tiles-plan.md, RT1 to RT10): a place address opens in a tab, shown
-# by the real place renderer tile (C:\thunderbird-cafe\maze-tiles\place\tile\, pinned by its record CID) through a
+# by the real place renderer tile (C:\thunderbird-cafe\renderer-tiles\place\tile\, pinned by its record CID) through a
 # replica of the tile loading server; Raku hands it the record over the tiles spec's data protocol; "Step into" opens
 # the place's tile in a new tab; "Open in" shows the record in an explorer; the refusals and the limits. Places' tile
 # card (claude/raku-places-card-plan.md, PC1 to PC6): the tile record Raku reads for it, and the banner's bytes Raku
@@ -7,14 +7,17 @@
 # 1 MB, within the same 20 per load. Since ways (claude/raku-ways-plan.md, RW5): a signpost's "Go to" takes that way.
 # Since Nov 9 (claude/raku-data-replay-plan.md): a test renderer that adds handlers after listen() gets the record from
 # the loading server's data.js (step 6c, which fails with the stock data.js).
-# Since Nov 15 (claude/mixtape-3c-track-renderer-notes.md, R3c-4): the track renderer "Tracks" (maze-tiles track\tile\)
+# Since Nov 15 (claude/mixtape-3c-track-renderer-notes.md, R3c-4): the track renderer "Tracks" (renderer-tiles track\tile\)
 # plays a song record of ours and a plyr.fm one; Raku fetches the song's audio for it only when Play is pressed, only
 # the record's own audioBlob, from its author's server, an audio file by its bytes, matching its CID, at most 100 MB and
 # 3 per load (step 6d; a probe renderer asks for what it mayn't, and fails the check when the rule is loosened).
+# Since Nov 20 (the settling round, R3c-12 and R3c-10): Tracks' Aurora draws with WebGL through the real loader, and
+# Tracks opened as a tile on its own shows what it is. The renderers live in C:\thunderbird-cafe\renderer-tiles since
+# Nov 20 (R3c-5, RM6); maze-tiles is still needed for Winter Forest's banner and icon.
 #
 # It sets everything up itself: a copy of this Raku folder with a test pin in RENDERERS (the real pin is filled in
 # after publishing), bundled with esbuild and the stand-in sign-in, then servers.mjs and loader-replica.mjs.
-# Usage: python3 test/browser/check_renderer.py <work folder> <tiles-loading-server folder> <maze-tiles folder>
+# Usage: python3 test/browser/check_renderer.py <work folder> <tiles-loading-server folder> <renderer-tiles folder> <maze-tiles folder>
 #   (needs Playwright with Chromium, esbuild (NODE_PATH or /opt/npm-tools), node_modules with @dasl/tile-loader and
 #   rooms-lab, and port 80 free for the loader replica)
 import base64, hashlib, json, os, re, shutil, subprocess, sys, time
@@ -24,7 +27,8 @@ from playwright.sync_api import sync_playwright
 
 W = Path(sys.argv[1]).resolve(); W.mkdir(parents=True, exist_ok=True)
 LOADING_SERVER = Path(sys.argv[2]).resolve()
-MAZE = Path(sys.argv[3]).resolve()
+RENDERER_TILES = Path(sys.argv[3]).resolve()
+MAZE = Path(sys.argv[4]).resolve()
 RAKU_SRC = Path(__file__).resolve().parents[2]
 OUT = W / 'shots'; OUT.mkdir(exist_ok=True)
 RAKU = 'http://127.0.0.1:5180/'
@@ -46,10 +50,10 @@ def res(data, ctype):
     return {'src': {'$type': 'blob', 'ref': {'$link': c}, 'mimeType': ctype, 'size': len(data)}, 'content-type': ctype}
 TYPES = {'.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.mp3': 'audio/mpeg'}
 
-# ---- the renderer tile, from maze-tiles, under a test record pinned by a test CID ----
+# ---- the renderer tile, from renderer-tiles, under a test record pinned by a test CID ----
 RENDERER_RKEY = '3mzplacestest'
 RENDERER_CID = 'bafyreiplacesrenderertestpinaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-place_dir = MAZE / 'place' / 'tile'
+place_dir = RENDERER_TILES / 'place' / 'tile'
 resources = {}
 for f in ['index.html', 'place.css', 'place.js', 'view.js', 'icon.png', 'banner.png']:
     resources['/' if f == 'index.html' else f'/{f}'] = res((place_dir / f).read_bytes(), TYPES[Path(f).suffix])
@@ -74,11 +78,11 @@ records = {   # (repo, collection, rkey) -> (cid, value)
     (B, PLACE, 'hidden'): ('bafyreiplacehidden', {'$type': PLACE, 'tile': FOREST_TILE, 'cid': 'x', 'name': 'Should not show', 'updatedAt': '2026-10-28T00:00:00Z'}),
     (A, 'app.bsky.feed.like', '3mzlike'): ('bafyreilike', {'$type': 'app.bsky.feed.like', 'subject': {}}),
 }
-# ---- the signpost renderer (claude/raku-renderer-tiles-plan.md, "The signpost renderer"), from maze-tiles, test-pinned ----
+# ---- the signpost renderer (claude/raku-renderer-tiles-plan.md, "The signpost renderer"), from renderer-tiles, test-pinned ----
 SIGNPOST = 'cafe.thunderbird.way.signpost'
 SIGN_RKEY = '3mzsignstest'
 SIGN_CID = 'bafyreisignpostsrenderertestpinaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-sign_dir = MAZE / 'signpost' / 'tile'
+sign_dir = RENDERER_TILES / 'signpost' / 'tile'
 sign_res = {}
 for f in ['index.html', 'signpost.css', 'signpost.js', 'view.js', 'icon.png', 'banner.png']:
     sign_res['/' if f == 'index.html' else f'/{f}'] = res((sign_dir / f).read_bytes(), TYPES[Path(f).suffix])
@@ -115,19 +119,19 @@ records[(A, TILE, LATE_RKEY)] = (LATE_CID, {'$type': TILE, 'cid': 'bafyreimanife
     'resources': {'/': res(LATE_HTML, 'text/html'), '/late.js': res(LATE_JS, 'text/javascript')}}, 'createdAt': '2026-11-09T12:00:00Z'})
 records[(A, LATE, 'one')] = ('bafyreilaterecord', {'$type': LATE, 'name': 'A record for a late handler', 'see': MAZE_PLACE})
 records[(A, SIGNPOST, 'winter-forest.slide')] = ('bafyreisignslide', {'$type': SIGNPOST, 'to': [{'place': MAZE_PLACE, 'entrance': 'obelisk'}], 'updatedAt': '2026-10-29T05:40:00.000Z'})
-# ---- the track renderer, "Tracks" (claude/mixtape-3c-track-renderer-notes.md), from maze-tiles, test-pinned for both
+# ---- the track renderer, "Tracks" (claude/mixtape-3c-track-renderer-notes.md), from renderer-tiles, test-pinned for both
 #      song kinds; a few songs; and a probe renderer for a test kind that asks for what it mayn't (R3c-4) ----
 AUDIO = 'cafe.thunderbird.audio.track'
 PLYR = 'fm.plyr.track'
 TRACK_RKEY = '3mztrackstest'
 TRACK_CID = 'bafyreitracksrenderertestpinaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-track_dir = MAZE / 'track' / 'tile'
+track_dir = RENDERER_TILES / 'track' / 'tile'
 track_res = {}
-for f in ['index.html', 'track.css', 'track.js', 'view.js', 'looks.js', 'icon.png', 'banner.png']:
+for f in ['index.html', 'track.css', 'track.js', 'view.js', 'looks.js', 'aurora.js', 'icon.png', 'banner.png']:
     track_res['/' if f == 'index.html' else f'/{f}'] = res((track_dir / f).read_bytes(), TYPES[Path(f).suffix])
 records[(A, TILE, TRACK_RKEY)] = (TRACK_CID, {'$type': TILE, 'cid': 'bafyreimanifest4', 'tile': {'name': 'Tracks', 'description': 'Plays a song.', 'resources': track_res,
     'icons': [{'src': '/icon.png'}], 'screenshots': [{'src': '/banner.png'}]}, 'createdAt': '2026-11-15T12:00:00Z'})
-SAMPLE = (MAZE / 'track' / 'dev' / 'sample.mp3').read_bytes()
+SAMPLE = (RENDERER_TILES / 'track' / 'dev' / 'sample.mp3').read_bytes()
 song_blob = res(SAMPLE, 'audio/mpeg')['src']
 SONG_CID = song_blob['ref']['$link']
 COVER_BLOB = res((MAZE / 'forest' / 'tile' / 'icon.png').read_bytes(), 'image/png')['src']
@@ -508,6 +512,17 @@ try:
         inner().locator('.looks [data-look="scope"]').click()
         time.sleep(0.6)
         page.screenshot(path=str(OUT / 'renderer-track.png'))
+        # Aurora (R3c-12): WebGL inside the tile, through the real loader and its policy
+        inner().locator('.looks [data-look="aurora"]').click()
+        check('Aurora: drawn with WebGL inside the tile, through the real loader', wait_for(lambda: inner().locator('#track').get_attribute('data-aurora') == 'webgl' and inner().locator('.scene canvas.gl').is_visible(), 5),
+              str(inner().locator('#track').get_attribute('data-aurora')))
+        gl_ink = "() => { const c = document.querySelector('.scene canvas.gl'); const t = document.createElement('canvas'); t.width = c.width; t.height = c.height; const g = t.getContext('2d'); g.drawImage(c, 0, 0); const d = g.getImageData(0, 0, t.width, t.height).data; let s = 0; for (let i = 0; i < d.length; i += 4 * 97) s += d[i] + d[i + 1] * 3 + d[i + 2] * 7; return s; }"
+        time.sleep(0.5); i1 = inner().evaluate(gl_ink); time.sleep(0.5); i2 = inner().evaluate(gl_ink)
+        check('...it draws and moves with the music', i1 > 0 and i1 != i2, f'{i1} {i2}')
+        inner().locator('.under [data-world="bloom"]').click()
+        time.sleep(0.6)
+        page.screenshot(path=str(OUT / 'renderer-track-aurora.png'))
+        inner().locator('.looks [data-look="jukebox"]').click()
         inner().locator('.play').click()
         page.fill('.addr', f'at://{P_HANDLE}/{PLYR}/plyr1'); page.press('.addr', 'Enter')
         check('a plyr.fm song opens in Tracks too, "Uploaded through plyr.fm"', wait_for(lambda: tile_text('.card-title h1') == 'Jackson Station', 15) and 'Uploaded through plyr.fm' in (tile_text('.credits dl') or ''), str(tile_text('.credits dl')))
@@ -524,6 +539,11 @@ try:
         check('R3c-4: a renderer may have only its record\'s own song: another file and another record refused, then three, then too many',
               probe == ['not-allowed', 'not-allowed', f'audio/mpeg:{len(SAMPLE)}', f'audio/mpeg:{len(SAMPLE)}', f'audio/mpeg:{len(SAMPLE)}', 'too-many'], str(probe))
         check('...the record\'s other file was never fetched for it', len(song_calls(COVER_BLOB['ref']['$link'])) == cover_before)
+        # Tracks opened as a tile on its own (R3c-10): no record handed over, so it says what it is
+        page.fill('.addr', f'at://{A}/{TILE}/{TRACK_RKEY}'); page.press('.addr', 'Enter')
+        check('Tracks opened as a tile on its own: what it is, with two songs to try in Raku', wait_for(lambda: inner() and inner().locator('#track[data-state="nohost"]').count() == 1, 15)
+              and tile_text('h1') == 'Tracks' and inner().locator('.tries a').count() == 2, str(tile_text('h1')))
+        page.screenshot(path=str(OUT / 'renderer-track-alone.png'))
 
         # 7. a renderer that changed since it was pinned is refused
         state['renderer_cid'] = 'bafyreisomethingelseentirelyaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'

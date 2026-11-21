@@ -545,23 +545,24 @@ export const explorerLink = (app, uri) => `https://${app.host}${app.prefix}${uri
 // records of that kind, pinned by its record CID like a table's tiles (RT2), so Raku runs exactly the version that was
 // checked. Raku hands it the record over the tiles spec's data protocol (tp-data, RT1 and RT4) and lets it ask for one
 // thing: to open an at:// address in a new tab (RT5). Kinds without a renderer open the link message, as before.
-// The place renderer is published from C:\thunderbird-cafe\maze-tiles (node scripts/publish.mjs --place, which prints
+// The renderers are published from C:\thunderbird-cafe\renderer-tiles (since Nov 20 2026; maze-tiles before). The place
+// renderer with node scripts/publish.mjs --place there, which prints
 // these two values; its published.json keeps them under "place-renderer"). Without both, places open the link message. Republishing it means a new pin here, or Raku refuses the changed tile (publish and pin before pushing).
 export const RENDERERS = Object.freeze({
   'cafe.thunderbird.way.place': Object.freeze({ name: 'Places', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3mzp2cmnlwa26',
     cid: 'bafyreigdzwamcyeeqxfaf6okekdyosybbilwznlb7qolyucky3pj4w6ica' }),   // republished Nov 7 2026 (the tile's card)
   // The signpost renderer (claude/raku-renderer-tiles-plan.md, "The signpost renderer"): node scripts/publish.mjs
-  // --signpost in C:\thunderbird-cafe\maze-tiles prints these two values (its published.json: "signpost-renderer").
+  // --signpost in C:\thunderbird-cafe\renderer-tiles prints these two values (its published.json: "signpost-renderer").
   'cafe.thunderbird.way.signpost': Object.freeze({ name: 'Signposts', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3mzoty54cln2u',
     cid: 'bafyreifeyejtny7l7dc6kv33yiyasihzfvgd2mjdvyr5ubxlkt2lj7b4fa' }),   // published Nov 6 2026
   // The track renderer, "Tracks" (claude/mixtape-3c-track-renderer-notes.md, R3c-1 to R3c-9): one song, ours (from the
   // Foundry's importer) or plyr.fm's, played in the look the listener picks; it asks Raku for the song's audio
-  // ({ audio }, R3c-4). node scripts/publish.mjs --track in C:\thunderbird-cafe\maze-tiles prints these two values (its
+  // ({ audio }, R3c-4). node scripts/publish.mjs --track in C:\thunderbird-cafe\renderer-tiles prints these two values (its
   // published.json: "track-renderer"); the same tile for both kinds. Until they're filled in, songs open the link message.
-  'cafe.thunderbird.audio.track': Object.freeze({ name: 'Tracks', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3n2emk2xd562v',
-    cid: 'bafyreidcnkfdszuizpsaqxuj7egd446m2n67vbehrnrksewdzdgqzxchq4' }),   // published Nov 15 2026
-  'fm.plyr.track': Object.freeze({ name: 'Tracks', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3n2emk2xd562v',
-    cid: 'bafyreidcnkfdszuizpsaqxuj7egd446m2n67vbehrnrksewdzdgqzxchq4' }),   // published Nov 15 2026
+  'cafe.thunderbird.audio.track': Object.freeze({ name: 'Tracks', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3n2sdwt2j6s2f',
+    cid: 'bafyreif6fhdmyqhws2okvswacj2k6bi5c6uxt7oa2veneyn2izuxbhrhty' }),   // republished Nov 20 2026 (Aurora, the settling round)
+  'fm.plyr.track': Object.freeze({ name: 'Tracks', uri: 'at://did:plc:6vxjigxrqizmbo56gojxico3/ing.dasl.masl/3n2sdwt2j6s2f',
+    cid: 'bafyreif6fhdmyqhws2okvswacj2k6bi5c6uxt7oa2veneyn2izuxbhrhty' }),   // republished Nov 20 2026 (Aurora, the settling round)
 });
 /** The pinned renderer for records of this kind, or null (none, or not pinned yet). */
 export function rendererFor(collection, renderers = RENDERERS) {

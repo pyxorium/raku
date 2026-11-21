@@ -482,8 +482,8 @@ to show records of that kind. The list is `RENDERERS` in `src/config.js` (`rende
 renderer per collection, pinned by its record CID like a table's tiles, loaded by the same pinned loader
 (`src/tables/pinned.js`), so Raku runs exactly the checked version and refuses a changed one ("…has changed since Raku was
 set up to use it"). The first is **Places** for `cafe.thunderbird.way.place` (e.g. `at://pyxorium.com/cafe.thunderbird.way.place/maze`),
-published from `C:\thunderbird-cafe\maze-tiles` (`node scripts/publish.mjs --place`, which prints the address and CID
-for `RENDERERS`). Until its `uri` and `cid` are filled in, places keep opening the link message.
+published from `C:\thunderbird-cafe\renderer-tiles` (`node scripts/publish.mjs --place`, which prints the address and CID
+for `RENDERERS`; the renderers lived in maze-tiles until Nov 20 2026). Until its `uri` and `cid` are filled in, places keep opening the link message.
 
 - **How the record reaches the tile:** the tiles spec's data protocol, tp-data (`/.well-known/web-tiles/data.js`,
   which the loading server already serves). Raku reads the record from its author's server (`resolver.record`), starts
@@ -505,7 +505,7 @@ for `RENDERERS`). Until its `uri` and `cid` are filled in, places keep opening t
   aren't shown ("This account's records aren't shown in Raku."). A whole collection still opens the link message.
 - **Signposts (Nov 6)**, the second renderer, for `cafe.thunderbird.way.signpost` (where one exit of a tile leads; e.g.
   `at://thunderbird.cafe/cafe.thunderbird.way.signpost/winter-forest.slide`), published with `node scripts/publish.mjs
-  --signpost` in `C:\thunderbird-cafe\maze-tiles`. Until its pin is filled in, signposts keep opening the link message.
+  --signpost` in `C:\thunderbird-cafe\renderer-tiles`. Until its pin is filled in, signposts keep opening the link message.
   It also asks Raku to **read records for it** (the plan's "The signpost renderer", SR2 and SR6), so it can show names:
   `{ get: "at://…" }`, answered with `{ got, record }` (the same shape) or `{ got, error }` (`not-allowed`, `too-many`,
   `hidden`, `not-found`). Only a single record **named in the record the renderer was given, exactly as written there,
@@ -522,7 +522,7 @@ for `RENDERERS`). Until its `uri` and `cid` are filled in, places keep opening t
 - **Songs for renderers (Tracks, Nov 15; claude/mixtape-3c-track-renderer-notes.md, R3c-1 to R3c-9):** the third
   renderer, **Tracks**, plays a song record, ours (`cafe.thunderbird.audio.track`, from the Foundry's importer) or
   plyr.fm's (`fm.plyr.track`): one tile pinned for both kinds, published with `node scripts/publish.mjs --track` in
-  `C:\thunderbird-cafe\maze-tiles`. Until its pin is filled in, songs keep opening the link message. When the listener
+  `C:\thunderbird-cafe\renderer-tiles`. Since Nov 20 it has a fifth look, Aurora, drawn with WebGL inside the tile. Until its pin is filled in, songs keep opening the link message. When the listener
   presses Play it asks for the song: `{ audio: "<blob cid>", from: "at://…" }`; while Raku downloads it, it sends
   `{ audioProgress, from, received, total }` (at most every 250 ms, `RENDER.progressMs`), then `{ gotAudio, from, type,
   bytes }` (an `ArrayBuffer`, handed over, not copied; the tile plays it from a `blob:` address) or `{ gotAudio, from,
@@ -1224,10 +1224,10 @@ and the palette bar never move, each bar in its style's colours, pointing and ta
 putting the chosen one back, the bar hidden from screen readers. The first-paint checks fail without `public/look.js`, the bowl's after a reload without
 `refreshBrandPots` once the chrome is in place.
 
-`check_renderer.py` (101 checks, renderer tiles; since Nov 15, Tracks playing a song of ours and a plyr.fm one, the song fetched only on Play and only the record's own file, refused when it isn't audio, has changed or is too big, and a probe renderer refused what it mayn't have; since Nov 11, the Places card's tile page fetched early and not again on Step into; since ways, a signpost's "Go to" taking that way to the maze's tile; since Nov 9, a test renderer adding handlers after `listen()` gets the record from the loading server's `data.js`: fails with the stock one) sets everything up itself, like `check_daisy.py`: a copy of this folder
-with a test pin in `RENDERERS`, bundled, Raku's page and the loader replica, and the real place renderer from a
-maze-tiles folder. Usage: `python3 test/browser/check_renderer.py <work folder> <tiles-loading-server folder> <maze-tiles
-folder>`. A place typed in the box opens in its tab through the real loader; the record handed over (name, checked
+`check_renderer.py` (104 checks, renderer tiles; since Nov 20, Tracks' Aurora drawing with WebGL through the real loader and Tracks opened on its own saying what it is; since Nov 15, Tracks playing a song of ours and a plyr.fm one, the song fetched only on Play and only the record's own file, refused when it isn't audio, has changed or is too big, and a probe renderer refused what it mayn't have; since Nov 11, the Places card's tile page fetched early and not again on Step into; since ways, a signpost's "Go to" taking that way to the maze's tile; since Nov 9, a test renderer adding handlers after `listen()` gets the record from the loading server's `data.js`: fails with the stock one) sets everything up itself, like `check_daisy.py`: a copy of this folder
+with a test pin in `RENDERERS`, bundled, Raku's page and the loader replica, and the real renderers from a
+renderer-tiles folder (Winter Forest's pictures from a maze-tiles folder). Usage: `python3 test/browser/check_renderer.py
+<work folder> <tiles-loading-server folder> <renderer-tiles folder> <maze-tiles folder>`. A place typed in the box opens in its tab through the real loader; the record handed over (name, checked
 handle, date, the tile behind it); Open in (PDSls ticked, Taproot opening the record with the DID and no opener, the
 choice shared with the link message, Escape); Step into opening the forest tile in a new tab; two presses at once
 opening one tab; an https request refused, anything but `{ open }` ignored, another place asked for opening in a new
